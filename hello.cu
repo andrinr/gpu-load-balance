@@ -1,12 +1,13 @@
-
+#include "math.h"
 #include "stdio.h"
 
-__global__ void step(N, pos, vel, h){
-	for (int i = 0; i < N; i++){
-		vel[i*3] += std::rand()*10<<-5 * h;
-		vel[i*3+1] += std::rand()*10<<-5 * h;
-		vel[i*3+2] += std::rand()*10<<-5 * h;
-
+__global__ void step(int N, double *pos, double *vel, double h){
+	int index = threadIdx.x;
+	int stride = blockDim.x;
+	for (int i = index*3; i < N; i += stride * 3){
+		vel[i*3] -= pos[i*3]*h;
+		vel[i*3+1] -= pos[i*3]*h;
+		vel[i*3+2] -= pos[i*3]*h;
 		
 		pos[i*3] += vel[i*3] * h;
 		pos[i*3+1] += vel[i*3+1] * h;
@@ -32,11 +33,14 @@ int main()
 		vel[3*i+2] = 0;
 	}
 
-    	step<<<1,1>>>(N, pos, vel, 10<<-3); 
+    	step<<<1,256>>>(N, pos, vel, 0.001); 
 
-	cudaFree(x);
-	cudaFree(y);
-	cudaFree(z);
+	cudaDeviceSynchronize();
+	
+	printf("calculated one step");
+
+	cudaFree(pos);
+	cudaFree(vel);
     	return 0;
 }
 
