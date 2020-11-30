@@ -1,30 +1,23 @@
 #include "math.h"
 #include "stdio.h"
+#include <iostream>
+#include <fstream>
 
 __global__ void step(int N, double *pos, double *vel, double h){
 	int index = threadIdx.x;
 	int stride = blockDim.x;
-	for (int i = index*3; i < N; i += stride * 3){
-		vel[i*3] -= pos[i*3]*h;
-		vel[i*3+1] -= pos[i*3]*h;
-		vel[i*3+2] -= pos[i*3]*h;
-		
-		pos[i*3] += vel[i*3] * h;
-		pos[i*3+1] += vel[i*3+1] * h;
-		pos[i*3+2] += vel[i*3+2] * h;
-	}
 }	
 
 __global__ void split(int N, double *xpos){
-
+	// smt
 }
 
 int main() 
 {
 	int N = 10<<20; // 1M Elemets
-	double *pos, *vel;
+	double *xpos;
 	
-	cudaMallocManaged(&xpos, N*sizeof(double)*);
+	cudaMallocManaged(&xpos, N*sizeof(double));
 	
 	double pos [N*3];
 	double vel [N*3];
@@ -39,7 +32,8 @@ int main()
 		vel[3*i+2] = 0;
 	}
 
-    	step<<<1,256>>>(N, pos, vel, 0.001); 
+	
+	// :step<<<1,256>>>(N, pos, vel, 0.001); 
 
 	cudaDeviceSynchronize();
 	
