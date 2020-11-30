@@ -13,6 +13,10 @@ __global__ void step(int N, double *pos, double *vel, double h){
 		pos[i*3+1] += vel[i*3+1] * h;
 		pos[i*3+2] += vel[i*3+2] * h;
 	}
+}	
+
+__global__ void split(int N, double *xpos){
+
 }
 
 int main() 
@@ -20,8 +24,10 @@ int main()
 	int N = 10<<20; // 1M Elemets
 	double *pos, *vel;
 	
-	cudaMallocManaged(&pos, N*sizeof(double)*3);
-	cudaMallocManaged(&vel, N*sizeof(double)*3);
+	cudaMallocManaged(&xpos, N*sizeof(double)*);
+	
+	double pos [N*3];
+	double vel [N*3];
 
 	for (int i = 0; i < N; i++){
 		pos[3*i] = std::rand();
