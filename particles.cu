@@ -8,9 +8,11 @@ __global__ void split(int N, int split, int * pos, int * domain){
 	int stride = blockDim.x;
 	int index = threadIdx.x;
 	
-	__shared__ int splitSize = 0;
+	__shared__ int splitSize;
+
+	splitSize = 0;
 	
-	for (int sweep = 0; sweep < 32; i++){
+	for (int sweep = 0; sweep < 32; sweep++){
 
 		for (int i = index; i < N; i += stride){
 			if (pos[i] > split){
@@ -21,9 +23,11 @@ __global__ void split(int N, int split, int * pos, int * domain){
 			}
 		}
 		
-		_syncthreads();
-
-		if (splitSize > N/2){
+		__syncthreads();
+	
+		// Only primary thread needs to execute this
+		if (index == 0 && splitSize > N/2){
+			//split = N
 						
 		}
 	}	
@@ -59,22 +63,23 @@ int main()
 		vel[3*i+2] = 0;
 	}
 	
+	int firstGuess = 0;
 	
-	split<<<1,256>>>(N, 0, xpos, domain); 
+	split<<<1,256>>>(N, firstGuess, xpos, domain); 
 
 	cudaDeviceSynchronize();
 	
 	printf("calculated one step");
-
-	cudaFree(xpos);
 	
 	remove( "out.dat" );
 	std::ofstream Data("out.dat");
 	
 	for (int i = 0; i < N; i++){
-		Data << pos[3*i] << " " << pos[3*i +1] << " " << pos[3*i+2] << "\n";
+		Data << pos[3*i] << " " << pos[3*i +1] << " " << domain[i]  << "\n";
 	}
 
+	cudaFree(xpos);
+	cudaFree(domain);
 	Data.close();
     	return 0;
 }
