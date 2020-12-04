@@ -4,9 +4,29 @@
 #include <iostream>
 #include <fstream>
 
-__global__ void split(int N, int * pos){
+__global__ void split(int N, int split, int * pos, int * domain){
 	int stride = blockDim.x;
 	int index = threadIdx.x;
+	
+	__shared__ int splitSize = 0;
+	
+	for (int sweep = 0; sweep < 32; i++){
+
+		for (int i = index; i < N; i += stride){
+			if (pos[i] > split){
+				domain[i] = 1;
+				splitSize += 1;
+			} else {
+				domain[i] = 0;
+			}
+		}
+		
+		_syncthreads();
+
+		if (splitSize > N/2){
+						
+		}
+	}	
 }
 
 int main() 
@@ -40,7 +60,7 @@ int main()
 	}
 	
 	
-	split<<<1,256>>>(N, xpos); 
+	split<<<1,256>>>(N, 0, xpos, domain); 
 
 	cudaDeviceSynchronize();
 	
