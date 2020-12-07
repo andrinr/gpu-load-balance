@@ -13,6 +13,10 @@ __global__ void split(int N, int * splitIndex, int * pos, int * domain){
 	splitSize = 0;
 	
 	for (int sweep = 30; sweep > 0; sweep--){
+		
+		atomicExch(&splitSize, 0);
+		
+		__syncthreads();
 
 		for (int i = index; i < N; i += stride){
 			if (pos[i] > *splitIndex){
@@ -33,6 +37,8 @@ __global__ void split(int N, int * splitIndex, int * pos, int * domain){
 		else if (index == 0){
 			*splitIndex += 2 << sweep;
 		}
+
+		
 		
 	}	
 }
@@ -90,6 +96,8 @@ int main()
 	// Do calculations
 	split<<<1,256>>>(N, &h_splitIndex, h_xPos, h_domain);
 
+	cudaDeviceSynchronize();
+
 	// Copy to host
 	cudaMemcpy(h_xPos, d_xPos, size, cudaMemcpyDeviceToHost);
 	cudaMemcpy(h_domain, d_domain, size, cudaMemcpyDeviceToHost);
@@ -97,7 +105,7 @@ int main()
 
 	// Make sure all results
 	//TODO: Is this the right place to call this?	
-	cudaDeviceSynchronize();
+	//cudaDeviceSynchronize();
 	
 	// Free memory
 	cudaFree(d_domain);
