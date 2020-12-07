@@ -4,7 +4,7 @@
 #include <iostream>
 #include <fstream>
 
-__global__ void split(int N, int split, int * pos, int * domain){
+__global__ void split(int N, int * splitIndex, int * pos, int * domain){
 	int stride = blockDim.x;
 	int index = threadIdx.x;
 	
@@ -12,12 +12,12 @@ __global__ void split(int N, int split, int * pos, int * domain){
 
 	splitSize = 0;
 	
-	for (int sweep = 0; sweep < 32; sweep++){
+	for (int sweep = 30; sweep > 0; sweep--){
 
 		for (int i = index; i < N; i += stride){
-			if (pos[i] > split){
+			if (pos[i] > *splitIndex){
 				domain[i] = 1;
-				splitSize += 1;
+				atomicAdd(&splitSize, 1);
 			} else {
 				domain[i] = 0;
 			}
@@ -28,58 +28,94 @@ __global__ void split(int N, int split, int * pos, int * domain){
 		// Only primary thread needs to execute this
 		if (index == 0 && splitSize > N/2){
 			//split = N
-						
+			*splitIndex -= 2 << sweep; 		
 		}
+		else if (index == 0){
+			*splitIndex += 2 << sweep;
+		}
+		
 	}	
 }
 
 int main() 
-{
-	int N = 10<<16; // 60k  Elemets
-	int *xpos;
-	int *domain;
+{	
+	/// Parameters ///
 
-	cudaMallocManaged(&xpos, N*sizeof(double));
-	cudaMallocManaged(&domain, N*sizeof(int));
+	// 60k elements
+	int N = 10<<16;
+	// Inital split index guess
+	int h_splitIndex = 0;
+
+
+	/// Allocation /// 
+
+	// Memory size
+	int size = N * 3 * sizeof(int);
 	
-	int pos [N*3];
-	int vel [N*3];
+	// Host memory
+	int* h_xPos = (int*)malloc(size);
+	int* h_yPos = (int*)malloc(size);
+	int* h_zPos = (int*)malloc(size);
+
+	int* h_domain = (int*)malloc(size);
+
+	// Device memory
+	int* d_splitIndex;
+	cudaMalloc(&d_splitIndex, sizeof(int));
+	int* d_xPos;
+	cudaMalloc(&d_xPos, size);
+	int* d_domain;
+	cudaMalloc(&d_domain, size);
+
+
+	/// Initialisation ///
 
 	for (int i = 0; i < N; i++){
 		// xpos
-		pos[3*i] = std::experimental::randint(INT_MIN, INT_MAX);
-		xpos[i] = pos[3*i];
-		domain[0] = 0;
+		h_xPos[i] = std::experimental::randint(INT_MIN, INT_MAX);
 		// ypos
-		pos[3*i + 1] = std::experimental::randint(INT_MIN, INT_MAX);
+		h_yPos[i] = std::experimental::randint(INT_MIN, INT_MAX);
 		// zpos
-		pos[3*i + 2] = std::experimental::randint(INT_MIN, INT_MAX);
+		h_zPos[i] = std::experimental::randint(INT_MIN, INT_MAX);
 
-		// xvel
-		vel[3*i] = 0;
-		// yvel
-		vel[3*i+1] = 0;
-		// zpos
-		vel[3*i+2] = 0;
+		// domain
+		h_domain[i] = 0;
 	}
-	
-	int firstGuess = 0;
-	
-	split<<<1,256>>>(N, firstGuess, xpos, domain); 
 
+	// Copy to device	
+	cudaMemcpy(d_xPos, h_xPos, size, cudaMemcpyHostToDevice);
+	cudaMemcpy(d_domain, h_domain, size, cudaMemcpyHostToDevice);
+	cudaMemcpy(d_splitIndex, &h_splitIndex, sizeof(int), cudaMemcpyHostToDevice);
+
+	// Do calculations
+	split<<<1,256>>>(N, &h_splitIndex, h_xPos, h_domain);
+
+	// Copy to host
+	cudaMemcpy(h_xPos, d_xPos, size, cudaMemcpyDeviceToHost);
+	cudaMemcpy(h_domain, d_domain, size, cudaMemcpyDeviceToHost);
+	cudaMemcpy(&h_splitIndex, d_splitIndex, sizeof(int), cudaMemcpyDeviceToHost);
+
+	// Make sure all results
+	//TODO: Is this the right place to call this?	
 	cudaDeviceSynchronize();
 	
+	// Free memory
+	cudaFree(d_domain);
+	cudaFree(d_xPos);
+	cudaFree(d_splitIndex);
+
+
+	/// Output ///
+
 	printf("calculated one step");
-	
+	std::cout << h_splitIndex;
 	remove( "out.dat" );
 	std::ofstream Data("out.dat");
 	
 	for (int i = 0; i < N; i++){
-		Data << pos[3*i] << " " << pos[3*i +1] << " " << domain[i]  << "\n";
+		Data << h_xPos[3*i] << " " << h_yPos[3*i +1] << " " << h_domain[i]  << "\n";
 	}
 
-	cudaFree(xpos);
-	cudaFree(domain);
 	Data.close();
     	return 0;
 }
