@@ -12,14 +12,17 @@ __global__ void split(int N, int * splitIndex, int * pos, int * domain){
 
 	splitSize = 0;
 	
+	// Binary search for splitIndex
+	// We have chosen 30 since we have a total of 2**32 possible values
 	for (int sweep = 30; sweep > 0; sweep--){
 		
+		// Reset split size for new sweep
 		atomicExch(&splitSize, 0);
 		
 		__syncthreads();
 
 		for (int i = index; i < N; i += stride){
-			if (pos[i] > *splitIndex){
+			if (pos[i] > 0){ //*splitIndex){
 				domain[i] = 1;
 				atomicAdd(&splitSize, 1);
 			} else {
@@ -36,10 +39,7 @@ __global__ void split(int N, int * splitIndex, int * pos, int * domain){
 		}
 		else if (index == 0){
 			*splitIndex += 2 << sweep;
-		}
-
-		
-		
+		}		
 	}	
 }
 
@@ -56,7 +56,7 @@ int main()
 	/// Allocation /// 
 
 	// Memory size
-	int size = N * 3 * sizeof(int);
+	int size = N * sizeof(int);
 	
 	// Host memory
 	int* h_xPos = (int*)malloc(size);
@@ -99,7 +99,8 @@ int main()
 	cudaDeviceSynchronize();
 
 	// Copy to host
-	cudaMemcpy(h_xPos, d_xPos, size, cudaMemcpyDeviceToHost);
+	// We do not need to copy back the xPositions
+	//cudaMemcpy(h_xPos, d_xPos, size, cudaMemcpyDeviceToHost);
 	cudaMemcpy(h_domain, d_domain, size, cudaMemcpyDeviceToHost);
 	cudaMemcpy(&h_splitIndex, d_splitIndex, sizeof(int), cudaMemcpyDeviceToHost);
 
