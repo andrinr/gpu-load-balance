@@ -22,7 +22,7 @@ __global__ void split(int N, int * splitIndex, int * pos, int * domain){
 		__syncthreads();
 
 		for (int i = index; i < N; i += stride){
-			if (pos[i] > 0){ //*splitIndex){
+			if (pos[i] > *splitIndex){
 				domain[i] = 1;
 				atomicAdd(&splitSize, 1);
 			} else {
@@ -67,6 +67,7 @@ int main()
 
 	// Device memory
 	int* d_splitIndex;
+	// add asserts for error checking
 	cudaMalloc(&d_splitIndex, sizeof(int));
 	int* d_xPos;
 	cudaMalloc(&d_xPos, size);
@@ -95,9 +96,9 @@ int main()
 
 	// Do calculations
 	split<<<1,256>>>(N, &h_splitIndex, h_xPos, h_domain);
-
-	cudaDeviceSynchronize();
-
+	
+	// TODO: add second kernel to set domain
+	
 	// Copy to host
 	// We do not need to copy back the xPositions
 	//cudaMemcpy(h_xPos, d_xPos, size, cudaMemcpyDeviceToHost);
@@ -106,7 +107,7 @@ int main()
 
 	// Make sure all results
 	//TODO: Is this the right place to call this?	
-	//cudaDeviceSynchronize();
+	cudaDeviceSynchronize();
 	
 	// Free memory
 	cudaFree(d_domain);
