@@ -12,11 +12,10 @@ __global__ void split(int nPositions, int * positions, int threeDepth, int * spl
 	
 	// Local splizSizes
 	int * l_splitSizes;
-	int l_splitIndex = 0;
 		
 	for (int i = index; i < N; i += stride){
 		// Binary search for corresponding split
-		l_splitIndex = 0;
+		int l_splitIndex = 0;
 		for (int level = 0; level < threeDepth; ++level){
 			// Binary tree traversal, assuming complete balanced binary tree
 			// Branchless for optimization
