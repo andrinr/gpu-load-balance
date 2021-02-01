@@ -4,28 +4,31 @@
 #include <iostream>
 #include <fstream>
 
-__global__ void split(int nPositions, int * positions, int splitPosition, int splitSize){
+__global__ void split(int nPositions, int * positions, int threeDepth, int * splitPositions, int * splitSizes){
 	int stride = blockDim.x;
 	int index = threadIdx.x;
 	
 	//__shared__ int shared_splitSize;
 	
 	// Local splizSizes
-        unsigned int l_splitSize;
-	extern __shared__ unsigned int s_splitSizes;
-
-        for (unsigned int i = index; i < N; i += stride){
-                int isLeft = positions[i] > splitPosition;
-                // Increment splitSize
-                l_splitSize += isLeft;
-        }
-
-        s_splitSize[tid] = l_splitSize;
-
-        for (unsigned int s = blockDim.x/2; s > 0; s >>= 1){
-                s_splitSizes[tid] += s_splitSizes[tid + s];
-	}
+	int * l_splitSizes;
 		
+	for (int i = index; i < N; i += stride){
+		// Binary search for corresponding split
+		int l_splitIndex = 0;
+		for (int level = 0; level < threeDepth; ++level){
+			// Binary tree traversal, assuming complete balanced binary tree
+			// Branchless for optimization
+			int isLeft = positions[i] > *splitPositions[splitIndex];
+			int isRight = 1 - isLeft;
+			l_splitIndex = isLeft * (l_splitIndex * 2 + 1) + isRight * (l_splitIndex * 2 + 2);
+		}
+		// Increment splitSize
+		l_splitSizes[l_splitIndex] += 1
+	}
+	
+	// Use reductions instead
+	atomicAdd(&shared_splitSize, local_splitSize);
 }
 
 __global__ void findDomainID(int N, int * pos, int * splitPositions, int * domainIDs){
@@ -81,7 +84,7 @@ int main()
 	cudaMemcpy(d_xPos, h_xPos, size, cudaMemcpyHostToDevice);
 
 	// Do calculations
-	split<<<1,256>>>(N, h_xPos, h_splitPosition);
+	split<<<1,256>>>(N, h_xPos, splitPosition);
 	
 	// TODO: add second kernel to set domain
 	
