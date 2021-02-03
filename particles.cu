@@ -4,28 +4,32 @@
 #include <iostream>
 #include <fstream>
 
-__global__ void split(int nPositions, int * positions, int splitPosition, int splitSize){
-	int stride = blockDim.x;
-	int index = threadIdx.x;
+__global__ void split(int nPositions, int * positions, int splitPosition, unsigned int * splitSize){
 	
-	//__shared__ int shared_splitSize;
+	unsigned int tid = threadIdx.x;
 	
 	// Local splizSizes
-        unsigned int l_splitSize;
-	extern __shared__ unsigned int s_splitSizes;
+        unsigned int l_splitSize = 0;
+	extern __shared__ unsigned int s_splitSizes[];
 
-        for (unsigned int i = index; i < N; i += stride){
+        for (unsigned int i = threadIdx.x; i < nPositions; i += blockDim.x){
                 int isLeft = positions[i] > splitPosition;
                 // Increment splitSize
                 l_splitSize += isLeft;
         }
 
-        s_splitSize[tid] = l_splitSize;
+        s_splitSizes[tid] = l_splitSize;
 
         for (unsigned int s = blockDim.x/2; s > 0; s >>= 1){
-                s_splitSizes[tid] += s_splitSizes[tid + s];
+                if (tid < s){
+			s_splitSizes[tid] += s_splitSizes[tid + s];
+		}
+		__syncthreads();
 	}
-		
+
+	if (tid == 0){
+		*splitSize = s_splitSizes[0];	
+	}
 }
 
 __global__ void findDomainID(int N, int * pos, int * splitPositions, int * domainIDs){
@@ -39,8 +43,8 @@ int main()
 	// 60k elements
 	int N = 10<<16;
 	// Inital split index guess
-	int h_splitPositions = 0;
-
+	int h_splitPosition = 0;
+	unsigned int h_splitSize = 0;
 
 	/// Allocation /// 
 
@@ -52,8 +56,6 @@ int main()
 	int* h_yPos = (int*)malloc(size);
 	int* h_zPos = (int*)malloc(size);
 
-	int* h_domain = (int*)malloc(size);
-
 	// Device memory
 	int* d_xPos;
 	cudaMalloc(&d_xPos, size);
@@ -63,6 +65,9 @@ int main()
 
 	int* d_zPos;
 	cudaMalloc(&d_zPos, size);
+
+	unsigned int* d_splitSize;
+	cudaMalloc(&d_splitSize, sizeof(unsigned int));
 	
 	/// Data Initialisation ///
 	for (int i = 0; i < N; i++){
@@ -72,46 +77,36 @@ int main()
 		h_yPos[i] = std::experimental::randint(INT_MIN, INT_MAX);
 		// zpos
 		h_zPos[i] = std::experimental::randint(INT_MIN, INT_MAX);
-
-		// domain
-		h_domain[i] = 0;
 	}
 
 	// Copy to device	
 	cudaMemcpy(d_xPos, h_xPos, size, cudaMemcpyHostToDevice);
 
 	// Do calculations
-	split<<<1,256>>>(N, h_xPos, h_splitPosition);
+	split<<<1,256>>>(N, d_xPos, h_splitPosition, d_splitSize);
 	
 	// TODO: add second kernel to set domain
 	
 	// Copy to host
 	// We do not need to copy back the xPositions
 	//cudaMemcpy(h_xPos, d_xPos, size, cudaMemcpyDeviceToHost);
-	cudaMemcpy(h_domain, d_domain, size, cudaMemcpyDeviceToHost);
-	cudaMemcpy(&h_splitIndex, d_splitIndex, sizeof(int), cudaMemcpyDeviceToHost);
+	cudaMemcpy(&h_splitSize, d_splitSize, sizeof(unsigned int), cudaMemcpyDeviceToHost);
 
-	// Make sure all results
-	//TODO: Is this the right place to call this?
-	// Not necessary here, since cudyMemcpy is already synchronized	
-	//cudaDeviceSynchronize();
-	
 	// Free memory
-	cudaFree(d_domain);
 	cudaFree(d_xPos);
-	cudaFree(d_splitIndex);
+	cudaFree(d_splitSize);
 
 
 	/// Output ///
-	std::cout << h_splitIndex;
+	std::cout << h_splitSize;
 	remove( "out.dat" );
-	std::ofstream Data("out.dat");
+	//std::ofstream Data("out.dat");
 	
-	for (int i = 0; i < N; i++){
-		Data << h_xPos[3*i] << " " << h_yPos[3*i +1] << " " << h_domain[i]  << "\n";
-	}
+	//for (int i = 0; i < N; i++){
+	//	Data << h_xPos[3*i] << " " << h_yPos[3*i +1] << " " << h_domain[i]  << "\n";
+	//}
 
-	Data.close();
+	//Data.close();
     	return 0;
 }
 
