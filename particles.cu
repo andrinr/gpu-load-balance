@@ -8,7 +8,6 @@ __global__ void split(int nPositions, int * positions, int splitPosition, unsign
 	
 	unsigned int tid = threadIdx.x;
 	
-	// Local splizSizes
         unsigned int l_splitSize = 0;
 	extern __shared__ unsigned int s_splitSizes[];
 
@@ -32,7 +31,7 @@ __global__ void split(int nPositions, int * positions, int splitPosition, unsign
 	}
 }
 
-__global__ void findDomainID(int N, int * pos, int * splitPositions, int * domainIDs){
+__global__ void findDomainID(int nPositions, int * poistions, int * splitPositions, int * domainIDs){
 	
 }
 
