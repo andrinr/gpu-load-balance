@@ -3,6 +3,7 @@
 #include <experimental/random>
 #include <iostream>
 #include <fstream>
+#include <assert.h>
 
 __global__ void split(int nPositions, int * positions, int splitPosition, unsigned int * splitSize){
 	
@@ -29,23 +30,21 @@ __global__ void split(int nPositions, int * positions, int splitPosition, unsign
 	if (tid == 0){
 		*splitSize = s_splitSizes[0];	
 	}
+
+	assert(*splitSize > 0);
 }
 
-__global__ void findDomainID(int nPositions, int * poistions, int * splitPositions, int * domainIDs){
-	
+__global__ void findDomainID(int nPositions, int * positions, int splitPosition, unsigned int * domainIDs){
+	for (unsigned int i = thread.x; i < nPositions; i += blockDim.x){
+		int isLeft = positions[i] > splitPosition;
+		domainIDs[i] = isLeft;
+	}
 }
 
 int main() 
 {	
-	/// Parameters ///
-
 	// 60k elements
 	int N = 10<<16;
-	// Inital split index guess
-	int h_splitPosition = 0;
-	unsigned int h_splitSize = 0;
-
-	/// Allocation /// 
 
 	// Memory size
 	int size = N * sizeof(int);
@@ -67,8 +66,8 @@ int main()
 
 	unsigned int* d_splitSize;
 	cudaMalloc(&d_splitSize, sizeof(unsigned int));
-	
-	/// Data Initialisation ///
+
+	// Data Initialisation
 	for (int i = 0; i < N; i++){
 		// xpos
 		h_xPos[i] = std::experimental::randint(INT_MIN, INT_MAX);
@@ -80,23 +79,21 @@ int main()
 
 	// Copy to device	
 	cudaMemcpy(d_xPos, h_xPos, size, cudaMemcpyHostToDevice);
-
+	
 	// Do calculations
+	int h_splitPosition = 0;
+
 	split<<<1,256>>>(N, d_xPos, h_splitPosition, d_splitSize);
 	
-	// TODO: add second kernel to set domain
-	
-	// Copy to host
-	// We do not need to copy back the xPositions
-	//cudaMemcpy(h_xPos, d_xPos, size, cudaMemcpyDeviceToHost);
+	// Copy back to host	
+	unsigned int h_splitSize = 0;
 	cudaMemcpy(&h_splitSize, d_splitSize, sizeof(unsigned int), cudaMemcpyDeviceToHost);
-
+	
 	// Free memory
 	cudaFree(d_xPos);
 	cudaFree(d_splitSize);
 
-
-	/// Output ///
+	// Output
 	std::cout << h_splitSize;
 	remove( "out.dat" );
 	//std::ofstream Data("out.dat");
