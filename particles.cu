@@ -22,6 +22,7 @@ __global__ void split(int nPositions, int * positions, int splitPosition, unsign
 
 	assert(s_splitSizes[tid] > 0);
 
+	// sequential reduction, can be optimized further
         for (unsigned int s = blockDim.x/2; s > 0; s >>= 1){
                 if (tid < s){
 			s_splitSizes[tid] += s_splitSizes[tid + s];
@@ -45,8 +46,9 @@ __global__ void findDomainID(int nPositions, int * positions, int splitPosition,
 
 int main() 
 {	
-	// 60k elements
-	int N = 10<<16;
+	// 65k elements
+	int p = 24;
+	int N = 2<<p;
 
 	// Memory size
 	int size = N * sizeof(int);
@@ -79,17 +81,25 @@ int main()
 		h_zPos[i] = std::experimental::randint(INT_MIN, INT_MAX);
 	}
 
+	std::cout << "initialization finished \n";
+
 	// Copy to device	
 	cudaMemcpy(d_xPos, h_xPos, size, cudaMemcpyHostToDevice);
 	
-	// Do calculations
+	// Random initial guess
 	int h_splitPosition = 0;
 
-	split<<<1, 256, 256*sizeof(unsigned int)>>>(N, d_xPos, h_splitPosition, d_splitSize);
-	
-	// Copy back to host	
 	unsigned int h_splitSize = 0;
-	cudaMemcpy(&h_splitSize, d_splitSize, sizeof(unsigned int), cudaMemcpyDeviceToHost);
+	// Binary search for ideal splitPosition
+	for (int i = p; i > 0; i--){
+		split<<<1, 256, 256*sizeof(unsigned int)>>>(N, d_xPos, h_splitPosition, d_splitSize);
+		cudaMemcpy(&h_splitSize, d_splitSize, sizeof(unsigned int), cudaMemcpyDeviceToHost);
+
+		//if (h_splitSize > 2<<(p-1)){
+		//
+		//}
+
+	}	
 	
 	// Free memory
 	cudaFree(d_xPos);
