@@ -13,12 +13,14 @@ __global__ void split(int nPositions, int * positions, int splitPosition, unsign
 	extern __shared__ unsigned int s_splitSizes[];
 
         for (unsigned int i = threadIdx.x; i < nPositions; i += blockDim.x){
-                int isLeft = positions[i] > splitPosition;
+                int isLeft = positions[i] < splitPosition;
                 // Increment splitSize
                 l_splitSize += isLeft;
         }
 
         s_splitSizes[tid] = l_splitSize;
+
+	assert(s_splitSizes[tid] > 0);
 
         for (unsigned int s = blockDim.x/2; s > 0; s >>= 1){
                 if (tid < s){
@@ -29,13 +31,13 @@ __global__ void split(int nPositions, int * positions, int splitPosition, unsign
 
 	if (tid == 0){
 		*splitSize = s_splitSizes[0];	
+		assert(*splitSize > 0);
 	}
 
-	assert(*splitSize > 0);
 }
 
 __global__ void findDomainID(int nPositions, int * positions, int splitPosition, unsigned int * domainIDs){
-	for (unsigned int i = thread.x; i < nPositions; i += blockDim.x){
+	for (unsigned int i = threadIdx.x; i < nPositions; i += blockDim.x){
 		int isLeft = positions[i] > splitPosition;
 		domainIDs[i] = isLeft;
 	}
@@ -83,7 +85,7 @@ int main()
 	// Do calculations
 	int h_splitPosition = 0;
 
-	split<<<1,256>>>(N, d_xPos, h_splitPosition, d_splitSize);
+	split<<<1, 256, 256*sizeof(unsigned int)>>>(N, d_xPos, h_splitPosition, d_splitSize);
 	
 	// Copy back to host	
 	unsigned int h_splitSize = 0;
