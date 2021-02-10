@@ -14,13 +14,10 @@ __global__ void split(int nPositions, int * positions, int splitPosition, unsign
 
         for (unsigned int i = threadIdx.x; i < nPositions; i += blockDim.x){
                 int isLeft = positions[i] < splitPosition;
-                // Increment splitSize
                 l_splitSize += isLeft;
         }
 
         s_splitSizes[tid] = l_splitSize;
-
-	assert(s_splitSizes[tid] > 0);
 
 	// sequential reduction, can be optimized further
         for (unsigned int s = blockDim.x/2; s > 0; s >>= 1){
@@ -32,14 +29,12 @@ __global__ void split(int nPositions, int * positions, int splitPosition, unsign
 
 	if (tid == 0){
 		*splitSize = s_splitSizes[0];	
-		assert(*splitSize > 0);
 	}
-
 }
 
 __global__ void findDomainID(int nPositions, int * positions, int splitPosition, unsigned int * domainIDs){
 	for (unsigned int i = threadIdx.x; i < nPositions; i += blockDim.x){
-		int isLeft = positions[i] > splitPosition;
+		int isLeft = positions[i] < splitPosition;
 		domainIDs[i] = isLeft;
 	}
 }
@@ -47,7 +42,7 @@ __global__ void findDomainID(int nPositions, int * positions, int splitPosition,
 int main() 
 {	
 	// 65k elements
-	int p = 24;
+	int p = 22;
 	int N = 2<<p;
 
 	// Memory size
@@ -87,26 +82,38 @@ int main()
 	cudaMemcpy(d_xPos, h_xPos, size, cudaMemcpyHostToDevice);
 	
 	// Random initial guess
-	int h_splitPosition = 0;
+	int splitPosition = 0;
 
+	std::cout << INT_MIN << " " << INT_MAX << "\n";
 	unsigned int h_splitSize = 0;
-	// Binary search for ideal splitPosition
-	for (int i = p; i > 0; i--){
-		split<<<1, 256, 256*sizeof(unsigned int)>>>(N, d_xPos, h_splitPosition, d_splitSize);
+	// Binary search for ideal splitPosition, assuming 32bit integers
+	for (int i = 29; i > 0; i--){
+		split<<<1, 256, 256*sizeof(unsigned int)>>>(N, d_xPos, splitPosition, d_splitSize);
 		cudaMemcpy(&h_splitSize, d_splitSize, sizeof(unsigned int), cudaMemcpyDeviceToHost);
 
-		//if (h_splitSize > 2<<(p-1)){
-		//
-		//}
+		std::cout << splitPosition << " " << h_splitSize << "\n";
+		
+		if (h_splitSize > 2<<(p-1)){
+			splitPosition -= 2 << i;
 
+			std::cout << "decrement \n";
+		}
+		else if(h_splitSize < 2 << (p-1)){
+			splitPosition += 2 << i;
+
+			std::cout << "increment \n";
+		}
+		else{
+			std::cout << "found split \n";
+			break;
+		}
 	}	
-	
+ 	
 	// Free memory
 	cudaFree(d_xPos);
 	cudaFree(d_splitSize);
 
 	// Output
-	std::cout << h_splitSize;
 	remove( "out.dat" );
 	//std::ofstream Data("out.dat");
 	
