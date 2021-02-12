@@ -5,31 +5,41 @@
 #include <fstream>
 #include <assert.h>
 
-__global__ void split(int nPositions, int * positions, int splitPosition, unsigned int * splitSize){
+__global__ void split(int nPositions, int * positions, int splitPosition, unsigned int * splitSizes){
 	
-	unsigned int tid = threadIdx.x;
-	
+	unsigned int index = threadIdx.x + blockIdx.x * blockDim.x;
         unsigned int l_splitSize = 0;
 	extern __shared__ unsigned int s_splitSizes[];
 
-        for (unsigned int i = threadIdx.x; i < nPositions; i += blockDim.x){
+        for (unsigned int i = index; i < min(nPositions, (blockIdx.x + 1) * blockDim.x); i += blockDim.x){
                 int isLeft = positions[i] < splitPosition;
                 l_splitSize += isLeft;
         }
 
-        s_splitSizes[tid] = l_splitSize;
+        s_splitSizes[threadIdx.x] = l_splitSize;
 
 	// sequential reduction, can be optimized further
         for (unsigned int s = blockDim.x/2; s > 0; s >>= 1){
-                if (tid < s){
-			s_splitSizes[tid] += s_splitSizes[tid + s];
+                if (threadIdx.x < s){
+			s_splitSizes[threadIdx.x] += s_splitSizes[threadIdx.x + s];
 		}
 		__syncthreads();
 	}
 
-	if (tid == 0){
-		*splitSize = s_splitSizes[0];	
+	if (threadIdx.x == 0){
+		splitSizes[blockIdx.x]	= s_splitSizes[0];	
 	}
+}
+
+// Sums all elements in array and stores result at index = 0
+__global__ void sum(int size, unsigned int*values){
+	for (unsigned int s = blockDim.x/2; s > 0; s >>= 1){
+		if (threadIdx.x < s){
+			values[threadIdx.x] += values[threadIdx.x + s];
+		}
+		__syncthreads();
+	}	
+
 }
 
 __global__ void findDomainID(int nPositions, int * positions, int splitPosition, unsigned int * domainIDs){
@@ -84,27 +94,30 @@ int main()
 	// Random initial guess
 	int splitPosition = 0;
 
-	std::cout << INT_MIN << " " << INT_MAX << "\n";
-	unsigned int h_splitSize = 0;
+	unsigned int nThreads = 256;
+	int nBlocks = (N + nThreads - 1) / nThreads;
+
+	unsigned int h_splitSize;
+
+	unsigned int* d_splitSizes;
+	cudaMalloc(&d_splitSizes, nBlocks * sizeof(unsigned int));
+
 	// Binary search for ideal splitPosition, assuming 32bit integers
 	for (int i = 29; i > 0; i--){
-		split<<<1, 256, 256*sizeof(unsigned int)>>>(N, d_xPos, splitPosition, d_splitSize);
-		cudaMemcpy(&h_splitSize, d_splitSize, sizeof(unsigned int), cudaMemcpyDeviceToHost);
+		split<<<nBlocks, nThreads, nThreads*sizeof(unsigned int)>>>(N, d_xPos, splitPosition, d_splitSizes);
+		sum<<<1, nThreads>>>(nBlocks, d_splitSizes);
 
-		std::cout << splitPosition << " " << h_splitSize << "\n";
-		
+		cudaMemcpy(&h_splitSize, d_splitSizes, sizeof(unsigned int), cudaMemcpyDeviceToHost);
+
+		std::cout << h_splitSize << "\n";	
 		if (h_splitSize > 2<<(p-1)){
 			splitPosition -= 2 << i;
-
-			std::cout << "decrement \n";
 		}
 		else if(h_splitSize < 2 << (p-1)){
 			splitPosition += 2 << i;
-
-			std::cout << "increment \n";
 		}
 		else{
-			std::cout << "found split \n";
+			std::cout << "found split at position " << splitPosition << "\n";
 			break;
 		}
 	}	
