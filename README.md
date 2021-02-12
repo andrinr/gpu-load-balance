@@ -1,3 +1,3 @@
-# particles-cpp-cuda
+# gpu-load-balance
 
 GPU accelerated three building.
