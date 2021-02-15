@@ -26,7 +26,7 @@ __global__ void split(int nPositions, int * positions, int splitPosition, unsign
 	}
 
 	if (threadIdx.x == 0){
-		splitSizes[blockIdx.x]	= s_splitSizes[0];	
+		splitSizes[blockIdx.x] = s_splitSizes[0];	
 	}
 }
 
@@ -51,8 +51,8 @@ __global__ void findDomainID(int nPositions, int * positions, int splitPosition,
 int main() 
 {	
 	// 65k elements
-	int p = 22;
-	int N = 2<<p;
+	int p = 23;
+	int N = 1<<p;
 
 	// Memory size
 	int size = N * sizeof(int);
@@ -95,23 +95,32 @@ int main()
 
 	unsigned int h_splitSize;
 
+	unsigned int* h_splitSizes = (unsigned int*)malloc(nBlocks*sizeof(unsigned int));
 	unsigned int* d_splitSizes;
 	cudaMalloc(&d_splitSizes, nBlocks * sizeof(unsigned int));
 
 	// Binary search for ideal splitPosition, assuming 32bit integers
-	for (int i = 29; i > 0; i--){
+	for (int i = 30; i >= 0; i--){
 		split<<<nBlocks, nThreads, nThreads*sizeof(unsigned int)>>>(N, d_xPos, splitPosition, d_splitSizes);
-		// Sum up results from blocks
-		sum<<<1, nThreads>>>(nBlocks, d_splitSizes);
-		// Copy back to host
-		cudaMemcpy(&h_splitSize, d_splitSizes, sizeof(unsigned int), cudaMemcpyDeviceToHost);
 
-		std::cout << h_splitSize << "\n";	
-		if (h_splitSize > 2<<(p-1)){
-			splitPosition -= 2 << i;
+		cudaMemcpy(h_splitSizes, d_splitSizes, nBlocks*sizeof(unsigned int), cudaMemcpyDeviceToHost);
+
+		h_splitSize = 0;
+		for (unsigned int j = 0; j < nBlocks; j++){
+			h_splitSize += h_splitSizes[j];	
 		}
-		else if(h_splitSize < 2 << (p-1)){
-			splitPosition += 2 << i;
+
+		// Sum up results from blocks
+		//sum<<<1, nThreads>>>(nBlocks, d_splitSizes);
+		// Copy back to host
+		//cudaMemcpy(&h_splitSize, d_splitSizes, sizeof(unsigned int), cudaMemcpyDeviceToHost);
+
+		std::cout << splitPosition << " : " <<  h_splitSize << "\n";	
+		if (h_splitSize > 1<<(p-1)){
+			splitPosition -= 1 << i;
+		}
+		else if(h_splitSize < 1<<(p-1)){
+			splitPosition += 1 << i;
 		}
 		else{
 			std::cout << "found split at position " << splitPosition << "\n";
