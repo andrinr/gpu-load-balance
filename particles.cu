@@ -8,15 +8,14 @@
 __global__ void split(int nPositions, int * positions, int splitPosition, unsigned int * splitSizes){
 	
 	unsigned int index = threadIdx.x + blockIdx.x * blockDim.x;
-        unsigned int l_splitSize = 0;
+
+	// shared among theads in block
 	extern __shared__ unsigned int s_splitSizes[];
 
-        for (unsigned int i = index; i < min(nPositions, (blockIdx.x + 1) * blockDim.x); i += blockDim.x){
-                int isLeft = positions[i] < splitPosition;
-                l_splitSize += isLeft;
-        }
-
-        s_splitSizes[threadIdx.x] = l_splitSize;
+	if (index < nPositions){
+		int isLeft = positions[index] < splitPosition;
+		s_splitSizes[threadIdx.x] = isLeft;
+	}
 
 	// sequential reduction, can be optimized further
         for (unsigned int s = blockDim.x/2; s > 0; s >>= 1){
@@ -73,9 +72,6 @@ int main()
 	int* d_zPos;
 	cudaMalloc(&d_zPos, size);
 
-	unsigned int* d_splitSize;
-	cudaMalloc(&d_splitSize, sizeof(unsigned int));
-
 	// Data Initialisation
 	for (int i = 0; i < N; i++){
 		// xpos
@@ -105,8 +101,9 @@ int main()
 	// Binary search for ideal splitPosition, assuming 32bit integers
 	for (int i = 29; i > 0; i--){
 		split<<<nBlocks, nThreads, nThreads*sizeof(unsigned int)>>>(N, d_xPos, splitPosition, d_splitSizes);
+		// Sum up results from blocks
 		sum<<<1, nThreads>>>(nBlocks, d_splitSizes);
-
+		// Copy back to host
 		cudaMemcpy(&h_splitSize, d_splitSizes, sizeof(unsigned int), cudaMemcpyDeviceToHost);
 
 		std::cout << h_splitSize << "\n";	
@@ -124,7 +121,7 @@ int main()
  	
 	// Free memory
 	cudaFree(d_xPos);
-	cudaFree(d_splitSize);
+	cudaFree(d_splitSizes);
 
 	// Output
 	remove( "out.dat" );
