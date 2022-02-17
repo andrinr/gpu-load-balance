@@ -1,3 +1,7 @@
 *.swp
 *.out
 *.dat
+*.aux
+*.log
+*.gz
+*.pdf
