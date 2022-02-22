@@ -11,16 +11,18 @@
 \section{Datapoints of supercomputers}
 
 \begin{center}
-	\begin{tabular}{ c c c c }
-		& Piz Daint GPU \cite{piz_daint} & Eiger & Summit \\ 
+	\begin{tabular}{ c c c }
+		& Piz Daint GPU \cite{piz_daint} & Summit \\ 
 		\hline
-		Number of Nodes & 5704 & & \\
-		Mem. Cap. / Node & 64 GB & cell5 & cell6 \\   
-		CPU Model & Intel Xeon E5-2690 v3 \\
+		Number of Nodes & 5704 & 4608\\
+		CPU Mem. Cap. & 64 GB & 512 GB  \\   
+		CPU Model & Intel Xeon E5-2690 v3 & IBM POWER9 \\
 		CPU Mem. Bandwith  & 68 GB/s \\
-		GPU Model & NVIDIA Tesla P100 \\
-		GPU Mem. Cap. & 16 GB \\
+		CPU Number of Cores & 12 \\
+		GPU Model & NVIDIA Tesla P100 & NVIDIA Volta V100s \\
+		GPU Mem. Cap. & 16 GB & 96 GB\\
 		GPU Mem. Bandwith & 732 GB/s \\
+		GPU Interconnect Bandwidth & 32 GB/s \\
 		GPU Single Prec. Perf. & 9.3 tFlops
 	\end{tabular}
 \end{center}
@@ -28,18 +30,42 @@
 \subsection{Terminology}
 
 \begin{enumerate}
-	\item Memory Bandwith: read / write speed of semiconductor memory
+	\item Memory Bandwidth: read / write speed of semiconductor memory
 	\item 
 
 \end{enumerate}
 
 \section{Analysis}
 
+\begin{itemize}
+	\item 
+	One particle requires 32 bytes of storage. Where the XYZ coordinates require $4\times3 = 12$ bytes of storage, the rest is used for additional information.
+	
+	\item
+	A single iteration of the binary cut algorithm requires $32 \times N$ operations.
+	
+	\item 
+	All particles are assumed to be stored in the CPU memory initially.
+	
+	\item
+	We perform the analysis on one billion particles. This means we need 32 GB storage for all the particles and 12 GB for only the XYZ positions.
+\end{itemize}
 
-We assume one particle requires 32 bytes of storage. Where the XYZ coordinates require $4\times3 = 12$ bytes of storage, the rest is used for additional information.
 
 \subsection{Piz Daint} 
-We can store $10^9$ particles in the memory of Piz Daint. 
+When executing the algorithm on the CPU, for a single iteration of the binary cut algorithm we perform a scan over an axis of all particle positions. This translates to $10^9 \times 4 bytes = 4 GB$.
+On the CPU this results in an execution time of 
+\begin{center}
+	$32 \times \frac{ 4 GB}{68 GB/s} = 1.8 s$ 
+\end{center}
+
+If we do the same on the GPU we get an execution time of:
+\begin{center}
+	$32 \times \frac{4 GB}{732 GB/s} + 2 \times \frac{4 GB}{32 GB/s} = 0.38 s$ 
+\end{center}
+
+
+
 \bibliographystyle{plain}
 \bibliography{reference}
 

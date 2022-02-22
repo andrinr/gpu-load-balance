@@ -3,6 +3,8 @@ Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
 The top-level auxiliary file: notes.aux
 The style file: plain.bst
 Database file #1: reference.bib
+Warning--entry type for "piz_daint" isn't style-file defined
+--line 1 of file reference.bib
 Warning--to sort, need author or key in piz_daint
 You've used 1 entry,
             2118 wiz_defined-function locations,
@@ -45,4 +47,4 @@ warning$ -- 1
 while$ -- 0
 width$ -- 2
 write$ -- 7
-(There was 1 warning)
+(There were 2 warnings)
