@@ -1,0 +1,138 @@
+\documentclass[english]{IFIletter}
+
+\usepackage[utf8]{inputenc}
+\usepackage{babel}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{listings}
+\usepackage{color}
+\usepackage{hyperref}
+\usepackage{comment}
+
+\begin{document}
+
+\address{Prof.\ Dr.\ Michael B\"ohlen}
+\position{Professor}
+\IFIgroup{Database Technology}
+\IFIemail{boehlen}
+\IFIphone{5 43 33}
+\signature{Prof.\ Dr.\ Michael B\"ohlen\\\position}
+
+\toname{}
+\toaddressstreet{}
+\toaddresscity{}
+\toaddresscountry{}
+
+\begin{letter}
+
+\date{\today}
+
+\opening{\textbf{BSc Thesis \\ Orthogonal Recursive Bisection on the GPU for Accelerated Load Balancing in Large N-Body Simulations }}
+
+\vspace{0.5cm}
+
+The N-Body technique has been used for decades to simulate the Universe so we can compare theory with observations. This technique uses ``particles'' or ``bodies'' to sample phase space, and as gravity operates over infinite distance it is necessary to consider all pair-wise interactions which makes a naive implementation $\mathcal{O}(n^2)$.
+It is clear that this does not scale particularly well with large particle counts.
+
+One common approach is to decompose the particles into a tree structure and multipole expansions of the particles in each tree cell to approximate the forces. This reduces the complexity of the algorithm to $\mathcal{O}(n\log{}n)$. More recently the Fast Multipole Method (FMM) has gained wider option primarily due to the extremely large sizes of modern simulations. This technique further reduces the complexity to $\mathcal{O}(n)$!
+
+
+\begin{comment}
+\begin{itemize}
+    \item Load balancing and tree building can be derived from the tree decomposition. 
+    \item Particle-particle interactions can be reduced from $O(N \times N)$ to $O(N)$ with the fast multi-poles method.
+\end{itemize}
+\end{comment}
+
+The computational effort required in modern N-Body simulations can thus be split into three categories:
+
+\begin{itemize}
+    \item \textbf{Load Balancing:} Distribute particles equally among nodes with regards to memory.
+    \item \textbf{Tree Building:} Build tree on each node for accelerated force calculation and integration.
+    \item \textbf{Force calculation and integration:} Calculate forces between particles and apply them.
+\end{itemize}
+
+Before the implementation of FMM into codes, and particularly before the era of modern accelerated computing (e.g., SIMD vectorization and GPU computing) the forces calculations dominated the computational cost. In more recent simulations, each category is about one third of the total calculation time\cite{2017ComAC...4....2P}. This makes the tree building and load balancing subjects to great performance gains, since GPU acceleration is usually not exploited. 
+
+This project proposes to implement ORB with the CUDA API to accelerate load balancing.
+
+\textbf{Tasks}
+
+\begin{enumerate}\itemsep=15pt
+
+\item \textbf{Literature review and prerequisite study}
+  \begin{itemize}
+\item J.Stadel, Cosmological N-body simulations and their analysis \cite{stadel:2001}
+\item Salmon, Parallel hierarchical N-body methods
+\cite{salmon1991parallel}
+
+\end{itemize}
+
+\item \textbf{Theoretical Analysis of Speedup}
+\begin{itemize}
+    \item ORB essentially works by executing a binary search over the spatial domain, where the left and right side of the cut contain the same number of particles. This is repeated until a desired tree depth is achieved. Each time a cut is found, there exist a multitude of options on how to handle and prepare the particle data for the next iteration of the algorithm. In fact it's crucial to find a good strategy which minimizes communication overheads between CPU and GPU RAM whilst maximizing the efficiency of the binary search.
+    \begin{itemize}
+        \item Variant A: Reshuffle particle array after each cut on the CPU. Therefore particle positions have to reloaded from the CPU onto the GPU after each iteration. The particles can be sent from the CPU to the GPU in small batches, where the GPU already starts processing received batches, which can mitigate the communication overhead. 
+        \item Variant B: Reshuffle particle array on the CPU only after $k$ cuts have been done on the GPU. In the meantime the cuts are represented and stored on shared GPU memory. This mitigates the communication overhead since communication only has to happen every $k$-th iteration, where $k$ is limited by the efficiency of the shared memory.
+        \item Optionally come up with better variant. 
+    \end{itemize}
+    \item  Derive an upper bound and an average bound for all variants  considering both time and memory complexity. Use different theoretical particle distributions. 
+    \item In theory, compare the GPU accelerated load balancing against the CPU accelerated versions.
+\end{itemize}
+
+
+
+\item \textbf{Write and optimize CUDA Kernel for ORB}
+
+  \begin{itemize}
+  \item Program theoretically optimal variant from (2.) using CUDA and C++.
+  \item Based on resources from CUDA, find and apply most efficient implementation details. 
+
+  \end{itemize}
+  
+\item \textbf{Integrate with PKDGRAV}
+    \begin{itemize}
+    \item Implement inter-node communication for both binary search and reshuffling.
+    \item Integrate the code with the already existing simulation software PKDGRAV.\cite{2017ComAC...4....2P}
+\end{itemize}
+
+\item \textbf{Profiling and Analysis}
+\begin{itemize}
+    \item Profile the previous version of PKDGRAV against the newly optimized version with GPU accelerated load balancing and tree building.
+\end{itemize}
+
+
+
+
+\item \textbf{Task 6: Write and defend the thesis}
+  \begin{itemize}
+  \item Describe the implementations, results and evaluations
+  \item Present and defend thesis
+  \end{itemize}
+\end{enumerate}
+
+\vspace{0.5cm}
+
+\bibliographystyle{plain}
+\bibliography{literature}
+
+\vspace{1cm}
+
+\textbf{Supervisors}:
+\begin{itemize}
+\item Dr. Doug Potter (douglas.potter@uzh.ch)
+\item Prof. Dr. Michael B\"ohlen (boehlen@ifi.uzh.ch)
+\end{itemize}
+
+\vspace{0.5cm}
+\textbf{Start Date}: February 14th, 2022
+
+\vspace{0.5cm}
+\textbf{End Date}: August 14th, 2022
+
+\vspace{2cm}
+\closing{University of Zurich\\Department of Informatics}
+
+\end{letter}
+
+\end{document}

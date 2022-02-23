@@ -17,13 +17,11 @@
 		Number of Nodes & 5704 & 4608\\
 		CPU Mem. Cap. & 64 GB & 256 GB $\times$ 2  \\   
 		CPU Model & Intel Xeon E5-2690 v3 & IBM POWER9 $\times$ 2 \\
-		CPU Mem. Bandwith  & 68 GB/s & 170 GB/s\\
-		CPU Number of Cores & 12 \\
+		CPU Mem. Bandwidth  & 68 GB/s & 170 GB/s\\
 		GPU Model & NVIDIA Tesla P100 & NVIDIA Volta V100s $\times$ 6 \\
 		GPU Mem. Cap. & 16 GB & 16 GB $\times$ 6\\
-		GPU Mem. Bandwith & 732 GB/s & 900 GB/s \\
-		GPU Interconnect Bandwidth & 32 GB/s & 50 GB/s \\
-		GPU Single Prec. Perf. & 9.3 tFlops
+		GPU Mem. Bandwidth & 732 GB/s & 900 GB/s \\
+		Interconnect Bandwidth & 32 GB/s & 50 GB/s \\
 	\end{tabular}
 \end{center}
 
@@ -35,7 +33,7 @@
 
 \end{enumerate}
 
-\section{Analysis}
+\section{Analysis of GPU ORB building}
 
 \begin{itemize}
 	\item 
@@ -61,25 +59,33 @@ On the CPU this results in a memory access time of
 
 If we do the same on the GPU we get an access time of:
 \begin{center}
-	$32 \times \frac{4 GB}{732 GB/s} + 2 \times \frac{4 GB}{32 GB/s} = 0.38 s$ 
+	$32 \times \frac{4 GB}{732 GB/s} + \frac{4 GB}{32 GB/s} = 0.3 s$ 
 \end{center}
 
-Where the first part are the 32 iterations of the memory sweep and the second part are the transfer times from CPU to GPU and from CPU to GPU. It is clear that the transfer times from the CPU to the GPU dominate the runtime.
+This results in a theoretical speedup of:
 
-Let us now consider an alternative way of computing binary cuts. We will build part of the tree on the GPU itself. Since we have a shared memory size of 64 KB and we assume a single tree cell requires 64 bytes of information, we can perform 6 binary cuts on GPU. Note that in this we need to load all three coordinates to the GPU which translates to following formulas:
+\begin{center}
+	$\frac{1.8}{0.3} = 6$
+\end{center}
+
+Where the first part are the 32 iterations of the memory sweep and the second part are the transfer times from CPU to GPU. We only need to transfer back a single number, which is then used to termine the next split position. Thus transfer times from the GPU to CPU are negligible. It is clear that the transfer times from the CPU to the GPU dominate the runtime.
+
+Let us now consider an alternative way of computing binary cuts. We will build part of the tree on the GPU itself. We have a shared memory size of 64 KB and we assume a single tree cell requires 64 bytes of information. Thus we can perform $log 10^6 = 6$ binary cuts on GPU. Note that in this case we need to load all three coordinates to the GPU. Furthermore we need to send more information from the GPU to the CPU, since for each particle we need to know its corresponding domain, finally we need to send back the domain data. We omit the domain data transfer in the equation ql since it can be stored in 64 KB memory which is negligible.
 
 \begin{center}
 	$6 \times 32 \times \frac{ 4 GB}{68 GB/s} = 11.3 s$ 
 \end{center}
 
 \begin{center}
-	$6 \times 32 \times \frac{4 GB}{732 GB/s} + 2 \times \frac{12 GB}{32 GB/s} = 1.8 s$ 
+	$6 \times 32 \times \frac{4 GB}{732 GB/s} + \frac{12 GB}{32 GB/s} + \frac{4 GB}{32 GB/s} = 1.5 s$ 
 \end{center}
 
+\begin{center}
+	$\frac{11.3}{1.5} = 7.5$ 
+\end{center}
+ 
 Todo: Consider not only increased datatransfer rates of the GPU but also consider how the GPU might be able to improve the speeds with a higher parallelization.
 What about shared memory costs? How to estimate?
-
-
 
 \bibliographystyle{plain}
 \bibliography{reference}
