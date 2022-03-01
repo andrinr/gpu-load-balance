@@ -1,8 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 static int COUNT = 10 ^ 9;
 static int MIN_SIZE = 16;
+static int DIMENSIONS = 3;
 
 struct Cell
 {
@@ -14,59 +16,51 @@ struct Cell
     int end;
 };
 
-int main()
-{
-    // Init positions
-    float p [3][COUNT];
 
-    for (int j = 0; j < 3; j++) {
-        for (int i = 0; i < COUNT; i++) {
-            p[j][i] = (float)rand()/(float)(RAND_MAX) - 0.5;
+int reshuffleArray(float arr[][DIMENSIONS], int axis, int start, int end, float split) {
+    int i = start;
+    int j = end-1;
+    
+    while (i < j) {
+        if (arr[i][axis] < split) {
+            i += 1;
+        }
+        if (arr[j][axis] > split) {
+            j -= 1;
+        }
+        if (arr[i][axis] < split && arr[j][axis] < split){
+            for (int d = 0; d < 3; d++) {
+                float tmp = arr[i][d];
+                arr[i][d] = arr[j][d];
+                arr[j][d] = tmp;
+            }
+
+            i += 1;
+            j -= 1;
         }
     }
 
-    // Init tree
-    struct Cell root = {
-        .center = {0.0, 0.0, 0.0},
-        .size = {1.0, 1.0, 1.0},
-        .start = 0,
-        .end = COUNT
-    };
-    
-    orb(&root, &p);
-
-    return 0;
+    return i - 1;
 }
 
-void orb(struct Cell *cell, float *p [3][COUNT]) {
+int findMaxIndex(float arr[DIMENSIONS]) {
 
-    int axis = findMaxIndex(&cell->size);
+    float max = 0;
+    int index = -1;
 
-    if (cell->end - cell->start < MIN_SIZE){
-        return;
-    }
-
-    float left = cell->center[axis]-cell->size[axis]/2.0;
-    float right = cell->center[axis]+cell->size[axis]/2.0;
-    
-    float split = findSplit(&p[axis], cell->start, cell->end, left, right);
-
-    struct Cell leftChild = {
-        .start
+    for (int i = 0; i < DIMENSIONS; i++) {
+        float element = (arr)[i];
+        if (element > max) {
+            index = i;
+            max = element;
+        };
     };
 
-    struct Cell rightChild = {
-
-    };
-
-
+    return index;
 }
 
-float reshuffleArray(float *arr[], int start, int end, float split) {
 
-}
-
-float findSplit(float *arr[], int start, int end, float left, float right) {
+float findSplit(float arr[][DIMENSIONS], int axis, int start, int end, float left, float right) {
     int half = (end - start) / 2;
 
     float split = 0;
@@ -77,7 +71,7 @@ float findSplit(float *arr[], int start, int end, float left, float right) {
         int nLeft = 0;
 
         for (int j = start; j < end; j++) {
-            nLeft += (*arr)[j] < split;
+            nLeft += arr[j][axis] < split;
         }
 
         if (abs(nLeft - half) < 1 ) {
@@ -91,23 +85,82 @@ float findSplit(float *arr[], int start, int end, float left, float right) {
             left = split;
         }
     }
-
     return split;
 }
 
+void orb(struct Cell *cell, float p [COUNT][DIMENSIONS]) {
 
-int findMaxIndex(float *arr[]) {
+    int axis = findMaxIndex(cell->size);
 
-    float max = 0;
-    int index = -1;
+    if (cell->end - cell->start < MIN_SIZE){
+        return;
+    }
 
-    for (int i = 0; i < sizeof(*arr); i++) {
-        float element = (*arr)[i];
-        if (element > max) {
-            index = i;
-            max = element;
-        };
+    float left = cell->center[axis]-cell->size[axis]/2.0;
+    float right = cell->center[axis]+cell->size[axis]/2.0;
+    
+    int split = findSplit(p, axis, cell->start, cell->end, left, right);
+    int mid = reshuffleArray(p, axis, cell->start, cell->end, split);
+
+    float centerLeft[DIMENSIONS], centerRight[DIMENSIONS], sizeLeft[DIMENSIONS], sizeRight[DIMENSIONS];
+
+    for (int d = 0; d < DIMENSIONS; d++) {
+        sizeLeft[d] = cell->size[d];
+        sizeRight[d] = cell->size[d];
+        centerRight[d] = cell->center[d];
+        centerLeft[d] = cell->center[d];
+    }
+
+    sizeLeft[axis] = split - left;
+    sizeRight[axis] = right - split;
+
+    centerLeft[axis] = left + sizeLeft[axis] / 2.0;
+    centerRight[axis] = right - sizeRight[axis] / 2.0;
+
+    
+    struct Cell leftChild = {
+        .start = cell->start,
+        .end = mid
     };
 
-    return index;
+    struct Cell rightChild = {
+        .start = mid,
+        .end = cell->end
+    };
+
+    memcpy(leftChild.center, centerLeft, 3);
+    memcpy(leftChild.size, sizeLeft, 3);
+    memcpy(rightChild.center, centerRight, 3);
+    memcpy(rightChild.size, sizeRight, 3);
+
+    cell->left = &leftChild;
+    cell->right = &rightChild;
+
+    orb(cell->left, p);
+    orb(cell->right, p);
+}
+
+int main()
+{
+    // Init positions
+    float p [COUNT][DIMENSIONS];
+
+    for (int d = 0; d < DIMENSIONS; d++) {
+        for (int i = 0; i < COUNT; i++) {
+            p[i][d] = (float)rand()/(float)(RAND_MAX) - 0.5;
+        }
+    }
+
+    // Init tree
+    struct Cell root = {
+        .center = {0.0},
+        .size = {1.0},
+        .start = 0,
+        .end = COUNT
+    };
+    
+    orb(&root, p);
+
+    printf("Done.");
+    return 0;
 }
