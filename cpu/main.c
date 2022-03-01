@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static int COUNT = 10 ^ 9;
+static int COUNT = 1 << 16;
 static int MIN_SIZE = 16;
 static int DIMENSIONS = 3;
 
@@ -99,9 +99,9 @@ void orb(struct Cell *cell, float p [COUNT][DIMENSIONS]) {
     float left = cell->center[axis]-cell->size[axis]/2.0;
     float right = cell->center[axis]+cell->size[axis]/2.0;
     
-    int split = findSplit(p, axis, cell->start, cell->end, left, right);
+    float split = findSplit(p, axis, cell->start, cell->end, left, right);
     int mid = reshuffleArray(p, axis, cell->start, cell->end, split);
-
+    printf("%.4f", split);
     float centerLeft[DIMENSIONS], centerRight[DIMENSIONS], sizeLeft[DIMENSIONS], sizeRight[DIMENSIONS];
 
     for (int d = 0; d < DIMENSIONS; d++) {
@@ -145,11 +145,15 @@ int main()
     // Init positions
     float p [COUNT][DIMENSIONS];
 
-    for (int d = 0; d < DIMENSIONS; d++) {
-        for (int i = 0; i < COUNT; i++) {
+    for (int i = 0; i < COUNT; i++) {
+        printf("%.2f percent initialized\n", i/(float)COUNT * 100);
+        for (int d = 0; d < DIMENSIONS; d++) {
             p[i][d] = (float)rand()/(float)(RAND_MAX) - 0.5;
         }
     }
+
+    printf("Initialized");
+    printf("test");
 
     // Init tree
     struct Cell root = {
