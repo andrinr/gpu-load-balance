@@ -3,7 +3,7 @@
 #include <string.h>
 #include "orb.c"
 
-static int COUNT = 1 << 18;
+static int COUNT = 1 << 19;
 
 int main()
 {
@@ -27,7 +27,7 @@ int main()
         .end = COUNT
     };
     
-    orb(&root, p);
+    orb(&root, p, 0, 32);
 
     printf("Done.\n");
     return 0;

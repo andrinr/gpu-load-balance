@@ -21,15 +21,13 @@ int reshuffleArray(float arr[][DIMENSIONS], int axis, int start, int end, float 
     int j = end-1;
     
     while (i < j) {
-        //printf("%d, %d, \n", i, j);
-        //printf("%.3f, %.3f, %.3f \n", arr[i][axis], arr[j][axis], split);
         if (arr[i][axis] < split) {
             i += 1;
         }
-        if (arr[j][axis] > split) {
+        else if (arr[j][axis] > split) {
             j -= 1;
         }
-        if (arr[i][axis] > split && arr[j][axis] < split){
+        else {
             for (int d = 0; d < 3; d++) {
                 float tmp = arr[i][d];
                 arr[i][d] = arr[j][d];
@@ -41,7 +39,7 @@ int reshuffleArray(float arr[][DIMENSIONS], int axis, int start, int end, float 
         }
     }
 
-    return i - 1;
+    return i;
 }
 
 int findMaxIndex(float arr[DIMENSIONS]) {
@@ -59,7 +57,6 @@ int findMaxIndex(float arr[DIMENSIONS]) {
 
     return index;
 }
-
 
 float findSplit(float arr[][DIMENSIONS], int axis, int start, int end, float left, float right) {
     int half = (end - start) / 2;
@@ -84,16 +81,15 @@ float findSplit(float arr[][DIMENSIONS], int axis, int start, int end, float lef
         else {
             left = split;
         }
-        //printf("%.3f, %d, %d \n", split, nLeft, half);
     }
     return split;
 }
 
-void orb(struct Cell *cell, float p [][DIMENSIONS]) {
+void orb(struct Cell *cell, float p [][DIMENSIONS], int depth, int maxDepth) {
 
     int axis = findMaxIndex(cell->size);
 
-    if (cell->end - cell->start < MIN_SIZE){
+    if (cell->end - cell->start <= MIN_SIZE || depth >= maxDepth){
         return;
     }
 
@@ -102,9 +98,6 @@ void orb(struct Cell *cell, float p [][DIMENSIONS]) {
     
     float split = findSplit(p, axis, cell->start, cell->end, left, right);
     int mid = reshuffleArray(p, axis, cell->start, cell->end, split);
-
-    printf("%d, %d, %d \n", cell->start, cell->end, mid);
-    printf("%.3f, %.3f, %.3f \n", left, right, split);
 
     float centerLeft[DIMENSIONS], centerRight[DIMENSIONS], sizeLeft[DIMENSIONS], sizeRight[DIMENSIONS];
 
@@ -132,14 +125,15 @@ void orb(struct Cell *cell, float p [][DIMENSIONS]) {
         .end = cell->end
     };
 
-    memcpy(leftChild.center, centerLeft, 3);
-    memcpy(leftChild.size, sizeLeft, 3);
-    memcpy(rightChild.center, centerRight, 3);
-    memcpy(rightChild.size, sizeRight, 3);
+    int size = sizeof(float) * DIMENSIONS;
+    memcpy(&leftChild.center, centerLeft, size);
+    memcpy(&leftChild.size, sizeLeft, size);
+    memcpy(&rightChild.center, centerRight, size);
+    memcpy(&rightChild.size, sizeRight, size);
 
     cell->left = &leftChild;
     cell->right = &rightChild;
 
-    orb(cell->left, p);
-    orb(cell->right, p);
+    orb(cell->left, p, depth + 1, maxDepth);
+    orb(cell->right, p, depth + 1, maxDepth);
 }

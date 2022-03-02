@@ -1,11 +1,16 @@
-*.swp
-*.out
-*.dat
+# Latex files
 *.aux
 *.log
 *.gz
 *.pdf
 *.bbl
 *.blg
-*.o
+
+# Editor files
 /.vscode
+*.swp
+
+# Output files
+*.dat
+*.out
+*.o
