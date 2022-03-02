@@ -7,3 +7,5 @@
 *.pdf
 *.bbl
 *.blg
+*.o
+/.vscode
