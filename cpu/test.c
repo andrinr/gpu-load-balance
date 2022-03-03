@@ -4,7 +4,28 @@
 #include "orb.c"
 #include <assert.h>
 
-static int COUNT = 1 << 10;
+static int COUNT_LARGE = 1 << 10;
+static int COUNT_SMALL = 1 << 5;
+
+void testOrb()
+{    
+    float p [COUNT_SMALL][DIMENSIONS];
+    for (int i = 0; i < COUNT_SMALL; i++) {
+        for (int d = 0; d < DIMENSIONS; d++) {
+            p[i][d] = (float)rand()/(float)(RAND_MAX) - 0.5;
+        }
+    }
+
+    // Init tree
+    struct Cell root = {
+        .center = {0.0, 0.0, 0.0},
+        .size = {1.0, 1.0, 1.0},
+        .start = 0,
+        .end = COUNT_SMALL
+    };
+    
+    orb(&root, p, 2);
+}
 
 void testFindMaxIndex() {
     float p [5] = {0.1, 0.9, 0.2, 0.3, -0.2};
@@ -15,14 +36,14 @@ void testFindMaxIndex() {
 
 void testSplit()
 {
-    float p [COUNT][DIMENSIONS];
-    for (int i = 0; i < COUNT; i++) {
+    float p [COUNT_LARGE][DIMENSIONS];
+    for (int i = 0; i < COUNT_LARGE; i++) {
         for (int d = 0; d < DIMENSIONS; d++) {
-            p[i][d] = i / (float) COUNT -0.5;
+            p[i][d] = i / (float) COUNT_LARGE -0.5;
         }
     }
 
-    float split = findSplit(p, 0, 0, COUNT, -0.5, 0.5);
+    float split = findSplit(p, 0, 0, COUNT_LARGE, -0.5, 0.5);
 
     assert(split == 0.0);
 }
@@ -47,5 +68,6 @@ int main()
     testSplit();
     testFindMaxIndex();
     testReshuffleArray();
+    testOrb();
     return 0;
 }

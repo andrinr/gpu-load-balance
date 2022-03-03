@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-static int MIN_SIZE = 128;
 static int DIMENSIONS = 3;
 
 struct Cell
@@ -85,11 +84,11 @@ float findSplit(float arr[][DIMENSIONS], int axis, int start, int end, float lef
     return split;
 }
 
-void orb(struct Cell *cell, float p [][DIMENSIONS], int depth, int maxDepth) {
+void orb(struct Cell *cell, float p [][DIMENSIONS], int minSize) {
 
     int axis = findMaxIndex(cell->size);
-
-    if (cell->end - cell->start <= MIN_SIZE || depth >= maxDepth){
+    if (cell->end - cell->start <= minSize){
+        //printf("%.3f, %.3f, %.3f \n", cell->center[0], cell->center[1], cell->center[2]);
         return;
     }
 
@@ -134,6 +133,6 @@ void orb(struct Cell *cell, float p [][DIMENSIONS], int depth, int maxDepth) {
     cell->left = &leftChild;
     cell->right = &rightChild;
 
-    orb(cell->left, p, depth + 1, maxDepth);
-    orb(cell->right, p, depth + 1, maxDepth);
+    orb(cell->left, p, minSize);
+    orb(cell->right, p, minSize);
 }
