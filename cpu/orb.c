@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <pthread.h>
 
 static int DIMENSIONS = 3;
 
@@ -133,6 +135,12 @@ void orb(struct Cell *cell, float p [][DIMENSIONS], int minSize) {
     cell->left = &leftChild;
     cell->right = &rightChild;
 
-    orb(cell->left, p, minSize);
-    orb(cell->right, p, minSize);
+    pthread_t thread_id_left;
+    pthread_t thread_id_right;
+
+    pthread_create(&thread_id_left, NULL, orb, cell->left, &p, minSize);
+    pthread_create(&thread_id_right, NULL, orb, cell->right, &p, minSize);
+
+    pthread_join(thread_id_left, NULL);
+    pthread_join(thread_id_right, NULL);
 }
