@@ -1,24 +1,27 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "orb.c"
+#include <vector>
+#include "orb.cpp"
 
-static int COUNT = 1 << 25;
+static const int COUNT = 1 << 20;
 
 int main()
 {
     // Init positions
-    float (*p) [COUNT][DIMENSIONS] = malloc(sizeof(float[COUNT][DIMENSIONS]));
+    std::vector<std::vector<float>> p;
+    //p.reserve(COUNT);
 
     printf("Initializing... \n");
 
     for (int i = 0; i < COUNT; i++) {
         
         //printf("%.2f percent initialized\n", i/(float)COUNT * 100);
-
+        std::vector<float> pos;
         for (int d = 0; d < DIMENSIONS; d++) {
-            (*p)[i][d] = (float)rand()/(float)(RAND_MAX) - 0.5;
+            pos.push_back((float)rand()/(float)(RAND_MAX) - 0.5);
         }
+        p.push_back(pos);
     }
 
     printf("Computing ORB... \n");
@@ -31,9 +34,7 @@ int main()
         .end = COUNT
     };
     
-    orb(&root, *p, 256);
-
-    free(p);
+    orb(&root, p, 256);
     
     printf("Done.\n");
     return 0;

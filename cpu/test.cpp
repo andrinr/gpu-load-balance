@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "orb.c"
+#include "orb.cpp"
 #include <assert.h>
 
 static int COUNT_LARGE = 1 << 10;

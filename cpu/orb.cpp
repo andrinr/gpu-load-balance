@@ -1,23 +1,23 @@
-#include <stdio.h>
+
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <pthread.h>
+#include <vector>
+#include <iostream>
 
-static int DIMENSIONS = 3;
+static const int DIMENSIONS = 3;
 
 struct Cell
 {
     struct Cell *left;
     struct Cell *right;
-    float center [3];
-    float size [3];
+    std::vector<float> center;
+    std::vector<float> size;
     int start;
     int end;
 };
 
 
-int reshuffleArray(float arr[][DIMENSIONS], int axis, int start, int end, float split) {
+int reshuffleArray(std::vector<std::vector<float>> arr, int axis, int start, int end, float split) {
     int i = start;
     int j = end-1;
     
@@ -29,7 +29,7 @@ int reshuffleArray(float arr[][DIMENSIONS], int axis, int start, int end, float 
             j -= 1;
         }
         else {
-            for (int d = 0; d < 3; d++) {
+            for (int d = 0; d < DIMENSIONS; d++) {
                 float tmp = arr[i][d];
                 arr[i][d] = arr[j][d];
                 arr[j][d] = tmp;
@@ -43,13 +43,13 @@ int reshuffleArray(float arr[][DIMENSIONS], int axis, int start, int end, float 
     return i;
 }
 
-int findMaxIndex(float arr[DIMENSIONS]) {
+int findMaxIndex(std::vector<float> arr) {
 
     float max = 0;
     int index = -1;
 
     for (int i = 0; i < DIMENSIONS; i++) {
-        float element = (arr)[i];
+        float element = arr[i];
         if (element > max) {
             index = i;
             max = element;
@@ -59,7 +59,7 @@ int findMaxIndex(float arr[DIMENSIONS]) {
     return index;
 }
 
-float findSplit(float arr[][DIMENSIONS], int axis, int start, int end, float left, float right) {
+float findSplit(std::vector<std::vector<float>> arr, int axis, int start, int end, float left, float right) {
     int half = (end - start) / 2;
 
     float split;
@@ -71,8 +71,8 @@ float findSplit(float arr[][DIMENSIONS], int axis, int start, int end, float lef
         for (int j = start; j < end; j++) {
             nLeft += arr[j][axis] < split;
         }
-
-        if (abs(nLeft - half) < 1 ) {
+        
+        if (abs(nLeft - half) <= 1 ) {
             break;
         }
 
@@ -86,12 +86,11 @@ float findSplit(float arr[][DIMENSIONS], int axis, int start, int end, float lef
     return split;
 }
 
-void orb(struct Cell *cell, float p [][DIMENSIONS], int minSize) {
+void orb(struct Cell *cell, std::vector<std::vector<float>> p, int minSize) {
 
     int axis = findMaxIndex(cell->size);
     if (cell->end - cell->start <= minSize){
-        //printf("%.3f, %.3f, %.3f \n", cell->center[0], cell->center[1], cell->center[2]);
-        return;
+       return;
     }
 
     float left = cell->center[axis]-cell->size[axis]/2.0;
@@ -100,14 +99,12 @@ void orb(struct Cell *cell, float p [][DIMENSIONS], int minSize) {
     float split = findSplit(p, axis, cell->start, cell->end, left, right);
     int mid = reshuffleArray(p, axis, cell->start, cell->end, split);
 
-    float centerLeft[DIMENSIONS], centerRight[DIMENSIONS], sizeLeft[DIMENSIONS], sizeRight[DIMENSIONS];
+    std::vector<float> centerLeft, centerRight, sizeLeft, sizeRight;
 
-    for (int d = 0; d < DIMENSIONS; d++) {
-        sizeLeft[d] = cell->size[d];
-        sizeRight[d] = cell->size[d];
-        centerRight[d] = cell->center[d];
-        centerLeft[d] = cell->center[d];
-    }
+    sizeLeft = cell->size;
+    sizeRight = cell->size;
+    centerLeft = cell->center;
+    centerRight = cell->center;
 
     sizeLeft[axis] = split - left;
     sizeRight[axis] = right - split;
@@ -115,32 +112,23 @@ void orb(struct Cell *cell, float p [][DIMENSIONS], int minSize) {
     centerLeft[axis] = left + sizeLeft[axis] / 2.0;
     centerRight[axis] = right - sizeRight[axis] / 2.0;
 
-    
     struct Cell leftChild = {
+        .center = centerLeft,
+        .size = sizeLeft,
         .start = cell->start,
-        .end = mid
+        .end = mid,
     };
 
     struct Cell rightChild = {
+        .center = centerLeft,
+        .size = sizeLeft,
         .start = mid,
         .end = cell->end
     };
 
-    int size = sizeof(float) * DIMENSIONS;
-    memcpy(&leftChild.center, centerLeft, size);
-    memcpy(&leftChild.size, sizeLeft, size);
-    memcpy(&rightChild.center, centerRight, size);
-    memcpy(&rightChild.size, sizeRight, size);
-
     cell->left = &leftChild;
     cell->right = &rightChild;
 
-    pthread_t thread_id_left;
-    pthread_t thread_id_right;
-
-    pthread_create(&thread_id_left, NULL, orb, cell->left, &p, minSize);
-    pthread_create(&thread_id_right, NULL, orb, cell->right, &p, minSize);
-
-    pthread_join(thread_id_left, NULL);
-    pthread_join(thread_id_right, NULL);
+    orb(cell->left, p, minSize);
+    orb(cell->right, p, minSize);
 }
