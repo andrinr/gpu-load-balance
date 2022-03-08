@@ -1,4 +1,3 @@
-#include <vector>
 #include <iostream>
 #include "mpi.cpp"
 
@@ -8,8 +7,9 @@ struct Cell
 {
     struct Cell *left;
     struct Cell *right;
-    float center[DIMENSIONS];
-    float size[DIMENSIONS];
+    
+    float cornerA[DIMENSIONS];
+    float cornerB[DIMENSIONS];
     
     int start;
     int end;
@@ -42,22 +42,6 @@ int reshuffleArray(float* arr, int axis, int start, int end, float split) {
     return i;
 }
 
-int findMaxIndex(float* arr) {
-
-    float max = 0;
-    int index = -1;
-
-    for (int i = 0; i < DIMENSIONS; i++) {
-        float element = arr[i];
-        if (element > max) {
-            index = i;
-            max = element;
-        };
-    };
-
-    return index;
-}
-
 float findSplit(float* arr, int axis, int start, int end, float left, float right) {
     int half = (end - start) / 2;
 
@@ -87,23 +71,27 @@ float findSplit(float* arr, int axis, int start, int end, float left, float righ
 
 void orb(struct Cell *cell, float* p, int minSize) {
 
-    int axis = findMaxIndex(cell->size);
+    float maxValue = 0;
+    int axis = -1;
+
+    for (int i = 0; i < DIMENSIONS; i++) {
+        float size = cell->cornerB[i] - cell->cornerA[i];
+        if (size > maxValue) {
+            maxValue = size;
+            axis = i;
+        }
+    }
+    
     if (cell->end - cell->start <= minSize){
         std::cout << cell->start << " " << cell->end << std::endl;
        return;
     }
 
-    float left = cell->center[axis]-cell->size[axis]/2.0;
-    float right = cell->center[axis]+cell->size[axis]/2.0;
+    float left = cell->cornerA[axis];
+    float right = cell->cornerB[axis];
     
     float split = findSplit(p, axis, cell->start, cell->end, left, right);
     int mid = reshuffleArray(p, axis, cell->start, cell->end, split);
-
-    float centerLeft[DIMENSIONS]{0.0};
-    float centerRight[DIMENSIONS]{0.0};
-    float sizeLeft[DIMENSIONS]{0.0};
-    float sizeRight[DIMENSIONS]{0.0};
-
 
     struct Cell leftChild = {
         .start = cell->start,
@@ -115,17 +103,13 @@ void orb(struct Cell *cell, float* p, int minSize) {
         .end = cell->end
     };
 
-    std::copy(std::begin(cell->size), std::end(cell->size), std::begin(leftChild.size));
-    std::copy(std::begin(cell->size), std::end(cell->size), std::begin(rightChild.size));
-    std::copy(std::begin(cell->center), std::end(cell->center), std::begin(leftChild.center));
-    std::copy(std::begin(cell->center), std::end(cell->center), std::begin(rightChild.center));
+    std::copy(std::begin(cell->cornerA), std::end(cell->cornerA), std::begin(leftChild.cornerA));
+    std::copy(std::begin(cell->cornerA), std::end(cell->cornerA), std::begin(rightChild.cornerA));
+    std::copy(std::begin(cell->cornerB), std::end(cell->cornerB), std::begin(leftChild.cornerB));
+    std::copy(std::begin(cell->cornerB), std::end(cell->cornerB), std::begin(rightChild.cornerB));
 
-
-    leftChild.size[axis] = split - left;
-    rightChild.size[axis] = right - split;
-
-    leftChild.center[axis] = left + leftChild.size[axis] / 2.0;
-    rightChild.center[axis] = right - rightChild.size[axis] / 2.0;
+    leftChild.cornerB[axis] = split;
+    rightChild.cornerA[axis] = split;
 
     cell->left = &leftChild;
     cell->right = &rightChild;

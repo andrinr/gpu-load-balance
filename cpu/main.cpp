@@ -5,9 +5,9 @@ static const int COUNT = 1 << 25;
 int main()
 {
     int pid = mpi::init();
+    
     // Init positions
     float* p = new float[COUNT * DIMENSIONS]{0.0};
-    //p.reserve(COUNT);
 
     printf("Initializing... \n");
 
@@ -21,8 +21,8 @@ int main()
 
     // Init tree
     struct Cell root = {
-        .center = {0.0, 0.0, 0.0},
-        .size = {1.0, 1.0, 1.0},
+        .cornerA = {-0.5, -0.5, -0.5},
+        .cornerB = {0.5, 0.5, 0.5},
         .start = 0,
         .end = COUNT
     };
