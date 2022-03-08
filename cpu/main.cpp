@@ -1,27 +1,20 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <vector>
 #include "orb.cpp"
 
-static const int COUNT = 1 << 20;
+static const int COUNT = 1 << 25;
 
 int main()
 {
+    int pid = mpi::init();
     // Init positions
-    std::vector<std::vector<float>> p;
+    float* p = new float[COUNT * DIMENSIONS]{0.0};
     //p.reserve(COUNT);
 
     printf("Initializing... \n");
 
     for (int i = 0; i < COUNT; i++) {
-        
-        //printf("%.2f percent initialized\n", i/(float)COUNT * 100);
-        std::vector<float> pos;
         for (int d = 0; d < DIMENSIONS; d++) {
-            pos.push_back((float)rand()/(float)(RAND_MAX) - 0.5);
+            p[i * DIMENSIONS + d] = (float)rand()/(float)(RAND_MAX) - 0.5;
         }
-        p.push_back(pos);
     }
 
     printf("Computing ORB... \n");
@@ -35,7 +28,10 @@ int main()
     };
     
     orb(&root, p, 256);
+
+    printf("Done.\n");                                              
     
-    printf("Done.\n");
+
+    mpi::finallize();
     return 0;
 }

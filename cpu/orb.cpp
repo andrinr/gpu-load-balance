@@ -1,9 +1,6 @@
-
-#include <stdlib.h>
-#include <string.h>
 #include <vector>
 #include <iostream>
-
+#include "mpi.cpp"
 
 static const int DIMENSIONS = 3;
 
@@ -11,29 +8,30 @@ struct Cell
 {
     struct Cell *left;
     struct Cell *right;
-    std::vector<float> center;
-    std::vector<float> size;
+    float center[DIMENSIONS];
+    float size[DIMENSIONS];
+    
     int start;
     int end;
 };
 
 
-int reshuffleArray(std::vector<std::vector<float>> arr, int axis, int start, int end, float split) {
+int reshuffleArray(float* arr, int axis, int start, int end, float split) {
     int i = start;
     int j = end-1;
     
     while (i < j) {
-        if (arr[i][axis] < split) {
+        if (arr[i * DIMENSIONS + axis] < split) {
             i += 1;
         }
-        else if (arr[j][axis] > split) {
+        else if (arr[j * DIMENSIONS + axis] > split) {
             j -= 1;
         }
         else {
             for (int d = 0; d < DIMENSIONS; d++) {
-                float tmp = arr[i][d];
-                arr[i][d] = arr[j][d];
-                arr[j][d] = tmp;
+                float tmp = arr[i * DIMENSIONS + d];
+                arr[i * DIMENSIONS + d] = arr[j * DIMENSIONS + d];
+                arr[j * DIMENSIONS + d] = tmp;
             }
 
             i += 1;
@@ -44,7 +42,7 @@ int reshuffleArray(std::vector<std::vector<float>> arr, int axis, int start, int
     return i;
 }
 
-int findMaxIndex(std::vector<float> arr) {
+int findMaxIndex(float* arr) {
 
     float max = 0;
     int index = -1;
@@ -60,7 +58,7 @@ int findMaxIndex(std::vector<float> arr) {
     return index;
 }
 
-float findSplit(std::vector<std::vector<float>> arr, int axis, int start, int end, float left, float right) {
+float findSplit(float* arr, int axis, int start, int end, float left, float right) {
     int half = (end - start) / 2;
 
     float split;
@@ -70,7 +68,7 @@ float findSplit(std::vector<std::vector<float>> arr, int axis, int start, int en
         int nLeft = 0;
 
         for (int j = start; j < end; j++) {
-            nLeft += arr[j][axis] < split;
+            nLeft += arr[j * DIMENSIONS + axis] < split;
         }
         
         if (abs(nLeft - half) <= 1 ) {
@@ -87,10 +85,11 @@ float findSplit(std::vector<std::vector<float>> arr, int axis, int start, int en
     return split;
 }
 
-void orb(struct Cell *cell, std::vector<std::vector<float>> p, int minSize) {
+void orb(struct Cell *cell, float* p, int minSize) {
 
     int axis = findMaxIndex(cell->size);
     if (cell->end - cell->start <= minSize){
+        std::cout << cell->start << " " << cell->end << std::endl;
        return;
     }
 
@@ -100,32 +99,33 @@ void orb(struct Cell *cell, std::vector<std::vector<float>> p, int minSize) {
     float split = findSplit(p, axis, cell->start, cell->end, left, right);
     int mid = reshuffleArray(p, axis, cell->start, cell->end, split);
 
-    std::vector<float> centerLeft, centerRight, sizeLeft, sizeRight;
+    float centerLeft[DIMENSIONS]{0.0};
+    float centerRight[DIMENSIONS]{0.0};
+    float sizeLeft[DIMENSIONS]{0.0};
+    float sizeRight[DIMENSIONS]{0.0};
 
-    sizeLeft = cell->size;
-    sizeRight = cell->size;
-    centerLeft = cell->center;
-    centerRight = cell->center;
-
-    sizeLeft[axis] = split - left;
-    sizeRight[axis] = right - split;
-
-    centerLeft[axis] = left + sizeLeft[axis] / 2.0;
-    centerRight[axis] = right - sizeRight[axis] / 2.0;
 
     struct Cell leftChild = {
-        .center = centerLeft,
-        .size = sizeLeft,
         .start = cell->start,
         .end = mid,
     };
 
     struct Cell rightChild = {
-        .center = centerLeft,
-        .size = sizeLeft,
         .start = mid,
         .end = cell->end
     };
+
+    std::copy(std::begin(cell->size), std::end(cell->size), std::begin(leftChild.size));
+    std::copy(std::begin(cell->size), std::end(cell->size), std::begin(rightChild.size));
+    std::copy(std::begin(cell->center), std::end(cell->center), std::begin(leftChild.center));
+    std::copy(std::begin(cell->center), std::end(cell->center), std::begin(rightChild.center));
+
+
+    leftChild.size[axis] = split - left;
+    rightChild.size[axis] = right - split;
+
+    leftChild.center[axis] = left + leftChild.size[axis] / 2.0;
+    rightChild.center[axis] = right - rightChild.size[axis] / 2.0;
 
     cell->left = &leftChild;
     cell->right = &rightChild;
