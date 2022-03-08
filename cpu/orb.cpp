@@ -4,6 +4,7 @@
 #include <vector>
 #include <iostream>
 
+
 static const int DIMENSIONS = 3;
 
 struct Cell
