@@ -1,12 +1,17 @@
 #include <iostream>
+#include <stack>
 #include "mpi.cpp"
 
 static const int DIMENSIONS = 3;
+static const int MAX_DEPTH = 32;
 
 struct Cell
 {
     struct Cell *left;
     struct Cell *right;
+
+    //float* Cell;
+    //int left;
     
     float cornerA[DIMENSIONS];
     float cornerB[DIMENSIONS];
@@ -70,6 +75,13 @@ float findSplit(float* arr, int axis, int start, int end, float left, float righ
 }
 
 void orb(struct Cell *cell, float* p, int minSize) {
+
+    int pid = mpi::init();
+    
+    for (int depth = 0; depth < MAX_DEPTH; depth++) {
+    
+        int left = pid;
+    }
 
     float maxValue = 0;
     int axis = -1;

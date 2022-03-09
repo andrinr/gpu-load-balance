@@ -11,33 +11,101 @@
 
 \maketitle
 
-\section{Datapoints of supercomputers}
+\section{Introduction}
 
-\begin{center}
-	\begin{tabular}{ c c c }
-		& Piz Daint HYBRID \cite{piz_daint} & Summit \\ 
-		\hline
-		Number of Nodes & 5704 & 4608\\
-		CPU Mem. Cap. & 64 GB & 256 GB $\times$ 2  \\   
-		CPU Model & Intel Xeon E5-2690 v3 & IBM POWER9 $\times$ 2 \\
-		CPU Mem. Bandwidth  & 68 GB/s & 170 GB/s\\
-		GPU Model & NVIDIA Tesla P100 & NVIDIA Volta V100s $\times$ 6 \\
-		GPU Mem. Cap. & 16 GB & 16 GB $\times$ 6\\
-		GPU Mem. Bandwidth & 732 GB/s & 900 GB/s \\
-		Interconnect Bandwidth & 32 GB/s & 50 GB/s \\
-	\end{tabular}
-\end{center}
 
-\subsection{Terminology}
+The N-Body technique has been used for decades to simulate the Universe so we can compare theory with observations. This technique uses ``particles'' or ``bodies'' to sample phase space, and as gravity operates over infinite distance it is necessary to consider all pair-wise interactions which makes a naive implementation $\mathcal{O}(n^2)$.
+It is clear that this does not scale particularly well with large particle counts.
 
-\begin{enumerate}
-	\item Memory Bandwidth: read / write speed of semiconductor memory
-	\item 
+One common approach is to decompose the particles into a tree structure and multipole expansions of the particles in each tree cell to approximate the forces. This reduces the complexity of the algorithm to $\mathcal{O}(n\log{}n)$. More recently the Fast Multipole Method (FMM) has gained wider option primarily due to the extremely large sizes of modern simulations. This technique further reduces the complexity to $\mathcal{O}(n)$!
 
-\end{enumerate}
+The computational effort required in modern N-Body simulations can thus be split into three categories:
 
-\section{Analysis of GPU ORB building}
+\begin{itemize}
+	\item \textbf{Load Balancing:} Distribute particles equally among nodes with regards to memory.
+	\item \textbf{Tree Building:} Build tree on each node for accelerated force calculation and integration.
+	\item \textbf{Force calculation and integration:} Calculate forces between particles and apply them.
+\end{itemize}
 
+Before the implementation of FMM into codes, and particularly before the era of modern accelerated computing (e.g., SIMD vectorization and GPU computing) the forces calculations dominated the computational cost. In more recent simulations, each category is about one third of the total calculation time\cite{2017ComAC...4....2P}. This makes the tree building and load balancing subjects to great performance gains, since GPU acceleration is usually not exploited. 
+
+This project proposes to implement ORB with the CUDA API to accelerate load balancing.
+
+\section{ORB Algorithm}
+The general idea of the ORB algorithm is to split a $k$ dimensional domain containing $N$ particles into subdomains. Each subdomain contains an equal number of particles, which can also be relaxed for accommodate odd particle counts and increase performance. We always choose the dimension which is the biggest to perform the next cut. This has the advantage of yielding domains which are of a shape closely approximating a square. Square domains are of great importance for the performance and efficiency of the FFM (Fast Multipole Method).
+
+We assume positions are stored as a 32 bit precision float which is reasonable for astrophysical calculations. 
+\begin{algorithm}[H]
+	\caption{The ORB main routine}\label{euclid}
+	\begin{algorithmic}[1]
+		\Procedure{orb}{$cornerA, cornerB ,particles$}
+		\State $size = cornerB - cornerA$
+		\State $axis = maxIndex(size.x, size.y, size.z)$ \Comment{Get index of max size}
+		
+		\State $left = cornerA[axis]$
+		\State $right = cornerB[axis]$
+		\newline
+		\State $cut = cut(left, right, axis, particles)$
+		\State $mid = reshuffle(split, axis, particles)$
+		\newline
+		
+		TODO
+		\State \Call {orb}{cornerA, cornerB}
+		\EndProcedure
+	\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[H]
+	\caption{Find cut algorithm}\label{euclid}
+	\begin{algorithmic}[1]
+		\Procedure{cut}{$left, right, axis ,particles$}
+		\State $nLeft = 0$
+		\State $split = (right - left) / 2 + left $ \Comment{Initial guess}
+		\While{$abs(nLeft - particles.length/2) > 1 $}
+		\State $split = (right - left) / 2 + left $
+		\State $nLeft\gets sum(particles[:,axis] < split)$
+		\If{$nLeft <= particles.len / 2$}
+		\State $left = split$
+		\Else 
+		\State $right = split$
+		\EndIf
+		\EndWhile\label{euclidendwhile}
+		\State \Return $split$
+		\EndProcedure
+	\end{algorithmic}
+\end{algorithm}
+
+
+\begin{algorithm}[H]
+	\caption{Reshuffle algorithm}\label{euclid}
+	\begin{algorithmic}[1]
+		\Procedure{reshuffle}{$split, axis ,particles$}
+		\State $i = 0$
+		\State $j = particles.lenghth - 1$
+		
+		\While{$i < j$}
+			\If{$particles[i,axis] < split$}
+			\State $i = i + 1$
+			\ElsIf{$particles[j,axis] < split$}
+			\State $j = j - 1$
+			\Else
+			\State $tmp = particles[i,:]$
+			\State $particles[i,:] = particles[j,:]$
+			\State $particles[j,:] = tmp$
+			\EndIf
+		\EndWhile\label{euclidendwhile}
+		
+		\EndProcedure
+	\end{algorithmic}
+\end{algorithm}
+
+The reshuffle procedure takes the array of particles and rearanges the elements such that all element left of the split are on the one side, and the others are on the other side. (Add peseudocode?)
+
+\section{Theoretical Analysis of ORB}
+
+The goal is to have a general idea how and if the performance of the ORB algorithm will greatly benefit from a GPU implementation. We will compare the performance with the datapoints of Piz Daint, Summit and Alps which is a part of Eiger. 
+
+\subsection{Assumptions} 
 \begin{itemize}
 	\item 
 	One particle requires 32 bytes of storage. Where the XYZ coordinates require $4\times3 = 12$ bytes of storage, the rest is used for additional information.
@@ -52,10 +120,27 @@
 	We perform the analysis on one billion particles. This means we need 32 GB storage for all the particles and 12 GB for only the XYZ positions.
 	
 	\item
-	We do not consider calculation times as memory access times far outweigh them. The operations are simple comparison operations which require only very little cycles on the chip. 
+	We do not consider calculation times as memory access times  outweigh them. The operations are simple comparison  which require only very little cycles on the chip. 
 \end{itemize}
 
+\subsection{Datapoints of supercomputers}
 
+\small
+\begin{center}
+	\begin{tabular}{ c c c c }
+		& Piz Daint HYBRID \cite{piz_daint} & Summit & Alps (Eiger) \\ 
+		\hline
+		Number of Nodes & 5704 & 4608 & 1024\\
+		CPU Mem. Cap. & 64 GB & 256 GB $\times$ 2  \\   
+		CPU Model & Intel E5-2690 v3 & IBM POWER9 $\times$ 2 & AMD EPYC 7742 \\
+		CPU Mem. Bandw.  & 68 GB/s & 170 GB/s & 204.8 GB/s\\
+		GPU Model & NVIDIA P100 & NVIDIA V100s  $\times$ 6 & None \\
+		GPU Mem. Cap. & 16 GB & 16 GB $\times$ 6 & -\\
+		GPU Mem. Bandw. & 732 GB/s & 900 GB/s & -\\
+		Interconnect Bandw. & 32 GB/s & 50 GB/s & -\\
+	\end{tabular}
+\end{center}
+\normalfont
 \subsection{Piz Daint} 
 When executing the algorithm on the CPU, for a single iteration of the binary cut algorithm we perform a scan over an axis of all particle positions. This translates to $10^9 \times 4 bytes = 4 GB$.
 On the CPU this results in a memory access time of 
@@ -89,40 +174,22 @@ Let us now consider an alternative way of computing binary cuts. We will build p
 \begin{center}
 	$\frac{60.2}{6} = 10$ 
 \end{center}
- 
-\subsection{ORB Algorithm}
-The general idea of the ORB algorithm is to split a $k$ dimensional domain containing $N$ particles into subdomains. Each subdomain contains an equal number of particles, which can also be relaxed for accommodate odd particle counts and increase performance. 
 
-We assume positions are stored as a 32 bit precision float which is reasonable for astrophysical calculations. 
-\begin{algorithm}[H]
-	\caption{The Orthogonal Recursive Bisection Algorithm in 3D}\label{euclid}
-	\begin{algorithmic}[1]
-		\Procedure{orb}{$cornerA, cornerB ,particles$}
-		\State $size = cornerB - cornerA$
-		\State $index = maxIndex(size.x, size.y, size.z)$ \Comment{Get index of max size}
-	
-		\State $nLeft = 0$
-		\State $left = cornerA[index]$
-		\State $right = cornerB[index]$
-		
-		\State $split = (right - left) / 2 + left $ \Comment{Initial guess}
-		\While{$abs(nLeft - particles.len/2) > 1 $}
-		\State $split = (right - left) / 2 + left $
-		\State $nLeft\gets sum(particles < split)$
-		\If{$nLeft <= particles.len / 2$}
-			\State $left = split$
-		\Else 
-			\State $right = split$
-		\EndIf
-		\EndWhile\label{euclidendwhile}
-		
-		\State \Call {orb}{cornerA, cornerB}
-		\EndProcedure
-	\end{algorithmic}
-\end{algorithm}
+\subsection{Summit}
 
-The reshuffle procedure takes the array of particles and rearanges the elements such that all element left of the split are on the one side, and the others are on the other side.
+TODO
 
+\subsection{Eiger}
+
+TODO 
+
+\section{Implementation}
+
+\subsection{Sequential}
+
+\subsection{CPU parallelization of ORB}
+
+\subsection{CPU parallelization of ORB using CUDA }
 \bibliographystyle{plain}
 \bibliography{reference}
 

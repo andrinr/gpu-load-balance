@@ -4,7 +4,6 @@ static const int COUNT = 1 << 25;
 
 int main()
 {
-    int pid = mpi::init();
     
     // Init positions
     float* p = new float[COUNT * DIMENSIONS]{0.0};
@@ -32,6 +31,6 @@ int main()
     printf("Done.\n");                                              
     
 
-    mpi::finallize();
+    //mpi::finallize();
     return 0;
 }
