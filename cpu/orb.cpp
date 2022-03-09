@@ -74,58 +74,62 @@ float findSplit(float* arr, int axis, int start, int end, float left, float righ
     return split;
 }
 
-void orb(struct Cell *cell, float* p, int minSize) {
+void orb(struct Cell *root, float* p, int minSize) {
 
     int pid = mpi::init();
+    std::stack<Cell*> stack;
+    stack.push(root);
     
-    for (int depth = 0; depth < MAX_DEPTH; depth++) {
-    
-        int left = pid;
-    }
+    while (!stack.empty()) {
+        Cell* cell = stack.top();
+        stack.pop();
 
-    float maxValue = 0;
-    int axis = -1;
+        float maxValue = 0;
+        int axis = -1;
 
-    for (int i = 0; i < DIMENSIONS; i++) {
-        float size = cell->cornerB[i] - cell->cornerA[i];
-        if (size > maxValue) {
-            maxValue = size;
-            axis = i;
+        for (int i = 0; i < DIMENSIONS; i++) {
+            float size = cell->cornerB[i] - cell->cornerA[i];
+            if (size > maxValue) {
+                maxValue = size;
+                axis = i;
+            }       
         }
+        
+        if (cell->end - cell->start <= minSize){
+            std::cout << cell->start << " " << cell->end << std::endl;
+            continue;
+        }
+
+        float left = cell->cornerA[axis];
+        float right = cell->cornerB[axis];
+        
+        float split = findSplit(p, axis, cell->start, cell->end, left, right);
+        int mid = reshuffleArray(p, axis, cell->start, cell->end, split);
+
+        struct Cell leftChild = {
+            .start = cell->start,
+            .end = mid,
+        };
+
+        struct Cell rightChild = {
+            .start = mid,
+            .end = cell->end
+        };
+
+        std::copy(std::begin(cell->cornerA), std::end(cell->cornerA), std::begin(leftChild.cornerA));
+        std::copy(std::begin(cell->cornerA), std::end(cell->cornerA), std::begin(rightChild.cornerA));
+        std::copy(std::begin(cell->cornerB), std::end(cell->cornerB), std::begin(leftChild.cornerB));
+        std::copy(std::begin(cell->cornerB), std::end(cell->cornerB), std::begin(rightChild.cornerB));
+
+        leftChild.cornerB[axis] = split;
+        rightChild.cornerA[axis] = split;
+
+        cell->left = &leftChild;
+        cell->right = &rightChild;
+
+        stack.push(&leftChild);
+        stack.push(&rightChild);
     }
-    
-    if (cell->end - cell->start <= minSize){
-        std::cout << cell->start << " " << cell->end << std::endl;
-       return;
-    }
 
-    float left = cell->cornerA[axis];
-    float right = cell->cornerB[axis];
-    
-    float split = findSplit(p, axis, cell->start, cell->end, left, right);
-    int mid = reshuffleArray(p, axis, cell->start, cell->end, split);
-
-    struct Cell leftChild = {
-        .start = cell->start,
-        .end = mid,
-    };
-
-    struct Cell rightChild = {
-        .start = mid,
-        .end = cell->end
-    };
-
-    std::copy(std::begin(cell->cornerA), std::end(cell->cornerA), std::begin(leftChild.cornerA));
-    std::copy(std::begin(cell->cornerA), std::end(cell->cornerA), std::begin(rightChild.cornerA));
-    std::copy(std::begin(cell->cornerB), std::end(cell->cornerB), std::begin(leftChild.cornerB));
-    std::copy(std::begin(cell->cornerB), std::end(cell->cornerB), std::begin(rightChild.cornerB));
-
-    leftChild.cornerB[axis] = split;
-    rightChild.cornerA[axis] = split;
-
-    cell->left = &leftChild;
-    cell->right = &rightChild;
-
-    orb(cell->left, p, minSize);
-    orb(cell->right, p, minSize);
+    mpi::finallize();
 }

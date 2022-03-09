@@ -1,6 +1,6 @@
 #include "orb.cpp"
 
-static const int COUNT = 1 << 25;
+static const int COUNT = 1 << 20;
 
 int main()
 {

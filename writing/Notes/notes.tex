@@ -185,9 +185,24 @@ TODO
 
 \section{Implementation}
 
+\subsection{Data-structure}
+
+The data-structure which stores the entire three needs to have following properties:
+
+\begin{itemize}
+	\item store domain information and provide access to left and right child cells
+	\item Allow highly unbalanced trees
+\end{itemize}
+
+The most naive approach is to use a struct for each cell which stores information about the domain and keeps a pointer to the left and right cell. 
+
+Disadvantage? TODO
+
 \subsection{Sequential}
 
 \subsection{CPU parallelization of ORB}
+
+There are several variants on how to parallelize the CPU parallelized version of the ORB. Since it is a recursive algorithm 
 
 \subsection{CPU parallelization of ORB using CUDA }
 \bibliographystyle{plain}

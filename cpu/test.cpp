@@ -15,20 +15,13 @@ void testOrb()
 
     // Init tree
     struct Cell root = {
-        .center = {0.0, 0.0, 0.0},
-        .size = {1.0, 1.0, 1.0},
+        .cornerA = {-0.5, -0.5, -0.5},
+        .cornerB = {0.5, 0.5, 0.5},
         .start = 0,
         .end = COUNT_SMALL
     };
     
-    orb(&root, p, 2);
-}
-
-void testFindMaxIndex() {
-    float p [5] = {0.1, 0.9, 0.2, 0.3, -0.2};
-
-    int index = findMaxIndex(p);
-    assert(index == 1);
+    orb(&root, p, 3);
 }
 
 void testSplit()
@@ -63,7 +56,6 @@ void testReshuffleArray() {
 int main()
 {
     testSplit();
-    testFindMaxIndex();
     testReshuffleArray();
     testOrb();
     return 0;
