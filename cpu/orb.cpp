@@ -3,9 +3,8 @@
 #include "mpi.cpp"
 
 static const int DIMENSIONS = 3;
-static const int MAX_DEPTH = 32;
-static const int COUNT = 1 << 6;
-
+static const int DOMAIN_COUNT = 8;
+static const int COUNT = 32;
 
 struct Cell
 {
@@ -23,7 +22,7 @@ struct Cell
 };
 
 
-int reshuffleArray(float* arr, int axis, int start, int end, float split) {
+void reshuffleArray(float* arr, int axis, int start, int end, float split) {
     int i = start;
     int j = end-1;
     
@@ -45,24 +44,22 @@ int reshuffleArray(float* arr, int axis, int start, int end, float split) {
             j -= 1;
         }
     }
-
-    return i;
 }
 
-float findSplit(float* arr, int axis, int start, int end, float left, float right) {
+std::tuple<float, int> findSplit(float* arr, int axis, int start, int end, float left, float right) {
     int half = (end - start) / 2;
 
     float split;
+    int nLeft;
     for (int i = 0; i < 32; i++) {
         split = (right - left ) / 2.0 + left;
-
-        int nLeft = 0;
-
+        nLeft = 0;
         for (int j = start; j < end; j++) {
             nLeft += arr[j * DIMENSIONS + axis] < split;
         }
+        std::cout << "nLeft " << nLeft << " " << split << " " << left << " " << right << std::endl;
         
-        if (abs(nLeft - half) <= 1 ) {
+        if (abs(nLeft - half) < 1 ) {
             break;
         }
 
@@ -73,7 +70,7 @@ float findSplit(float* arr, int axis, int start, int end, float left, float righ
             left = split;
         }
     }
-    return split;
+    return {split, nLeft};
 }
 
 void orb(float* p, int minSize) {
@@ -82,11 +79,11 @@ void orb(float* p, int minSize) {
 
     int counter = 1;
     
-    int* leftChild = new int[COUNT]{0};
-    int* begin = new int[COUNT]{0};
-    int* end = new int[COUNT]{0};
-    float* cornerA = new float[DIMENSIONS * COUNT]{0.0};
-    float* cornerB = new float[DIMENSIONS * COUNT]{0.0};
+    int* leftChild = new int[DOMAIN_COUNT * 2]{0};
+    int* begin = new int[DOMAIN_COUNT * 2]{0};
+    int* end = new int[DOMAIN_COUNT * 2]{0};
+    float* cornerA = new float[DIMENSIONS * DOMAIN_COUNT * 2]{0.0};
+    float* cornerB = new float[DIMENSIONS * DOMAIN_COUNT * 2]{0.0};
 
     cornerA[0] = -0.5;
     cornerA[1] = -0.5;
@@ -118,15 +115,18 @@ void orb(float* p, int minSize) {
         
         std::cout << begin[id] << " " << end[id] << std::endl;
 
-        if (end[id] - begin[id] <= minSize){
+        if (end[id] - begin[id] <= (float) COUNT / DOMAIN_COUNT){
             continue;
         }
 
         float left = cornerA[id * DIMENSIONS + axis];
         float right = cornerB[id * DIMENSIONS + axis];
         
-        float split = findSplit(p, axis, begin[id], end[id], left, right);
-        int mid = reshuffleArray(p, axis, begin[id], end[id], split);
+        float split;
+        int mid;
+        std::tie(split, mid) =  findSplit(p, axis, begin[id], end[id], left, right);
+        mid += begin[id];
+        reshuffleArray(p, axis, begin[id], end[id], split);
 
         leftChild[id] = counter;
         
@@ -140,6 +140,8 @@ void orb(float* p, int minSize) {
         end[counter] = mid;
         stack.push(counter);
 
+        std::cout << counter << " mid " << mid << std::endl;
+
         counter += 1;
 
         // Right Child
@@ -151,6 +153,8 @@ void orb(float* p, int minSize) {
         begin[counter] = mid;
         end[counter] = end[id];
         stack.push(counter);
+
+        counter += 1;
     }
 
     mpi::finallize();
