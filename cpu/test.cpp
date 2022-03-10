@@ -12,16 +12,8 @@ void testOrb()
             p[i * DIMENSIONS + d] = (float)rand()/(float)(RAND_MAX) - 0.5;
         }
     }
-
-    // Init tree
-    struct Cell root = {
-        .cornerA = {-0.5, -0.5, -0.5},
-        .cornerB = {0.5, 0.5, 0.5},
-        .start = 0,
-        .end = COUNT_SMALL
-    };
     
-    orb(&root, p, 3);
+    orb(p, 3);
 }
 
 void testSplit()

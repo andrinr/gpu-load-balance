@@ -4,6 +4,8 @@
 
 static const int DIMENSIONS = 3;
 static const int MAX_DEPTH = 32;
+static const int COUNT = 1 << 6;
+
 
 struct Cell
 {
@@ -74,70 +76,81 @@ float findSplit(float* arr, int axis, int start, int end, float left, float righ
     return split;
 }
 
-void orb(struct Cell *root, float* p, int minSize) {
+void orb(float* p, int minSize) {
 
     int pid = mpi::init();
-    std::stack<Cell*> stack;
-    stack.push(root);
+
+    int counter = 1;
+    
+    int* leftChild = new int[COUNT]{0};
+    int* begin = new int[COUNT]{0};
+    int* end = new int[COUNT]{0};
+    float* cornerA = new float[DIMENSIONS * COUNT]{0.0};
+    float* cornerB = new float[DIMENSIONS * COUNT]{0.0};
+
+    cornerA[0] = -0.5;
+    cornerA[1] = -0.5;
+    cornerA[2] = -0.5;
+    cornerB[0] = 0.5;
+    cornerB[1] = 0.5;
+    cornerB[2] = 0.5;
+    begin[0] = 0;
+    end[0] = COUNT;
+
+    std::stack<int> stack;
+    stack.push(0);
     
     while (!stack.empty()) {
-        Cell* cell = stack.top();
+        int id = stack.top();
         stack.pop();
 
         float maxValue = 0;
         int axis = -1;
 
+        std::cout << "id " << id << std::endl;
         for (int i = 0; i < DIMENSIONS; i++) {
-            float size = cell->cornerB[i] - cell->cornerA[i];
+            float size = cornerB[id * DIMENSIONS + i] - cornerA[id * DIMENSIONS + i];
             if (size > maxValue) {
                 maxValue = size;
                 axis = i;
             }       
         }
         
-        if (cell->end - cell->start <= minSize){
+        std::cout << begin[id] << " " << end[id] << std::endl;
+
+        if (end[id] - begin[id] <= minSize){
             continue;
         }
 
-        float left = cell->cornerA[axis];
-        float right = cell->cornerB[axis];
+        float left = cornerA[id * DIMENSIONS + axis];
+        float right = cornerB[id * DIMENSIONS + axis];
         
-        float split = findSplit(p, axis, cell->start, cell->end, left, right);
-        int mid = reshuffleArray(p, axis, cell->start, cell->end, split);
+        float split = findSplit(p, axis, begin[id], end[id], left, right);
+        int mid = reshuffleArray(p, axis, begin[id], end[id], split);
 
-        std::cout << cell->start << " " << mid << " " << cell->end << std::endl;
-
-        std::cout << cell->cornerA[0] << " " << cell->cornerA[1] << " " << cell->cornerA[2] << std::endl;
-        std::cout << cell->cornerB[0] << " " << cell->cornerB[1] << " " << cell->cornerB[2] << std::endl;
-
-
-        struct Cell leftChild = {
-            .start = cell->start,
-            .end = mid,
-        };
-
-        struct Cell rightChild = {
-            .start = mid,
-            .end = cell->end
-        };
+        leftChild[id] = counter;
         
+        // Left Child info
+        for (int i = 0; i < DIMENSIONS; i++) {
+            cornerA[counter * DIMENSIONS + i] - cornerA[id * DIMENSIONS + i];      
+            cornerB[counter * DIMENSIONS + i] - cornerB[id * DIMENSIONS + i];      
+        }
+        cornerB[counter * DIMENSIONS + axis] = split;
+        begin[counter] = begin[id];
+        end[counter] = mid;
+        stack.push(counter);
 
-        std::copy(std::begin(cell->cornerA), std::end(cell->cornerA), std::begin(leftChild.cornerA));
-        std::copy(std::begin(cell->cornerA), std::end(cell->cornerA), std::begin(rightChild.cornerA));
-        std::copy(std::begin(cell->cornerB), std::end(cell->cornerB), std::begin(leftChild.cornerB));
-        std::copy(std::begin(cell->cornerB), std::end(cell->cornerB), std::begin(rightChild.cornerB));
+        counter += 1;
 
-        std::cout << cell->cornerA[0] << " " << cell->cornerA[1] << " " << cell->cornerA[2] << std::endl;
-        std::cout << cell->cornerB[0] << " " << cell->cornerB[1] << " " << cell->cornerB[2] << std::endl;
-
-        leftChild.cornerB[axis] = split;
-        rightChild.cornerA[axis] = split;
-
-        cell->left = &leftChild;
-        cell->right = &rightChild;
-        
-        stack.push(&rightChild);
-        stack.push(&leftChild);
+        // Right Child
+        for (int i = 0; i < DIMENSIONS; i++) {
+            cornerA[counter * DIMENSIONS + i] - cornerA[id * DIMENSIONS + i];      
+            cornerB[counter * DIMENSIONS + i] - cornerB[id * DIMENSIONS + i];      
+        }
+        cornerA[counter * DIMENSIONS + axis] = split;
+        begin[counter] = mid;
+        end[counter] = end[id];
+        stack.push(counter);
     }
 
     mpi::finallize();

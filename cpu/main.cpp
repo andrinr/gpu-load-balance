@@ -1,7 +1,4 @@
 #include "orb.cpp"
-
-static const int COUNT = 1 << 20;
-
 int main()
 {
     
@@ -17,16 +14,8 @@ int main()
     }
 
     printf("Computing ORB... \n");
-
-    // Init tree
-    struct Cell root = {
-        .cornerA = {-0.5, -0.5, -0.5},
-        .cornerB = {0.5, 0.5, 0.5},
-        .start = 0,
-        .end = COUNT
-    };
     
-    orb(&root, p, 256);
+    orb(p, 8);
 
     printf("Done.\n");                                              
     
