@@ -1,7 +1,6 @@
 #include "orb.cpp"
 int main()
 {
-    
     // Init positions
     float* p = new float[COUNT * DIMENSIONS]{0.0};
 
@@ -19,7 +18,6 @@ int main()
 
     printf("Done.\n");                                              
     
-
     //mpi::finallize();
     return 0;
 }

@@ -5,10 +5,11 @@
 *.pdf
 *.bbl
 *.blg
-
+*.xdp-*
 # Editor files
 /.vscode
 *.swp
+/.idea
 
 # Output files
 *.dat

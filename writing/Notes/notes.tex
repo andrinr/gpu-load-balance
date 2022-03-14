@@ -32,7 +32,23 @@ Before the implementation of FMM into codes, and particularly before the era of 
 This project proposes to implement ORB with the CUDA API to accelerate load balancing.
 
 \section{ORB Algorithm}
-The general idea of the ORB algorithm is to split a $k$ dimensional domain containing $N$ particles into subdomains. Each subdomain contains an equal number of particles, which can also be relaxed for accommodate odd particle counts and increase performance. We always choose the dimension which is the biggest to perform the next cut. This has the advantage of yielding domains which are of a shape closely approximating a square. Square domains are of great importance for the performance and efficiency of the FFM (Fast Multipole Method).
+
+%https://de.overleaf.com/learn/latex/TikZ_package
+%https://texample.net/tikz/examples/
+
+The general idea of the ORB algorithm is to split a $k$ dimensional domain containing $N$ particles into $s$ subdomains. Since we are using ORB to make partitions, the subdomain sizes should be chosen such that the workload can be equally distributed among nodes / processors. Thus we want each domain to contain a similar number of particles. 
+
+The easiest way to accomplish such a task, is search for a split such that 50\% of the particles are on the left side and likewise on the right side of the split. This split can be found in $O(log(N))$ using a binary search. We can introduce an even tighter bound when assuming each particle is being stored as a 32 bit precision number. In this case we have reached the maximum precision after $O(32)$ iterations. After such a split has been found, we can create two new subdomains and recursively apply the algorithm until we have reached the desired number of subdomains. To a clearer terminology, we will from now on refer to a domain as a cell. Furthermore a subdomain of a domain is a child cell of a cell, and likewise we also have the concept of a parent cell.
+
+When each cell keeps track of its child cells, we have built a tree datastructure, where each node represents a cell, the root node is the cell which encompasses the entire space and particles, and finally its leaves can be assigned to a processor / node. Note that the tree is not balanced, but each node has either two children or is a leaf. 
+
+Let us now consider an example where the desired number of leaf cells is not a power of two, for example 7. In this case our first split should not be a 
+
+TODO
+
+This decomposition step is very straight forward, as long as the number of final subdomains $s$ is a power of two. Otherwise we will always end 
+
+We always choose the dimension which is the biggest to perform the next cut. This has the advantage of yielding domains which are of a shape closely approximating a square. Square domains are of great importance for the performance and efficiency of the FFM (Fast Multipole Method).
 
 We assume positions are stored as a 32 bit precision float which is reasonable for astrophysical calculations. 
 \begin{algorithm}[H]
@@ -99,8 +115,9 @@ We assume positions are stored as a 32 bit precision float which is reasonable f
 	\end{algorithmic}
 \end{algorithm}
 
-The reshuffle procedure takes the array of particles and rearanges the elements such that all element left of the split are on the one side, and the others are on the other side. (Add peseudocode?)
+The reshuffle procedure takes the array of particles and rearanges the elements such that all element left of the split are on the one side, and the others are on the other side. 
 
+TODO: more detailed, add section about special cases, add section about tree datastructure
 \section{Theoretical Analysis of ORB}
 
 The goal is to have a general idea how and if the performance of the ORB algorithm will greatly benefit from a GPU implementation. We will compare the performance with the datapoints of Piz Daint, Summit and Alps which is a part of Eiger. 
@@ -133,7 +150,7 @@ The goal is to have a general idea how and if the performance of the ORB algorit
 		Number of Nodes & 5704 & 4608 & 1024\\
 		CPU Mem. Cap. & 64 GB & 256 GB $\times$ 2  \\   
 		CPU Model & Intel E5-2690 v3 & IBM POWER9 $\times$ 2 & AMD EPYC 7742 \\
-		CPU Mem. Bandw.  & 68 GB/s & 170 GB/s & 204.8 GB/s\\
+		CPU Mem. Bandw.  & 68 GB/s & 170 GB/s & 204.8 GB/s x 2	\\
 		GPU Model & NVIDIA P100 & NVIDIA V100s  $\times$ 6 & None \\
 		GPU Mem. Cap. & 16 GB & 16 GB $\times$ 6 & -\\
 		GPU Mem. Bandw. & 732 GB/s & 900 GB/s & -\\
@@ -194,15 +211,26 @@ The data-structure which stores the entire three needs to have following propert
 	\item Allow highly unbalanced trees
 \end{itemize}
 
-The most naive approach is to use a struct for each cell which stores information about the domain and keeps a pointer to the left and right cell. 
+The most naive approach is to use a struct for each cell which stores information about the domain and keeps a pointer to the left and right cell. However since we in high performance systems, synchronizing pointers can be a bit of hassle, furthermore PKDGrav implements distributed arrays. Thus we can store all domain information in an array and simply keep track of the indices of its child cells. This can even be reduced further, since the right child cell is being created by the same process as the left child was. Thus we can assign the information about the right child in the positions left + 1 and only keep track of the index of the left child.
 
-Disadvantage? TODO
+
+
+PkdGrav uses concept of distributed arrays, makes use of logical indexed, thus we do not use pointers. Pointers also take up more memory. 
+
 
 \subsection{Sequential}
 
+Standard array are not high performance. Has an overhead. Standard vector is not too bad. Blitz arrays. 
+ARgue about vector, array std::vector
+
 \subsection{CPU parallelization of ORB}
 
+To parallelize the ORB algorithms, we first need to think about which parts of the algorithm can be parallelized and yield in a performance improvement. The most obvious choice for parallelization is the counting part. In this case the main thread will send a split and the array of particles is distributed among all the processy
+Use OpenMPI / MPich, btoh same standard
+Reshuffling of arrays cannot be done in place.
+
 There are several variants on how to parallelize the CPU parallelized version of the ORB. Since it is a recursive algorithm 
+
 
 \subsection{CPU parallelization of ORB using CUDA }
 \bibliographystyle{plain}

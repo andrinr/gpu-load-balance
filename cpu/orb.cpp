@@ -1,6 +1,6 @@
 #include <iostream>
 #include <stack>
-#include "mpi.cpp"
+#include "mpi.cpp"  
 
 static const int DIMENSIONS = 3;
 static const int DOMAIN_COUNT = 8;
@@ -84,6 +84,19 @@ void orb(float* p, int minSize) {
     int* end = new int[DOMAIN_COUNT * 2]{0};
     float* cornerA = new float[DIMENSIONS * DOMAIN_COUNT * 2]{0.0};
     float* cornerB = new float[DIMENSIONS * DOMAIN_COUNT * 2]{0.0};
+
+    // Main thread coordinates all arrays
+    // Broadcast cell information
+    // While loop 
+    // Same principle as in CUDA just that CPU is rank0 and other threads are rankX
+    // Rank 0 can also participate
+    // Broadcast and reduce
+    
+    // Special cases for odd numbers
+
+    // number of domains left l = n / 2 
+    // number of domains right = n - l
+
 
     cornerA[0] = -0.5;
     cornerA[1] = -0.5;
