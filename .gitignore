@@ -6,6 +6,7 @@
 *.bbl
 *.blg
 *.xdp-*
+
 # Editor files
 /.vscode
 *.swp

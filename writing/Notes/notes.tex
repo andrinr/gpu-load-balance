@@ -293,12 +293,10 @@ The data-structure which stores the entire three needs to have following propert
 
 The most naive approach is to use a struct for each cell which stores information about the domain and keeps a pointer to the left and right cell. However since we in high performance systems, synchronizing pointers can be a bit of hassle, furthermore PKDGrav implements distributed arrays. Thus we can store all domain information in an array and simply keep track of the indices of its child cells. This can even be reduced further, since the right child cell is being created by the same process as the left child was. Thus we can assign the information about the right child in the positions left + 1 and only keep track of the index of the left child.
 
+Since we are building a tree and we 
 
 
 PkdGrav uses concept of distributed arrays, makes use of logical indexed, thus we do not use pointers. Pointers also take up more memory. 
-
-
-\subsection{Sequential}
 
 Standard array are not high performance. Has an overhead. Standard vector is not too bad. Blitz arrays. 
 ARgue about vector, array std::vector
