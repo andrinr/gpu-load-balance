@@ -25,7 +25,7 @@ void testSplit()
         }
     }
 
-    float split = findSplit(p, 0, 0, COUNT_LARGE, -0.5, 0.5);
+    float split = findCut(p, 0, 0, COUNT_LARGE, -0.5, 0.5);
 
     assert(split == 0.0);
 }
