@@ -1,4 +1,7 @@
-#include "orb.cpp"
+#include <iostream>
+#include "orb/Orb.h"
+#include "constants.h"
+
 int main()
 {
     // Init positions
@@ -14,7 +17,8 @@ int main()
 
     printf("Computing ORB... \n");
     
-    orb(p, 8);
+    Orb orb = Orb(p);
+    orb.build();
 
     printf("Done.\n");                                              
     
