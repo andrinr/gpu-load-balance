@@ -1,6 +1,8 @@
 #ifndef ORB_H // include guard
 #define ORB_H
 
+#include <tuple>
+
 class Orb {
 public:
     float* particles;

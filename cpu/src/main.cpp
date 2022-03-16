@@ -1,5 +1,5 @@
 #include <iostream>
-#include "orb/Orb.h"
+#include "Orb.h"
 #include "constants.h"
 
 int main()

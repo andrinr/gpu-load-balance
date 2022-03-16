@@ -1,8 +1,7 @@
-
-#include "../constants.h"
-
 #ifndef CELLS_H // include guard
 #define CELLS_H
+
+#include "constants.h"
 
 /**
  * @brief The Cells class is basically a wrapper around the array datastructure which 

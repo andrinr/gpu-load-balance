@@ -1,12 +1,31 @@
 #include <iostream>
 #include <stack>
-#include <tuple>
 #include <mpi.h>
 #include "Orb.h"
-#include "../cells/Cells.h"
+#include "Cells.h"
 
 Orb::Orb(float* particles) {
     particles = particles;
+}
+
+void Orb::build() {
+
+    int np, rank;
+    MPI_Init(NULL, NULL);
+
+    MPI_Comm_size(MPI_COMM_WORLD, &np);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    std::cout << "Processor ID: " << rank << " Number of processes: " << np << std::endl;
+
+    if (rank == 0) {
+        operative();
+    }
+    else {
+        worker();   
+    }
+
+    MPI_Finalize();
 }
 
 void Orb::reshuffleArray(int axis, int begin, int end, float split) {
@@ -57,7 +76,7 @@ std::tuple<float, int> Orb::findCut(
         cut = (right - left) / 2.0 + left;
         nLeft = 0;
         
-        MPI_SEND(&cut, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
+       // MPI_SEND(&cut, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
         //countLeft(arr,)
 
@@ -135,24 +154,4 @@ void Orb::operative() {
 
 void Orb::worker() {
 
-}
-
-void Orb::build() {
-
-    int np, rank;
-    MPI_Init(NULL, NULL);
-
-    MPI_Comm_size(MPI_COMM_WORLD, &np);
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-    std::cout << "Processor ID: " << rank << " Number of processes: " << np << std::endl;
-
-    if (rank == 0) {
-        operative();
-    }
-    else {
-        worker();
-    }
-
-    MPI_Finalize();
 }

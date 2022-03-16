@@ -1,6 +1,5 @@
 #include <stack>
 #include "Cells.h"
-#include "../constants.h"
 
 Cells::Cells(float left, float right) {
     // Init values
