@@ -49,9 +49,19 @@ The ORB Algorithm can be used to partition a multi dimensional domain into subdo
 
 The general idea of the ORB algorithm is to split a $k$ dimensional domain containing $N$ particles into $np$ subdomains using a recursive procedure. This can be repeated until the number of smallest subdomains is equal to the total count of processors or nodes. The final goal is an equal distribution of the workload and data, thus the subdomain sizes should be chosen such that the number of particles is equal among nodes / processors.
 
-For the ORB algorithms itself, the relation between the number of processors and the workload holds steady. But for the simulation certain particles require more timesteps, thus more computational effort, than others. This is mostly due to higher accelerations and greater proximity to strong gravitational influences. If we try to incorporate these effects, we will end up with partitions which are more equal in terms of workload, but less equal in terms of memory.  For the sake of simplicity, we will assume it is sensible to simply partition the domain into equally sized subdomains.
+\subsection{Memory and Workload Balancing}
+For the ORB algorithms itself, the relation between the number of processors and the workload holds steady. But for the simulation certain particles require more timesteps, thus more computational effort, than others. This is mostly due to higher accelerations and greater proximity to strong gravitational influences. This in turn requires a higher accuracy to mitigate errors. If we try to incorporate these effects, we will end up with partitions which are more equal in terms of workload, but less equal in terms of memory. 
+
+\vspace{5mm}
+If we consider a system with various nodes, the approach is usually to distribute 
+Unequal balancing of the memory in favor of a more equal balance in terms of workload, will results in 
+ For the sake of simplicity, we will assume it is sensible to simply partition the domain into equally sized subdomains.
 
 TODO: extend reasoning
+
+\subsection{ORB for power of twos}
+
+Let us first make the assumption that $np$ is a power of two. In this case we can search for a cut such that 50\% of the particles are on the left side and likewise on the right side of the cut. The position of the cut can be found in $O(log(N))$ using a binary search. We can introduce an even tighter bound when assuming each particle is being stored as a 32 bit precision number. In this case we have reached the maximum precision after $O(32)$ iterations. After such a cut has been found, we can create two new subdomains and recursively apply the algorithm until we have reached the desired number of subdomains $np$. 
 
 \vspace{5mm}
 
@@ -61,6 +71,7 @@ TODO: extend reasoning
 \def\spx{0.45}
 \def\spya{0.5}
 \def\spyb{0.6}
+\begin{figure}[H]
 \begin{center}
 	\begin{tikzpicture}[scale=0.33]
 		\pgfmathsetseed{2};
@@ -101,40 +112,80 @@ TODO: extend reasoning
 	
 \end{tikzpicture}
 \end{center}
+\caption{Building a tree of depth 3 using the ORB algorithm }
+\end{figure}
 
-\vspace{5mm}
-
-\Tree[.root [.cell1 [.cell2 \textit{P0} ]
-[.cell3 \textit{P1} ]]
-[.cell4 [.cell5 \textit{P2} ]
-[.cell5 \textit{P3} ]]]
-
-
-\vspace{5mm}
-
-Let us first make the assumption that $np$ is a power of two. In this case we can search for a split such that 50\% of the particles are on the left side and likewise on the right side of the split. This split can be found in $O(log(N))$ using a binary search. We can introduce an even tighter bound when assuming each particle is being stored as a 32 bit precision number. In this case we have reached the maximum precision after $O(32)$ iterations. After such a split has been found, we can create two new subdomains and recursively apply the algorithm until we have reached the desired number of subdomains $np$. 
 For a clearer terminology, we will from now on refer to a domain as a cell. Furthermore the subdomain of a domain is the child cell of a cell, and likewise we also have the concept of a parent cell.
 
 \vspace{5mm}
 
 When each cell keeps track of its child cells, we have built a tree datastructure. In this tree each cell represents a node, the root node is the cell which encompasses the entire space and particles and finally its leaves can be assigned to a processor / node. Note that the tree is not balanced, but each node has either two children or is a leaf. 
 
+\begin{figure}[H]
+\Tree[.rootcell [.cell1 [.cell2 \textit{P0} ]
+[.cell3 \textit{P1} ]]
+[.cell4 [.cell5 \textit{P2} ]
+[.cell5 \textit{P3} ]]]
+\caption{Tree datastructure of depth 3}
+\end{figure}
 
-\vspace{5mm}
+\subsection{ORB in the general case}
 
 Let us now consider an example where the desired number of leaf cells is not a power of two, for example 7. In this case our first split should not be a 
 
-TODO
+\def\spx{0.36}
+\def\spya{0.5}
+\def\spyb{0.6}
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}[scale=0.33]
+			\pgfmathsetseed{2};
+			\randistr{\x}{\y}{100};
+			\draw (0,0) rectangle (\x, \y);
+			\node[below] at (.5*\x,\y){$root cell$};
+		\end{tikzpicture}
+		\qquad
+		\begin{tikzpicture}[scale=0.33]
+			\pgfmathsetseed{2};
+			\randistr{\x}{\y}{100};
+			\draw (0,0) rectangle (\x * \spx, \y);
+			\node[below] at (\spx * 0.5 * \x,\y){$cell1$};
+			
+			\draw (\x  * \spx, 0) rectangle (\x, \y);
+			\node[below] at ((1.0 - \spx * 0.5) *\x,\y){$cell2$};
+			
+			\vspace{2mm}
+			
+		\end{tikzpicture}
+		\qquad
+		\begin{tikzpicture}[scale=0.33]
+			\pgfmathsetseed{2};
+			\randistr{\x}{\y}{100};
+			\draw (0,0) rectangle (\x * \spx, \y * \spya);
+			\node[below] at (.25*\x,\y * \spya){$cell2$};
+			
+			\draw (0,\y * \spya) rectangle (\x * \spx, \y);
+			\node[below] at (.25*\x,\y){$cell3$};
+			
+			\draw (\x * \spx,0) rectangle (\x, \y * \spyb);
+			\node[below] at (.75*\x,\y * \spyb){$cell4$};
+			
+			\draw (\x * \spx,\y * \spyb) rectangle (\x, \y);
+			\node[below] at (.75*\x,\y){$cell5$};
+			
+			\vspace{2mm}
+			
+		\end{tikzpicture}
+	\end{center}
+	\caption{Building a tree of depth 3 using the ORB algorithm }
+\end{figure}
 
-This decomposition step is very straight forward, as long as the number of final subdomains $s$ is a power of two. Otherwise we will always end 
+\subsection{Pseudocode}
 
-We always choose the dimension which is the biggest to perform the next cut. This has the advantage of yielding domains which are of a shape closely approximating a square. Square domains are of great importance for the performance and efficiency of the FFM (Fast Multipole Method).
-
-We assume positions are stored as a 32 bit precision float which is reasonable for astrophysical calculations. 
 \begin{algorithm}[H]
 	\caption{The ORB main routine}\label{euclid}
 	\begin{algorithmic}[1]
-		\Procedure{orb}{$cornerA, cornerB ,particles$}
+		\Procedure{orb}{$cornerA, cornerB ,particles, np$}
 		\State $size = cornerB - cornerA$
 		\State $axis = maxIndex(size.x, size.y, size.z)$ \Comment{Get index of max size}
 		
@@ -180,20 +231,30 @@ We assume positions are stored as a 32 bit precision float which is reasonable f
 		\State $j = particles.lenghth - 1$
 		
 		\While{$i < j$}
-			\If{$particles[i,axis] < split$}
-			\State $i = i + 1$
-			\ElsIf{$particles[j,axis] < split$}
-			\State $j = j - 1$
-			\Else
-			\State $tmp = particles[i,:]$
-			\State $particles[i,:] = particles[j,:]$
-			\State $particles[j,:] = tmp$
-			\EndIf
+		\If{$particles[i,axis] < split$}
+		\State $i = i + 1$
+		\ElsIf{$particles[j,axis] < split$}
+		\State $j = j - 1$
+		\Else
+		\State $tmp = particles[i,:]$
+		\State $particles[i,:] = particles[j,:]$
+		\State $particles[j,:] = tmp$
+		\EndIf
 		\EndWhile\label{euclidendwhile}
 		
 		\EndProcedure
 	\end{algorithmic}
 \end{algorithm}
+
+\vspace{5mm}
+
+TODO
+
+This decomposition step is very straight forward, as long as the number of final subdomains $s$ is a power of two. Otherwise we will always end 
+
+We always choose the dimension which is the biggest to perform the next cut. This has the advantage of yielding domains which are of a shape closely approximating a square. Square domains are of great importance for the performance and efficiency of the FFM (Fast Multipole Method).
+
+We assume positions are stored as a 32 bit precision float which is reasonable for astrophysical calculations. 
 
 The reshuffle procedure takes the array of particles and rearanges the elements such that all element left of the split are on the one side, and the others are on the other side. 
 
