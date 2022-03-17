@@ -261,7 +261,7 @@ We always choose the dimension which is the biggest to perform the next cut. Thi
 
 \section{Theoretical analysis of ORB speedup by GPU acceleration}
 
-The goal is to have a general idea how and if the performance of the ORB algorithm will greatly benefit from a GPU implementation. We will compare the performance with the datapoints of Piz Daint, Summit and Alps which is a part of Eiger. 
+In order to have a broad idea what speedup we can expect by implementing a GPU version, we first need to understand which parts of the code are suited to be done on the GPU. The GPU profits from a highly parallelized architecture, this means that it performs exceptionally when vectorization can be applied to large set of values. But the GPU has another strength over the CPU, which may be lesser known. The memory bandwidth between the GPU and its memory is much greater than the memory bandwidth between the CPU and GPU. Therefore we omit speedups which are introduced by parallelizing calculations and instead focus on the memory access overheads.
 
 \subsection{Assumptions} 
 \begin{itemize}
@@ -275,29 +275,63 @@ The goal is to have a general idea how and if the performance of the ORB algorit
 	All particles are assumed to be stored in the CPU memory initially.
 	
 	\item
-	We perform the analysis on one billion particles. This means we need 32 GB storage for all the particles and 12 GB for only the XYZ positions.
-	
-	\item
-	We do not consider calculation times as memory access times  outweigh them. The operations are simple comparison  which require only very little cycles on the chip. 
+	We perform the analysis on one billion particles. This means we need 32 GB storage for all the particles and 12 GB for only the XYZ positions. This translates to $10^9 \times 4 bytes = 4 GB$, assuming floating point precision. 
+
 \end{itemize}
 
 \subsection{Runtime estimations}
 
-Formula for the CPU:
+When executing the algorithm on the CPU, for a single iteration of the binary cut algorithm we perform a scan over an axis of all particle positions. Due to the nature of the datastructure we can usually not  TODO 
+
+TODO: mention somewhere only cut part of algorithm is parallelized
+
+\subsubsection{Naive implemtation}
+
+To analyze the runtime for the CPU we are using Equation \ref{eq:cpu}. The constant 32 represents the iterations which are necessary to find a cut. To find a cut we need to sweep 32 times over the entire array of particles, thus we multiply it by the data size $s$ divided by the cpu memory bandwidth denoted as $B_{CPU}$.
+
 \begin{center}
-	$32 \times \frac{ 4 GB}{68 GB/s} = 1.8 s$ 
+	\begin{equation}
+			32 \times \frac{ s }{B_{CPU}} = t
+			\label{eq:cpu}
+	\end{equation}
 \end{center}
 
-Formula for the GPU:
+
+The Equation \ref{eq:gpu} for the GPU is similar, the only difference being that we use the GPU memory bandwidth $B_{GPU}$ instead of the CPU bandwidth. Furthermore we have to consider the time it takes to send the data from the CPU to the GPU. This adds the terms size divided by CPU to GPU memory bandwidth denoted as $I$.
+
+ TODO: Here we also need to consider reading data once in CPU before sending it to the GPU?
+ 
+
 
 \begin{center}
-	$32 \times \frac{4 GB}{732 GB/s} + \frac{4 GB}{32 GB/s} = 0.3 s$ 
+	\begin{equation}
+		32 \times \frac{s}{B_{GPU}} + \frac{s}{I} = t
+		\label{eq:gpu}
+	\end{equation}
 \end{center}
 
 
-Formulate for the GPU with partial tree building on the GPU:
+\subsubsection{Improved implementation}
+
+Let us now consider an alternative way of computing binary cuts. We will build part of the tree on the GPU itself. This will allow us to reduce the very costly overheads imposed by transfering data from the CPU to the GPU. The maximum number of cuts we can perform is 32. After 32 cuts we have $2^{32}$ domains, and have reached the precision limit of the floating point positions.
+
+
+\begin{center}
+	\begin{equation}
+		32 \times 32 \times \frac{s}{B_{CPU}} =t
+	\end{equation}
+\end{center}
+
+\begin{center}
+	\begin{equation}
+		32 \times 32 \times \frac{s}{B_{CPU}} + \frac{s}{32 GB/s} + \frac{8 GB}{32 GB/s} = 6 s
+	\end{equation}
+\end{center}
+
 
 \subsection{Datapoints of supercomputers}
+
+We will compare the performance with the datapoints of Piz Daint, Summit and Alps which is a part of Eiger. We choose Piz Daint because we have the possibility to test the Code on its systems. We choose Eiger because we can also access its systems and it will give us a good reference values, due to it being a non hybrid supercomputer, meaning the nodes to not have GPU. Finally we analyze its performance on Summit, as its at the time of writing this thesis, one of the most capable supercomputers in the world.
 
 \small
 \begin{center}
@@ -316,7 +350,8 @@ Formulate for the GPU with partial tree building on the GPU:
 \end{center}
 \normalfont
 \subsection{Piz Daint} 
-When executing the algorithm on the CPU, for a single iteration of the binary cut algorithm we perform a scan over an axis of all particle positions. This translates to $10^9 \times 4 bytes = 4 GB$.
+
+
 On the CPU this results in a memory access time of 
 \begin{center}
 	$32 \times \frac{ 4 GB}{68 GB/s} = 1.8 s$ 
@@ -333,9 +368,6 @@ This results in a theoretical speedup of:
 	$\frac{1.8}{0.3} = 6$
 \end{center}
 
-Where the first part are the 32 iterations of the memory sweep and the second part are the transfer times from CPU to GPU. We only need to transfer back a single number, which is then used to termine the next split position. Thus transfer times from the GPU to CPU are negligible. It is clear that the transfer times from the CPU to the GPU dominate the runtime.
-
-Let us now consider an alternative way of computing binary cuts. We will build part of the tree on the GPU itself. We have a shared memory size of 64 KB. Since storing the information about the tree requires only very little storage, we are not limited by memory and can perform 32 cuts on the GPU. Note that in this case we need to load all three coordinates to the GPU. We omit the domain data transfer from the GPU to the CPU as it can be stored in very little memory. 
 
 \begin{center}
 	$32 \times 32 \times \frac{ 4 GB}{68 GB/s} = 60.2 s$ 
