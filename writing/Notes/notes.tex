@@ -61,7 +61,7 @@ TODO: extend reasoning
 
 \subsection{ORB for power of twos}
 
-Let us first make the assumption that $np$ is a power of two. In this case we can search for a cut such that 50\% of the particles are on the left side and likewise on the right side of the cut. The position of the cut can be found in $O(log(N))$ using a binary search. We can introduce an even tighter bound when assuming each particle is being stored as a 32 bit precision number. In this case we have reached the maximum precision after $O(32)$ iterations. After such a cut has been found, we can create two new subdomains and recursively apply the algorithm until we have reached the desired number of subdomains $np$. 
+Let us first make the assumption that $np$ is a power of two. In this case we can search for a cut such that 50\% of the particles are on the left side and likewise on the right side of the cut. The position of the cut can be found in $O(log(N))$ using a binary search. We can introduce an even tighter bound when assuming each particle is being stored as a 32 bit precision number. In this case we have reached the maximum precision after $O(32)$ iterations. After such a cut has been found, we can create two new subdomains and recursively apply the algorithm on both of tem until we have reached the desired number of subdomains $np$. 
 
 \vspace{5mm}
 
@@ -113,25 +113,29 @@ Let us first make the assumption that $np$ is a power of two. In this case we ca
 \end{tikzpicture}
 \end{center}
 \caption{Building a tree of depth 3 using the ORB algorithm }
+\label{fig:balorb}
 \end{figure}
 
 For a clearer terminology, we will from now on refer to a domain as a cell. Furthermore the subdomain of a domain is the child cell of a cell, and likewise we also have the concept of a parent cell.
 
 \vspace{5mm}
 
-When each cell keeps track of its child cells, we have built a tree datastructure. In this tree each cell represents a node, the root node is the cell which encompasses the entire space and particles and finally its leaves can be assigned to a processor / node. Note that the tree is not balanced, but each node has either two children or is a leaf. 
+When each cell keeps track of its child cells, we have built a tree datastructure. For instance for our simple domain composition of depth 3 from Figure \ref{fig:balorb} we end up with structure as depicted in Figure \ref{fig:baltree} In this tree each cell represents a node, the root node is the cell which encompasses the entire space and particles and finally its leaves can be assigned to a processor / node. Note that the tree is not balanced, but each node has either two children or is a leaf. 
 
 \begin{figure}[H]
-\Tree[.rootcell [.cell1 [.cell2 \textit{P0} ]
-[.cell3 \textit{P1} ]]
-[.cell4 [.cell5 \textit{P2} ]
-[.cell5 \textit{P3} ]]]
+\Tree[.rootcell [.cell1 [.cell2 ]
+[.cell3 ]]
+[.cell4 [.cell5 ]
+[.cell5 ]]]
 \caption{Tree datastructure of depth 3}
+\label{fig:baltree}
 \end{figure}
 
 \subsection{ORB in the general case}
 
-Let us now consider an example where the desired number of leaf cells is not a power of two, for example 7. In this case our first split should not be a 
+Let us now consider the general case where $np$ can be any integer number. 
+
+In this case we chose the cut such that we have 50\% of particles to the left and right. But we define the number of particles on the left side by $l = \left \lceil{\frac{np}{2}}\right \rceil$. Consequently the number of particles on the right are $r = np - l$. In the next iteration of the recursion, the left child cell will set $np = l$ and the right side $np = r$. This ensures that we end up with the right number of domains.
 
 \def\spx{0.36}
 \def\spya{0.5}
@@ -152,7 +156,7 @@ Let us now consider an example where the desired number of leaf cells is not a p
 			\node[below] at (\spx * 0.5 * \x,\y){$cell1$};
 			
 			\draw (\x  * \spx, 0) rectangle (\x, \y);
-			\node[below] at ((1.0 - \spx * 0.5) *\x,\y){$cell2$};
+			\node[below] at (0.63 *\x,\y){$cell2$};
 			
 			\vspace{2mm}
 			
@@ -161,17 +165,14 @@ Let us now consider an example where the desired number of leaf cells is not a p
 		\begin{tikzpicture}[scale=0.33]
 			\pgfmathsetseed{2};
 			\randistr{\x}{\y}{100};
-			\draw (0,0) rectangle (\x * \spx, \y * \spya);
-			\node[below] at (.25*\x,\y * \spya){$cell2$};
-			
-			\draw (0,\y * \spya) rectangle (\x * \spx, \y);
-			\node[below] at (.25*\x,\y){$cell3$};
+			\draw (0,0) rectangle (\x * \spx, \y);
+			\node[below] at (\spx * 0.5 * \x,\y){$cell1$};
 			
 			\draw (\x * \spx,0) rectangle (\x, \y * \spyb);
-			\node[below] at (.75*\x,\y * \spyb){$cell4$};
+			\node[below] at (.75*\x,\y * \spyb){$cell2$};
 			
 			\draw (\x * \spx,\y * \spyb) rectangle (\x, \y);
-			\node[below] at (.75*\x,\y){$cell5$};
+			\node[below] at (.75*\x,\y){$cell3$};
 			
 			\vspace{2mm}
 			
@@ -180,7 +181,16 @@ Let us now consider an example where the desired number of leaf cells is not a p
 	\caption{Building a tree of depth 3 using the ORB algorithm }
 \end{figure}
 
+\begin{figure}[H]
+	\Tree[.rootcell [.cell1 ]
+	[.cell2 [.cell3  ]
+	[.cell4 ]]]
+	\caption{Tree datastructure of depth 3}
+\end{figure}
+
 \subsection{Pseudocode}
+
+We always choose the dimension which is the biggest to perform the next cut. This has the advantage of yielding domains which are of a shape closely approximating a square. Square domains are of great importance for the performance and efficiency of the FFM (Fast Multipole Method).
 
 \begin{algorithm}[H]
 	\caption{The ORB main routine}\label{euclid}
@@ -248,18 +258,8 @@ Let us now consider an example where the desired number of leaf cells is not a p
 
 \vspace{5mm}
 
-TODO
 
-This decomposition step is very straight forward, as long as the number of final subdomains $s$ is a power of two. Otherwise we will always end 
-
-We always choose the dimension which is the biggest to perform the next cut. This has the advantage of yielding domains which are of a shape closely approximating a square. Square domains are of great importance for the performance and efficiency of the FFM (Fast Multipole Method).
-
-We assume positions are stored as a 32 bit precision float which is reasonable for astrophysical calculations. 
-
-The reshuffle procedure takes the array of particles and rearanges the elements such that all element left of the split are on the one side, and the others are on the other side. 
-
-TODO: more detailed, add section about special cases, add section about tree datastructure
-\section{Theoretical Analysis of ORB}
+\section{Theoretical analysis of ORB speedup by GPU acceleration}
 
 The goal is to have a general idea how and if the performance of the ORB algorithm will greatly benefit from a GPU implementation. We will compare the performance with the datapoints of Piz Daint, Summit and Alps which is a part of Eiger. 
 
@@ -280,6 +280,22 @@ The goal is to have a general idea how and if the performance of the ORB algorit
 	\item
 	We do not consider calculation times as memory access times  outweigh them. The operations are simple comparison  which require only very little cycles on the chip. 
 \end{itemize}
+
+\subsection{Runtime estimations}
+
+Formula for the CPU:
+\begin{center}
+	$32 \times \frac{ 4 GB}{68 GB/s} = 1.8 s$ 
+\end{center}
+
+Formula for the GPU:
+
+\begin{center}
+	$32 \times \frac{4 GB}{732 GB/s} + \frac{4 GB}{32 GB/s} = 0.3 s$ 
+\end{center}
+
+
+Formulate for the GPU with partial tree building on the GPU:
 
 \subsection{Datapoints of supercomputers}
 
