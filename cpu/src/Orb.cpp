@@ -10,7 +10,6 @@ Orb::Orb(float* particles) {
 
 void Orb::build() {
 
-    int np, rank;
     MPI_Init(NULL, NULL);
 
     MPI_Comm_size(MPI_COMM_WORLD, &np);
@@ -28,6 +27,10 @@ void Orb::build() {
     MPI_Finalize();
 }
 
+// You can move them after each split
+// Or you have another array to keep track
+// Local and global shuffle, ??
+// 
 void Orb::reshuffleArray(int axis, int begin, int end, float split) {
     int i = begin;
     int j = end-1;
@@ -52,9 +55,15 @@ void Orb::reshuffleArray(int axis, int begin, int end, float split) {
     }
 }
 
+// Use (N + np -1) / N
+// Is essentially the same as the integer ceiling
 int Orb::countLeft(int axis, int begin, int end, float split) {
     int nLeft = 0;
-    for (int j = begin; j < end; j++) {
+    int size = (end - begin) / np;
+    if (rank == 0) {
+        size = (end - begin) - size * (np - 1);
+    }
+    for (int j = begin + rank * size; j < begin + (rank + 1) * size; j++) {
         nLeft += particles[j * DIMENSIONS + axis] < split;
     }
     return nLeft;
@@ -78,7 +87,7 @@ std::tuple<float, int> Orb::findCut(
         
        // MPI_SEND(&cut, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
-        //countLeft(arr,)
+        countLeft(arr,)
 
         if (abs(nLeft - half) < 1) {
             break;
@@ -152,6 +161,18 @@ void Orb::operative() {
     }
 }
 
+// TODO: Ask about how data exactly works with MPI
 void Orb::worker() {
+    float split;
+    int id;
+    MPI_RECV(&split, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
+
+    if (id == -1) {
+        return;
+    }
+
+    MPI_RECV(&split, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
+
+    countLeft()
 
 }

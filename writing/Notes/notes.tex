@@ -50,19 +50,22 @@ The ORB Algorithm can be used to partition a multi dimensional domain into subdo
 The general idea of the ORB algorithm is to split a $k$ dimensional domain containing $N$ particles into $np$ subdomains using a recursive procedure. This can be repeated until the number of smallest subdomains is equal to the total count of processors or nodes. The final goal is an equal distribution of the workload and data, thus the subdomain sizes should be chosen such that the number of particles is equal among nodes / processors.
 
 \subsection{Memory and Workload Balancing}
-For the ORB algorithms itself, the relation between the number of processors and the workload holds steady. But for the simulation certain particles require more timesteps, thus more computational effort, than others. This is mostly due to higher accelerations and greater proximity to strong gravitational influences. This in turn requires a higher accuracy to mitigate errors. If we try to incorporate these effects, we will end up with partitions which are more equal in terms of workload, but less equal in terms of memory. 
+For the ORB algorithms itself, the relation between the number of processors and the workload holds steady. But for the simulation certain particles require more timesteps, thus more computational effort, than others. We denote the workload per particle as the waiting function $w(p_i)$ where $p_i \in {p_1, p_2, ..., p_N}$.
+
+Non equal waiting functions for different particles are due to higher accelerations and greater proximity to strong gravitational influences. This in turn requires a higher accuracy to mitigate errors. When we try to balance the workload, this implies drawbacks in terms of memory balance. 
+
+Let us consider a simple example to illustrate the point. Given the set of particles $A = {p_1, p_2, .., p_{2N/3}}$ and respectively $B = {p_{2N/3 + 1}, p_2, .., p_{N}}$. Let us now consider the that $\forall p \in A : w(p) = 1$ and $\forall p \in B : w(p) = 2$. If we assign all particles from set $A$ to process with rank 0 and the particles from B to rank 1. It is clear that $\sum_{p\in A}^{} w(p) = \sum_{p\in B}^{} w(p)$. Thus the two processors are balanced in terms of computing costs, but clearly they are not balanced in terms of memory size. In fact process with rank 0 has $2N/3$ elements and rank 1 has $N/3$ elements. Thus there will be processes there are memory slots which are not taken advantage of, which means we have a reduced total number of particles. As cosmological simulations profit from an increased number of particles, this also means that the quality of the simulation suffers when prefering workload balancing.
+
 
 \vspace{5mm}
-If we consider a system with various nodes, the approach is usually to distribute 
-Unequal balancing of the memory in favor of a more equal balance in terms of workload, will results in 
- For the sake of simplicity, we will assume it is sensible to simply partition the domain into equally sized subdomains.
 
-TODO: extend reasoning
+For next sections we will assume a waiting function of $w(p_i) = 1$ for all particles in the simulation.
 
 \subsection{ORB for power of twos}
 
-Let us first make the assumption that $np$ is a power of two. In this case we can search for a cut such that 50\% of the particles are on the left side and likewise on the right side of the cut. The position of the cut can be found in $O(log(N))$ using a binary search. We can introduce an even tighter bound when assuming each particle is being stored as a 32 bit precision number. In this case we have reached the maximum precision after $O(32)$ iterations. After such a cut has been found, we can create two new subdomains and recursively apply the algorithm on both of tem until we have reached the desired number of subdomains $np$. 
+Let us first make the assumption that $np$ is a power of two. In this case we can search for a cut such that 50\% of the particles are on the left side and likewise on the right side of the cut. The position of the cut can be found in $O(log(N))$ using a binary search. We can introduce an even tighter bound when assuming each particle is being stored as a 32 bit precision number. In this case we have reached the maximum precision after $O(32)$ iterations. After such a cut has been found, we can create two new subdomains and recursively apply the algorithm on both of them until we have reached the desired number of subdomains $np$. 
 
+In order to choose a TODO: Argue why we chose biggest to split domain
 \vspace{5mm}
 
 \def\x{8}
@@ -261,7 +264,7 @@ We always choose the dimension which is the biggest to perform the next cut. Thi
 
 \section{Theoretical analysis of ORB speedup by GPU acceleration}
 
-In order to have a broad idea what speedup we can expect by implementing a GPU version, we first need to understand which parts of the code are suited to be done on the GPU. The GPU profits from a highly parallelized architecture, this means that it performs exceptionally when vectorization can be applied to large set of values. But the GPU has another strength over the CPU, which may be lesser known. The memory bandwidth between the GPU and its memory is much greater than the memory bandwidth between the CPU and GPU. Therefore we omit speedups which are introduced by parallelizing calculations and instead focus on the memory access overheads.
+In order to have a broad idea what speedup we can expect by implementing a GPU version, we first need to understand which parts of the code are suited to be done on the GPU. The GPU profits from a highly parallelized architecture, this means that it performs exceptionally when vectorization can be applied to large set of values. But the GPU has another strength over the CPU, which may be lesser known. The memory bandwidth between the GPU and its memory is much greater than the memory bandwidth between the CPU and GPU. Since the time used for calculations is a lot smaller due the algorithm only requiring few and simple operations and is negligible in comparison to memory loading times, we omit speed-ups which are introduced by parallelizing calculations and instead focus on the memory access times.
 
 \subsection{Assumptions} 
 \begin{itemize}
@@ -297,36 +300,48 @@ To analyze the runtime for the CPU we are using Equation \ref{eq:cpu}. The const
 \end{center}
 
 
-The Equation \ref{eq:gpu} for the GPU is similar, the only difference being that we use the GPU memory bandwidth $B_{GPU}$ instead of the CPU bandwidth. Furthermore we have to consider the time it takes to send the data from the CPU to the GPU. This adds the terms size divided by CPU to GPU memory bandwidth denoted as $I$.
-
- TODO: Here we also need to consider reading data once in CPU before sending it to the GPU?
- 
-
+The Equation \ref{eq:gpu} for the GPU is similar, the only difference being that we use the GPU memory bandwidth $B_{GPU}$ instead of the CPU bandwidth. Furthermore we have to consider the time it takes to send the data from the CPU to the GPU. This adds the terms size divided by CPU to GPU memory bandwidth denoted as $I$. Finally we also need to load the data from the CPU memory to the CPU before we are able to send it. 
 
 \begin{center}
 	\begin{equation}
-		32 \times \frac{s}{B_{GPU}} + \frac{s}{I} = t
+		32 \times \frac{s}{B_{GPU}} + \frac{s}{I}  + \frac{s}{B_{CPU}}= t
 		\label{eq:gpu}
 	\end{equation}
 \end{center}
 
 
-\subsubsection{Improved implementation}
+\subsubsection{GPU tree building}
 
-Let us now consider an alternative way of computing binary cuts. We will build part of the tree on the GPU itself. This will allow us to reduce the very costly overheads imposed by transfering data from the CPU to the GPU. The maximum number of cuts we can perform is 32. After 32 cuts we have $2^{32}$ domains, and have reached the precision limit of the floating point positions.
-
+Let us now consider an alternative way of computing binary cuts. We will build part of the tree on the GPU itself. This will allow us to reduce the very costly overheads imposed by transfering data from the CPU to the GPU. The maximum number of cuts we can perform is 32. After 32 cuts we have $2^{32}$ domains, and have reached the precision limit of the floating point positions. Note that in this case we also need to send back the domain information from the GPU to the CPU. For 
 
 \begin{center}
 	\begin{equation}
-		32 \times 32 \times \frac{s}{B_{CPU}} =t
+		32 \times 32 \times \frac{s}{B_{CPU}} = t
+		\label{eq:cputree}
 	\end{equation}
 \end{center}
 
 \begin{center}
 	\begin{equation}
-		32 \times 32 \times \frac{s}{B_{CPU}} + \frac{s}{32 GB/s} + \frac{8 GB}{32 GB/s} = 6 s
+		32 \times 32 \times \frac{s}{B_{GPU}} + 2 \times \frac{s}{I} = t
+		\label{eq:gputree}
 	\end{equation}
 \end{center}
+
+
+\subsubsection{Batch loading}
+
+Finally we can also try to mitigate the overheads introduced by CPU to GPU communication by sending small batches, such that the GPU can already start processing the data, before the data transfer was completed. The analysis of batch loading sequence cannot be determined as easily as the other strategies. Let 
+
+TODO
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+			% Horizontal time lines
+
+		\end{tikzpicture}
+	\end{center}
+\end{figure}
 
 
 \subsection{Datapoints of supercomputers}
@@ -334,56 +349,71 @@ Let us now consider an alternative way of computing binary cuts. We will build p
 We will compare the performance with the datapoints of Piz Daint, Summit and Alps which is a part of Eiger. We choose Piz Daint because we have the possibility to test the Code on its systems. We choose Eiger because we can also access its systems and it will give us a good reference values, due to it being a non hybrid supercomputer, meaning the nodes to not have GPU. Finally we analyze its performance on Summit, as its at the time of writing this thesis, one of the most capable supercomputers in the world.
 
 \small
-\begin{center}
-	\begin{tabular}{ c c c c }
-		& Piz Daint HYBRID \cite{piz_daint} & Summit & Alps (Eiger) \\ 
-		\hline
-		Number of Nodes & 5704 & 4608 & 1024\\
-		CPU Mem. Cap. & 64 GB & 256 GB $\times$ 2  \\   
-		CPU Model & Intel E5-2690 v3 & IBM POWER9 $\times$ 2 & AMD EPYC 7742 \\
-		CPU Mem. Bandw.  & 68 GB/s & 170 GB/s & 204.8 GB/s x 2	\\
-		GPU Model & NVIDIA P100 & NVIDIA V100s  $\times$ 6 & None \\
-		GPU Mem. Cap. & 16 GB & 16 GB $\times$ 6 & -\\
-		GPU Mem. Bandw. & 732 GB/s & 900 GB/s & -\\
-		Interconnect Bandw. & 32 GB/s & 50 GB/s & -\\
-	\end{tabular}
-\end{center}
+\begin{figure}[H]
+	\begin{center}
+		\begin{tabular}{ c c c c }
+			& Piz Daint \cite{piz_daint} & Summit & Alps (Eiger) \\ 
+			\hline
+			Number of Nodes & 5704 & 4608 & 1024\\
+			CPU Mem. Cap. & 64 GB & 256 GB $\times$ 2  \\   
+			CPU Model & Intel E5-2690 v3 & IBM POWER9 $\times$ 2 & AMD EPYC 7742 \\
+			CPU Mem. Bandw.  & 68 GB/s & 170 GB/s & 204.8 GB/s x 2	\\
+			GPU Model & NVIDIA P100 & NVIDIA V100s  $\times$ 6 & None \\
+			GPU Mem. Cap. & 16 GB & 16 GB $\times$ 6 & -\\
+			GPU Mem. Bandw. & 732 GB/s & 900 GB/s & -\\
+			Interconnect Bandw. & 32 GB/s & 50 GB/s & -\\
+		\end{tabular}
+	\end{center}
+\caption{Datapoints of Supercomputers}
+\label{fig:datapoints}
+\end{figure}
+
 \normalfont
 \subsection{Piz Daint} 
 
+Let us plugin the values from Figure \ref{fig:datapoints} into the corresponding formulas \ref{eq:cpu}, \ref{eq:gpu}, \ref{eq:cputree} and \ref{eq:gputree}.
 
-On the CPU this results in a memory access time of 
+The naive implementation yields a speedup of:
+
 \begin{center}
-	$32 \times \frac{ 4 GB}{68 GB/s} = 1.8 s$ 
+	\begin{equation}
+		\frac{32 \times \frac{ 12 GB }{68 GB/s}}
+		{32 \times \frac{12 GB}{732 GB/s} + \frac{12 GB}{32 GB/s}  + \frac{12 GB}{68 GB/s}}
+		= 5.24
+	\end{equation}
 \end{center}
 
-If we do the same on the GPU we get an access time of:
+The formula for the speedup considering GPU tree building looks as follows:
 \begin{center}
-	$32 \times \frac{4 GB}{732 GB/s} + \frac{4 GB}{32 GB/s} = 0.3 s$ 
-\end{center}
-
-This results in a theoretical speedup of:
-
-\begin{center}
-	$\frac{1.8}{0.3} = 6$
-\end{center}
-
-
-\begin{center}
-	$32 \times 32 \times \frac{ 4 GB}{68 GB/s} = 60.2 s$ 
-\end{center}
-
-\begin{center}
-	$32 \times 32 \times \frac{4 GB}{732 GB/s} + \frac{12 GB}{32 GB/s} + \frac{4 GB}{32 GB/s} = 6 s$ 
-\end{center}
-
-\begin{center}
-	$\frac{60.2}{6} = 10$ 
+	\begin{equation}
+		\frac{32 \times 32 \times \frac{ 12 GB }{68 GB/s}}
+		{32 \times 32 \times \frac{12 GB}{732 GB/s} + 2 \times \frac{12 GB}{32 GB/s}  + \frac{12 GB}{68 GB/s}}
+		= 10.2
+	\end{equation}
 \end{center}
 
 \subsection{Summit}
 
-TODO
+Let us plugin the values from Figure \ref{fig:datapoints} into the corresponding formulas \ref{eq:cpu}, \ref{eq:gpu}, \ref{eq:cputree} and \ref{eq:gputree}.
+
+The naive implementation yields a speedup of:
+
+\begin{center}
+	\begin{equation}
+		\frac{32 \times \frac{ 12 GB }{170 GB/s}}
+		{32 \times \frac{12 GB}{900 GB/s} + \frac{12 GB}{50 GB/s}  + \frac{12 GB}{170 GB/s}}
+		= 4.54
+	\end{equation}
+\end{center}
+
+The formula for the speedup considering GPU tree building looks as follows:
+\begin{center}
+	\begin{equation}
+		\frac{32 \times 32 \times \frac{ 12 GB }{170 GB/s}}
+		{32 \times 32 \times \frac{12 GB}{900 GB/s} + 2 \times \frac{12 GB}{50 GB/s}  + \frac{12 GB}{170 GB/s}}
+		= 5.09
+	\end{equation}
+\end{center}
 
 \subsection{Eiger}
 

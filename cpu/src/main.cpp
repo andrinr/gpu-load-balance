@@ -9,6 +9,7 @@ int main()
 
     printf("Initializing... \n");
 
+    // Set a seed
     for (int i = 0; i < COUNT; i++) {
         for (int d = 0; d < DIMENSIONS; d++) {
             p[i * DIMENSIONS + d] = (float)rand()/(float)(RAND_MAX) - 0.5;

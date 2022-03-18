@@ -1,6 +1,10 @@
 #include <stack>
 #include "Cells.h"
 
+// Maybe use structs again instead
+// structs in array
+// Also put in the report, sketch memory map
+
 Cells::Cells(float left, float right) {
     // Init values
     cellGeometry[0] = left;

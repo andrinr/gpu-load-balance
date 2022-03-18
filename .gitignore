@@ -8,7 +8,7 @@
 *.xdp-*
 
 # Editor files
-/.vscode
+*/.vscode
 *.swp
 /.idea
 

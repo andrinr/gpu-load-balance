@@ -11,6 +11,9 @@ public:
     void build();
 
 private:
+    int rank;
+    int np;
+    
     void reshuffleArray(int axis, int begin, int end, float split);
     int countLeft(int axis, int start, int end, float cut);
     std::tuple<float, int> findCut(int axis, int begin, int end, float left, float right);
