@@ -1,21 +1,25 @@
-CC = mpiCC
-RM=rm -f
+#HEADERS = Orb.h Cells.h constants.h
+#OBJECTS = main.o Orb.o Cells.o
 
-SRCS=main.cc
-OBJS=$(subst .cpp,.o,$(SRCS))
+OBJECTS = $(patsubst %.cpp, %.o, $(wildcard *.cpp))
+HEADERS = $(wildcard *.h)
 
-%.o: %.c $(DEPS)
-	$(CC) -c -o $@ 
+CC = mpiCC #g++
 
-all: main
+all: check program check
 
-main: $(OBJS)
-	$(CXX) -o main $(OBJS)
+check:
+	echo $(OBJECTS)
+	echo $(HEADERS)
 
-main.o: main.cpp
+%.o: %.c $(HEADERS)
+	$(CC) -c $< -o $@
+
+program: $(OBJECTS)
+	$(CC) $(OBJECTS) -o $@
 
 clean:
-	$(RM) $(OBJS)
+	-rm -f $(OBJECTS)
+	-rm -f program
 
-distclean: clean
-	$(RM) tool
+	
