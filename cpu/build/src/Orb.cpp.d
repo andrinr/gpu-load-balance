@@ -1,4 +1,4 @@
-build/./src/Orb.cpp.o: src/Orb.cpp \
+build/./src/Orb.cpp.o: src/Orb.cpp src/Orb.h \
  /usr/lib/x86_64-linux-gnu/openmpi/include/mpi.h \
  /usr/lib/x86_64-linux-gnu/openmpi/include/mpi_portable_platform.h \
  /usr/lib/x86_64-linux-gnu/openmpi/include/openmpi/ompi/mpi/cxx/mpicxx.h \
@@ -32,7 +32,8 @@ build/./src/Orb.cpp.o: src/Orb.cpp \
  /usr/lib/x86_64-linux-gnu/openmpi/include/openmpi/ompi/mpi/cxx/info_inln.h \
  /usr/lib/x86_64-linux-gnu/openmpi/include/openmpi/ompi/mpi/cxx/win_inln.h \
  /usr/lib/x86_64-linux-gnu/openmpi/include/openmpi/ompi/mpi/cxx/file_inln.h \
- src/Orb.h src/Cells.h src/constants.h
+ src/Cell.h src/constants.h
+src/Orb.h:
 /usr/lib/x86_64-linux-gnu/openmpi/include/mpi.h:
 /usr/lib/x86_64-linux-gnu/openmpi/include/mpi_portable_platform.h:
 /usr/lib/x86_64-linux-gnu/openmpi/include/openmpi/ompi/mpi/cxx/mpicxx.h:
@@ -66,6 +67,5 @@ build/./src/Orb.cpp.o: src/Orb.cpp \
 /usr/lib/x86_64-linux-gnu/openmpi/include/openmpi/ompi/mpi/cxx/info_inln.h:
 /usr/lib/x86_64-linux-gnu/openmpi/include/openmpi/ompi/mpi/cxx/win_inln.h:
 /usr/lib/x86_64-linux-gnu/openmpi/include/openmpi/ompi/mpi/cxx/file_inln.h:
-src/Orb.h:
-src/Cells.h:
+src/Cell.h:
 src/constants.h:

@@ -1,6 +1,7 @@
 #ifndef ORB_H // include guard
 #define ORB_H
 
+#include <mpi.h>
 #include "Cell.h"
 #include <tuple>
 
@@ -8,7 +9,7 @@ class Orb {
 public:
     float* particles;
     Cell* cells;
-    MPI_Datatype mpi_cut_type;
+    MPI::Datatype mpi_cut_type;
 
     Orb(float* particles);
     void build();

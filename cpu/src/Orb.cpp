@@ -1,14 +1,6 @@
 #include <iostream>
 #include <stack>
-#include <mpi.h>
-#include "Orb.h"
-
-struct Cut {
-    int begin;
-    int end;
-    int axis;
-    float pos;
-}
+#include <Orb.h>
 
 Orb::Orb(float* particles) {
     particles = particles;
@@ -112,14 +104,14 @@ std::tuple<float, int> Orb::findCut(
         };
         
         for (int r = 1; r < np; r++) {
-            MPI_SEND(&Cut, 1, mpi_cut_type, r,  0, MPI_COMM_WORLD);
+            MPI_Send(&cutdata, 1, mpi_cut_type, r,  0, MPI_COMM_WORLD);
         }
 
         nLeft = count(axis, begin, end, cut);
 
         for (int r = 1; r < np; r++) {
             int count = 0;
-            MPI_RECV(&count, 1, MPI_INT, r,  0, MPI_COMM_WORLD);
+            MPI_Recv(&count, 1, MPI_INT, r,  0, MPI_COMM_WORLD,  MPI_STATUS_IGNORE);
             nLeft += count;
         }
 
@@ -138,70 +130,92 @@ std::tuple<float, int> Orb::findCut(
 }
 
 void Orb::operative() {
-    Cells cells = Cells(-0.5, 0.5);
+    Cell cell = Cell{
+        0,
+        COUNT,
+        0,
+        -1,
+        {-0.5, -0.5, -0.5},
+        {0.5, 0.5, 0.5}
+    };
+    cells[0] = cell;
+
     std::stack<int> stack;
     stack.push(0);
     int counter = 1;
+
     while (!stack.empty()) {
         int id = stack.top();
         stack.pop();
+
+        Cell cell = cells[id];
 
         std::cout << id << std::endl;
         float maxValue = 0;
         int axis = -1;
 
         for (int i = 0; i < DIMENSIONS; i++) {
-            float size = cells.getCornerB(id, i) - cells.getCornerA(id, i);
+            float size = cell.upper[i] - cell.lower[i];
             if (size > maxValue) {
                 maxValue = size;
                 axis = i;
             }
         }
 
-        if (cells.getEnd(id) - cells.getBegin(id) <= (float) COUNT / DOMAIN_COUNT) {
+        if (cell.end - cell.begin <= (float) COUNT / DOMAIN_COUNT) {
             continue;
         }
 
-        float left = cells.getCornerA(id, axis);
-        float right = cells.getCornerB(id, axis);
+        float left = cell.lower[axis];
+        float right = cell.upper[axis];
 
         float cut;
         int mid;
         std::tie(cut, mid) =
-                findCut(axis, cells.getBegin(id), cells.getEnd(id), left, right);
+                findCut(axis, cell.begin, cell.end, left, right);
 
-        // Copy data
-        for (int i = 0; i < DIMENSIONS; i++) {
-            cells.setCornerA(counter, i,  cells.getCornerA(id, i));
-            cells.setCornerB(counter, i,  cells.getCornerB(id, i));
-            cells.setCornerA(counter + 1, i,  cells.getCornerA(id, i));
-            cells.setCornerB(counter + 1, i,  cells.getCornerB(id, i));
-        }
-
-        cells.setCornerB(counter, axis, cut);
-        cells.setBegin(counter, cells.getBegin(id));
-        cells.setEnd(counter, mid);
-
+        Cell leftChild = {
+            cell.begin,
+            mid,
+            -1,
+            counter,
+            {0,0,0},
+            {0,0,0}
+        };
+        cells[counter] = leftChild;
         stack.push(counter++);
 
-        cells.setCornerA(counter + 1, axis, cut);
-        cells.setBegin(counter, mid);
-        cells.setEnd(counter, cells.getEnd(id));
-
+        Cell rightChild = {
+            mid,
+            cell.end,
+            -1,
+            counter,
+            {0,0,0},
+            {0,0,0}
+        };
+        cells[counter] = rightChild;
         stack.push(counter++);
 
-        reshuffleArray(axis, cells.getBegin(id), cells.getEnd(id), cut);
+        std::copy(std::begin(cell.lower), std::end(cell.lower), std::begin(leftChild.lower));
+        std::copy(std::begin(cell.lower), std::end(cell.lower), std::begin(rightChild.lower));
+        std::copy(std::begin(cell.upper), std::end(cell.upper), std::begin(leftChild.upper));
+        std::copy(std::begin(cell.upper), std::end(cell.upper), std::begin(rightChild.upper));
+
+        leftChild.upper[axis] = cut;
+        rightChild.lower[axis] = cut;
+
+        reshuffleArray(axis, cell.begin, cell.end, cut);
     }
 }
 
 void Orb::worker() {
     float cut;
     int id;
-    Cut cut;
+    Cut cutData;
 
-    MPI_Recv(&cut, 1, mpi_cut_type, 0, 0, MPI_COMM_WORLD);
+    MPI_Recv(&cutData, 1, mpi_cut_type, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-    int nLeft = count(cut.axis, cut.begin, cut.end, cut.pos);
+    int nLeft = count(cutData.axis, cutData.begin, cutData.end, cutData.pos);
 
-    MPI_Send(count, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+    MPI_Send(&nLeft, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
 }
