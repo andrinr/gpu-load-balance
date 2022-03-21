@@ -6,6 +6,11 @@ Orb::Orb(float* particles) {
     particles = particles;
     cells = new Cell[COUNT * DIMENSIONS];
 
+    MPI_Init(NULL, NULL);
+
+    MPI_Comm_size(MPI_COMM_WORLD, &np);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
     /* create a type for struct CutDatad */
     const int nitems=4;
     int  blocklengths[4] = {1, 1, 1, 1};
@@ -23,11 +28,6 @@ Orb::Orb(float* particles) {
 }
 
 void Orb::build() {
-
-    MPI_Init(NULL, NULL);
-
-    MPI_Comm_size(MPI_COMM_WORLD, &np);
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     std::cout << "Processor ID: " << rank << " Number of processes: " << np << std::endl;
 
