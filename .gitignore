@@ -10,9 +10,10 @@
 # Editor files
 .vscode/
 *.swp
-/.idea
+.idea/
 
 # Output files
+build/
 *.dat
 *.out
 *.o

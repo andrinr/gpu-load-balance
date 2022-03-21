@@ -2,9 +2,11 @@
 #include <stack>
 #include <Orb.h>
 
-Orb::Orb(float* particles) {
+Orb::Orb(blitz::Array<float, 2> &particles) {
     particles = particles;
-    cells = new Cell[COUNT * DIMENSIONS];
+    cells = new Cell[MAX_CELL_COUNT];
+
+    std::cout << "Size:" << (*particles).size() << std::endl;
 
     MPI_Init(NULL, NULL);
 
@@ -50,17 +52,17 @@ void Orb::reshuffleArray(int axis, int begin, int end, float split) {
     int j = end-1;
 
     while (i < j) {
-        if (particles[i * DIMENSIONS + axis] < split) {
+        if ((*particles)(i, axis) < split) {
             i += 1;
         }
-        else if (particles[j * DIMENSIONS + axis] > split) {
+        else if ((*particles)(j, axis) > split) {
             j -= 1;
         }
         else {
             for (int d = 0; d < DIMENSIONS; d++) {
-                float tmp = particles[i * DIMENSIONS + d];
-                particles[i * DIMENSIONS + d] = particles[j * DIMENSIONS + d];
-                particles[j * DIMENSIONS + d] = tmp;
+                float tmp = (*particles)(i, d);
+                (*particles)(i, d) = (*particles)(j, d);
+                (*particles)(j, d) = tmp;
             }
 
             i += 1;
@@ -77,9 +79,13 @@ int Orb::count(int axis, int begin, int end, float split) {
     if (rank == 0) {
         size = (end - begin) - size * (np - 1);
     }
+
+    std::cout << "Size:" << (*particles).size() << "Begin:" << begin << "End" << end << std::endl;
     for (int j = begin + rank * size; j < begin + (rank + 1) * size; j++) {
-        nLeft += particles[j * DIMENSIONS + axis] < split;
+        std::cout << nLeft <<  " " << j << " " << begin + (rank + 1) * size << std::endl;
+        nLeft += (*particles)(j, axis) < split;
     }
+    //std::cout << "done" << std::endl;
     return nLeft;
 }
 
@@ -103,17 +109,23 @@ std::tuple<float, int> Orb::findCut(
             begin, axis, end, cut
         };
         
-        for (int r = 1; r < np; r++) {
+
+        std::cout << "Cut:" << cut << std::endl;
+
+        /*for (int r = 1; r < np; r++) {
             MPI_Send(&cutdata, 1, mpi_cut_type, r,  0, MPI_COMM_WORLD);
-        }
+        }*/
 
         nLeft = count(axis, begin, end, cut);
 
-        for (int r = 1; r < np; r++) {
+        /*for (int r = 1; r < np; r++) {
             int count = 0;
             MPI_Recv(&count, 1, MPI_INT, r,  0, MPI_COMM_WORLD,  MPI_STATUS_IGNORE);
             nLeft += count;
-        }
+        }*/
+
+        std::cout << "n:" << nLeft << std::endl;
+
 
         if (abs(nLeft - half) < 1) {
             break;
@@ -174,6 +186,7 @@ void Orb::operative() {
         std::tie(cut, mid) =
                 findCut(axis, cell.begin, cell.end, left, right);
 
+
         Cell leftChild = {
             cell.begin,
             mid,
@@ -196,6 +209,8 @@ void Orb::operative() {
         cells[counter] = rightChild;
         stack.push(counter++);
 
+        std::cout << id << std::endl;
+
         std::copy(std::begin(cell.lower), std::end(cell.lower), std::begin(leftChild.lower));
         std::copy(std::begin(cell.lower), std::end(cell.lower), std::begin(rightChild.lower));
         std::copy(std::begin(cell.upper), std::end(cell.upper), std::begin(leftChild.upper));
@@ -213,9 +228,11 @@ void Orb::worker() {
     int id;
     Cut cutData;
 
-    MPI_Recv(&cutData, 1, mpi_cut_type, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    while(true) {
+        MPI_Recv(&cutData, 1, mpi_cut_type, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-    int nLeft = count(cutData.axis, cutData.begin, cutData.end, cutData.pos);
+        int nLeft = count(cutData.axis, cutData.begin, cutData.end, cutData.pos);
 
-    MPI_Send(&nLeft, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+        MPI_Send(&nLeft, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+    }
 }
