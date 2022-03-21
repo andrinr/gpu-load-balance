@@ -2,7 +2,7 @@
 #include <stack>
 #include <Orb.h>
 
-Orb::Orb(blitz::Array<float, 2> &particles) {
+Orb::Orb(blitz::Array<float, 2> &p) {
     particles = particles;
     cells = new Cell[MAX_CELL_COUNT];
 
@@ -71,14 +71,15 @@ void Orb::reshuffleArray(int axis, int begin, int end, float split) {
     }
 }
 
-// Use (N + np -1) / N
-// Is essentially the same as the integer ceiling
 int Orb::count(int axis, int begin, int end, float split) {
     int nLeft = 0;
-    int size = (end - begin) / np;
+    int size = (end - begin + np - 1) / np;
+
     if (rank == 0) {
         size = (end - begin) - size * (np - 1);
     }
+
+    std::cout << (*particles)(20,0) << std::endl;
 
     std::cout << "Size:" << (*particles).size() << "Begin:" << begin << "End" << end << std::endl;
     for (int j = begin + rank * size; j < begin + (rank + 1) * size; j++) {
@@ -228,7 +229,10 @@ void Orb::worker() {
     int id;
     Cut cutData;
 
-    while(true) {
+    bool running = true;
+
+    while(running) {
+        
         MPI_Recv(&cutData, 1, mpi_cut_type, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
         int nLeft = count(cutData.axis, cutData.begin, cutData.end, cutData.pos);

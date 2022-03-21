@@ -54,18 +54,15 @@ For the ORB algorithms itself, the relation between the number of processors and
 
 Non equal waiting functions for different particles are due to higher accelerations and greater proximity to strong gravitational influences. This in turn requires a higher accuracy to mitigate errors. When we try to balance the workload, this implies drawbacks in terms of memory balance. 
 
-Let us consider a simple example to illustrate the point. Given the set of particles $A = {p_1, p_2, .., p_{2N/3}}$ and respectively $B = {p_{2N/3 + 1}, p_2, .., p_{N}}$. Let us now consider the that $\forall p \in A : w(p) = 1$ and $\forall p \in B : w(p) = 2$. If we assign all particles from set $A$ to process with rank 0 and the particles from B to rank 1. It is clear that $\sum_{p\in A}^{} w(p) = \sum_{p\in B}^{} w(p)$. Thus the two processors are balanced in terms of computing costs, but clearly they are not balanced in terms of memory size. In fact process with rank 0 has $2N/3$ elements and rank 1 has $N/3$ elements. Thus there will be processes there are memory slots which are not taken advantage of, which means we have a reduced total number of particles. As cosmological simulations profit from an increased number of particles, this also means that the quality of the simulation suffers when prefering workload balancing.
+Let us consider a simple example to illustrate the point. Given the set of particles $A = {p_1, p_2, .., p_{2N/3}}$ and respectively $B = {p_{2N/3 + 1}, p_2, .., p_{N}}$. Let us now consider the that $\forall p \in A : w(p) = 1$ and $\forall p \in B : w(p) = 2$. If we assign all particles from set $A$ to process with rank 0 and the particles from B to rank 1. It is clear that $\sum_{p\in A}^{} w(p) = \sum_{p\in B}^{} w(p)$. Thus the two processors are balanced in terms of computing costs, but clearly they are not balanced in terms of memory size. In fact process with rank 0 has $2N/3$ elements and rank 1 has $N/3$ elements. Thus there will be processes there are memory slots which are not taken advantage of, which means we have a reduced total number of particles. As cosmological simulations profit from an increased number of particles, this also means that the quality of the simulation suffers when prioritizing workload balancing.
 
 
-\vspace{5mm}
-
-For next sections we will assume a waiting function of $w(p_i) = 1$ for all particles in the simulation.
+If not denoted otherwise, we will assume $w(p_i) = 1$ for all particles in the simulation.
 
 \subsection{ORB for power of twos}
 
-Let us first make the assumption that $np$ is a power of two. In this case we can search for a cut such that 50\% of the particles are on the left side and likewise on the right side of the cut. The position of the cut can be found in $O(log(N))$ using a binary search. We can introduce an even tighter bound when assuming each particle is being stored as a 32 bit precision number. In this case we have reached the maximum precision after $O(32)$ iterations. After such a cut has been found, we can create two new subdomains and recursively apply the algorithm on both of them until we have reached the desired number of subdomains $np$. 
-
-In order to choose a TODO: Argue why we chose biggest to split domain
+Let us first make the assumption that $np$ is a power of two. In this case we can search for a cut such that 50\% of the particles are on the left side and likewise on the right side of the cut. The dimension of the cut is always the axis where the size of the domain is the largest. This ensures that we do not get very thin shapes, generally closer to a square. This in turn is very beneficial for the FMM as it has a higher precision on more squarish shapes.  The position of the cut can be found in $O(log(N))$ using a binary search. We can introduce an even tighter bound when assuming each particle is being stored as a 32 bit precision number. In this case we have reached the maximum precision after $O(32)$ iterations. After such a cut has been found, we can create two new subdomains and recursively apply the algorithm on both of them until we have reached the desired number of subdomains $np$. 
+ 
 \vspace{5mm}
 
 \def\x{8}
@@ -264,7 +261,7 @@ We always choose the dimension which is the biggest to perform the next cut. Thi
 
 \section{Theoretical analysis of ORB speedup by GPU acceleration}
 
-In order to have a broad idea what speedup we can expect by implementing a GPU version, we first need to understand which parts of the code are suited to be done on the GPU. The GPU profits from a highly parallelized architecture, this means that it performs exceptionally when vectorization can be applied to large set of values. But the GPU has another strength over the CPU, which may be lesser known. The memory bandwidth between the GPU and its memory is much greater than the memory bandwidth between the CPU and GPU. Since the time used for calculations is a lot smaller due the algorithm only requiring few and simple operations and is negligible in comparison to memory loading times, we omit speed-ups which are introduced by parallelizing calculations and instead focus on the memory access times.
+In order to have a broad idea what speedup we can expect by implementing a GPU version, we first need to understand which parts of the code are suited to be done on the GPU. The GPU profits from a highly parallelized architecture, this means that it performs exceptionally when vectorization can be applied to large set of values. But the GPU has another strength over the CPU, which may be lesser known. The memory bandwidth between the GPU and its memory is much greater than the memory bandwidth between the CPU and GPU. Since the time used for calculations is a lot smaller due the algorithm only requiring few and simple operations and is negligible in comparison to memory loading times, we omit speed-ups which are introduced by parallelizing calculations and instead focus on the memory access times. Thus for the section of theoretical analysis we assume that the waiting function is always $w(p) = 0$.
 
 \subsection{Assumptions} 
 \begin{itemize}
@@ -288,7 +285,7 @@ When executing the algorithm on the CPU, for a single iteration of the binary cu
 
 TODO: mention somewhere only cut part of algorithm is parallelized
 
-\subsubsection{Naive implemtation}
+\subsubsection{Naive implementation}
 
 To analyze the runtime for the CPU we are using Equation \ref{eq:cpu}. The constant 32 represents the iterations which are necessary to find a cut. To find a cut we need to sweep 32 times over the entire array of particles, thus we multiply it by the data size $s$ divided by the cpu memory bandwidth denoted as $B_{CPU}$.
 
@@ -299,6 +296,8 @@ To analyze the runtime for the CPU we are using Equation \ref{eq:cpu}. The const
 	\end{equation}
 \end{center}
 
+\vspace{5mm}
+
 
 The Equation \ref{eq:gpu} for the GPU is similar, the only difference being that we use the GPU memory bandwidth $B_{GPU}$ instead of the CPU bandwidth. Furthermore we have to consider the time it takes to send the data from the CPU to the GPU. This adds the terms size divided by CPU to GPU memory bandwidth denoted as $I$. Finally we also need to load the data from the CPU memory to the CPU before we are able to send it. 
 
@@ -308,6 +307,8 @@ The Equation \ref{eq:gpu} for the GPU is similar, the only difference being that
 		\label{eq:gpu}
 	\end{equation}
 \end{center}
+
+\vspace{5mm}
 
 
 \subsubsection{GPU tree building}
@@ -331,18 +332,16 @@ Let us now consider an alternative way of computing binary cuts. We will build p
 
 \subsubsection{Batch loading}
 
-Finally we can also try to mitigate the overheads introduced by CPU to GPU communication by sending small batches, such that the GPU can already start processing the data, before the data transfer was completed. The analysis of batch loading sequence cannot be determined as easily as the other strategies. Let 
+Finally we can also try to mitigate the overheads introduced by CPU to GPU communication by sending small batches, such that the GPU can already start processing the data, before the data transfer was completed. Lets denote the number of batches by $b$. For the sake of simplicity we only make a single cut and thus can reuse Equation \ref{eq:cpu} for the CPU version. For the GPU we now omit the term for memory access from the GPU. Because we can already start processing data in parallel when the first batch arrived and $B_{GPU} > I$ holds for every modern hardware. Thus the only overhead we still get is $\frac{s \div b}{B_{GPU}}$ for the very last batch, but as we can just increase b in relation to N, this becomes negligible. Note that this only counts for the very first iteration, thus the only difference we have is the constant of 31 and not 32. 
 
-TODO
-\begin{figure}[H]
-	\begin{center}
-		\begin{tikzpicture}
-			% Horizontal time lines
+\begin{center}
+	\begin{equation}
+		31 \times 32 \times \frac{s}{B_{GPU}} + 2 \times \frac{s}{I} = t
+		\label{eq:gpubatch}
+	\end{equation}
+\end{center}
 
-		\end{tikzpicture}
-	\end{center}
-\end{figure}
-
+Due to possible overhead and simply no real improvement over the naive GPU version, we will omit the analysis using this method.
 
 \subsection{Datapoints of supercomputers}
 
@@ -392,6 +391,9 @@ The formula for the speedup considering GPU tree building looks as follows:
 	\end{equation}
 \end{center}
 
+\vspace{5mm}
+
+
 \subsection{Summit}
 
 Let us plugin the values from Figure \ref{fig:datapoints} into the corresponding formulas \ref{eq:cpu}, \ref{eq:gpu}, \ref{eq:cputree} and \ref{eq:gputree}.
@@ -406,6 +408,9 @@ The naive implementation yields a speedup of:
 	\end{equation}
 \end{center}
 
+\vspace{5mm}
+
+
 The formula for the speedup considering GPU tree building looks as follows:
 \begin{center}
 	\begin{equation}
@@ -414,6 +419,9 @@ The formula for the speedup considering GPU tree building looks as follows:
 		= 5.09
 	\end{equation}
 \end{center}
+
+\vspace{5mm}
+
 
 \subsection{Eiger}
 
@@ -432,24 +440,23 @@ The data-structure which stores the entire three needs to have following propert
 
 The most naive approach is to use a struct for each cell which stores information about the domain and keeps a pointer to the left and right cell. However since we in high performance systems, synchronizing pointers can be a bit of hassle, furthermore PKDGrav implements distributed arrays. Thus we can store all domain information in an array and simply keep track of the indices of its child cells. This can even be reduced further, since the right child cell is being created by the same process as the left child was. Thus we can assign the information about the right child in the positions left + 1 and only keep track of the index of the left child.
 
-Since we are building a tree and we 
+We are making use of the Blitz++ array. TODO
 
 
-PkdGrav uses concept of distributed arrays, makes use of logical indexed, thus we do not use pointers. Pointers also take up more memory. 
+\subsection{Parallel CPU Version}
 
-Standard array are not high performance. Has an overhead. Standard vector is not too bad. Blitz arrays. 
-ARgue about vector, array std::vector
+To parallelize the ORB algorithms, we first need to think about which parts of the algorithm can be parallelized and yield in a performance improvement. The most obvious choice for parallelization is the counting part. In this case the main thread will send a cut position and each processor how many particles are on the left of this cut. It does so in a designated range of the entire particle array.
+Another strategy we can use, as soon as we have created two domains, rank 0 can process one domain and rank 1 can process the other domain. This has the advantage that not only the counting part, but also the costly reshuffling part of the ORB algorithm can be parallelized.
 
-\subsection{CPU parallelization of ORB}
+\vspace{5mm}
 
-To parallelize the ORB algorithms, we first need to think about which parts of the algorithm can be parallelized and yield in a performance improvement. The most obvious choice for parallelization is the counting part. In this case the main thread will send a split and the array of particles is distributed among all the processy
-Use OpenMPI / MPich, btoh same standard
-Reshuffling of arrays cannot be done in place.
+The reason why it so difficult to parallelize the reshuffling part is that it is very difficult to do in place. If we cannot perform it in place, we will probably have to use twice the memory capacity, which is will increase the maximum possible $N$ by a factor of two, which is not ideal.
 
-There are several variants on how to parallelize the CPU parallelized version of the ORB. Since it is a recursive algorithm 
+TODO
 
+\subsection{GPU parallelization of ORB using CUDA }
 
-\subsection{CPU parallelization of ORB using CUDA }
+% Use for reduction explanation https://texample.net/tikz/examples/database-decimation-process/
 \bibliographystyle{plain}
 \bibliography{reference}
 

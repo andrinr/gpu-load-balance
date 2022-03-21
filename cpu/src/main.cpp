@@ -7,6 +7,7 @@ int main()
 {
     // Init positions
     blitz::Array<float, 2> p(COUNT, 3);
+    blitz::allocateArrays(blitz::shape(COUNT,3), p);
 
     printf("Initializing... \n");
 
