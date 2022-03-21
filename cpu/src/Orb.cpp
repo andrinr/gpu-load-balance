@@ -2,10 +2,32 @@
 #include <stack>
 #include <mpi.h>
 #include "Orb.h"
-#include "Cells.h"
+
+struct Cut {
+    int begin;
+    int end;
+    int axis;
+    float pos;
+}
 
 Orb::Orb(float* particles) {
     particles = particles;
+    cells = new Cell[COUNT * DIMENSIONS];
+
+    /* create a type for struct CutDatad */
+    const int nitems=4;
+    int  blocklengths[4] = {1, 1, 1, 1};
+    MPI_Datatype types[4] = {MPI_INT, MPI_INT, MPI_INT, MPI_FLOAT};
+    MPI_Datatype mpi_cut_type;
+    MPI_Aint offsets[4];
+
+    offsets[0] = offsetof(Cut, begin);
+    offsets[1] = offsetof(Cut, end);
+    offsets[2] = offsetof(Cut, axis);
+    offsets[3] = offsetof(Cut, pos);
+
+    MPI_Type_create_struct(nitems, blocklengths, offsets, types, &mpi_cut_type);
+    MPI_Type_commit(&mpi_cut_type);
 }
 
 void Orb::build() {
@@ -57,7 +79,7 @@ void Orb::reshuffleArray(int axis, int begin, int end, float split) {
 
 // Use (N + np -1) / N
 // Is essentially the same as the integer ceiling
-int Orb::countLeft(int axis, int begin, int end, float split) {
+int Orb::count(int axis, int begin, int end, float split) {
     int nLeft = 0;
     int size = (end - begin) / np;
     if (rank == 0) {
@@ -84,10 +106,22 @@ std::tuple<float, int> Orb::findCut(
 
         cut = (right - left) / 2.0 + left;
         nLeft = 0;
-        
-       // MPI_SEND(&cut, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
-        countLeft(arr,)
+        Cut cutdata = {
+            begin, axis, end, cut
+        };
+        
+        for (int r = 1; r < np; r++) {
+            MPI_SEND(&Cut, 1, mpi_cut_type, r,  0, MPI_COMM_WORLD);
+        }
+
+        nLeft = count(axis, begin, end, cut);
+
+        for (int r = 1; r < np; r++) {
+            int count = 0;
+            MPI_RECV(&count, 1, MPI_INT, r,  0, MPI_COMM_WORLD);
+            nLeft += count;
+        }
 
         if (abs(nLeft - half) < 1) {
             break;
@@ -115,7 +149,6 @@ void Orb::operative() {
         std::cout << id << std::endl;
         float maxValue = 0;
         int axis = -1;
-
 
         for (int i = 0; i < DIMENSIONS; i++) {
             float size = cells.getCornerB(id, i) - cells.getCornerA(id, i);
@@ -161,18 +194,14 @@ void Orb::operative() {
     }
 }
 
-// TODO: Ask about how data exactly works with MPI
 void Orb::worker() {
-    float split;
+    float cut;
     int id;
-    MPI_RECV(&split, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
+    Cut cut;
 
-    if (id == -1) {
-        return;
-    }
+    MPI_Recv(&cut, 1, mpi_cut_type, 0, 0, MPI_COMM_WORLD);
 
-    MPI_RECV(&split, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
+    int nLeft = count(cut.axis, cut.begin, cut.end, cut.pos);
 
-    countLeft()
-
+    MPI_Send(count, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
 }
