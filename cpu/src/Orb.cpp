@@ -110,25 +110,31 @@ std::tuple<float, int> Orb::findCut(
             begin, axis, end, cut
         };
         
+        bool searchingSplit = true;
 
         std::cout << "Cut:" << cut << std::endl;
 
-        /*for (int r = 1; r < np; r++) {
+        for (int r = 1; r < np; r++) {
             MPI_Send(&cutdata, 1, mpi_cut_type, r,  0, MPI_COMM_WORLD);
-        }*/
+        }
 
         nLeft = count(axis, begin, end, cut);
 
-        /*for (int r = 1; r < np; r++) {
+        for (int r = 1; r < np; r++) {
             int count = 0;
             MPI_Recv(&count, 1, MPI_INT, r,  0, MPI_COMM_WORLD,  MPI_STATUS_IGNORE);
             nLeft += count;
-        }*/
+        }
 
         std::cout << "n:" << nLeft << std::endl;
 
+        searchingSplit = !(abs(nLeft - half) < 10);
 
-        if (abs(nLeft - half) < 1) {
+        for (int r = 1; r < np; r++) {
+            MPI_Send(&searchingSplit, 1, MPI_BOOL, r,  0, MPI_COMM_WORLD);
+        }
+
+        if (!searchingSplit) {
             break;
         }
 
@@ -158,6 +164,17 @@ void Orb::operative() {
     int counter = 1;
 
     while (!stack.empty()) {
+
+        // Broadcast not yet done
+        for (int r = 1; r < np; r++) {
+            MPI_Send(&true, 1, MPI_BOOL, r,  0, MPI_COMM_WORLD);
+        }
+
+        // Broadcast new particle array
+        for (int r = 1; r < np; r++) {
+            MPI_Send(particles.data(), particles.size(), MPI_FLOAT, r, 0, MPI_COMM_WORLD);
+        }
+
         int id = stack.top();
         stack.pop();
 
@@ -222,6 +239,10 @@ void Orb::operative() {
 
         reshuffleArray(axis, cell.begin, cell.end, cut);
     }
+
+    for (int r = 1; r < np; r++) {
+        MPI_Send(&false, 1, MPI_BOOL, r,  0, MPI_COMM_WORLD);
+    }
 }
 
 void Orb::worker() {
@@ -229,14 +250,23 @@ void Orb::worker() {
     int id;
     Cut cutData;
 
-    bool running = true;
+    bool searchingSplit = true;
+    bool buildingTree = true;
 
-    while(running) {
+    while(buildingTree) {
+        MPI_RECV(particles.data(), particles.size(), MPI_FLOAT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+        while(searchingSplit) {
         
-        MPI_Recv(&cutData, 1, mpi_cut_type, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(&cutData, 1, mpi_cut_type, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-        int nLeft = count(cutData.axis, cutData.begin, cutData.end, cutData.pos);
+            int nLeft = count(cutData.axis, cutData.begin, cutData.end, cutData.pos);
 
-        MPI_Send(&nLeft, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+            MPI_Send(&nLeft, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+
+            MPI_RECV(&searchingSplit, 1, MPI_BOOL, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+        }
+        MPI_RECV(&buildingTree, 1, MPI_BOOL, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     }
 }
