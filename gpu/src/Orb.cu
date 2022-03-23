@@ -83,8 +83,6 @@ int Orb::build(blitz::Array<float, 2> &h_particles)
 	// Questions: Directly use Blitz++ with CUDA?
 	
 
-
-
 	unsigned int nThreads = 256;
 	int nBlocks = (N + nThreads - 1) / nThreads;
 
@@ -168,13 +166,6 @@ int Orb::build(blitz::Array<float, 2> &h_particles)
 	remove( "out.dat" );
 	std::ofstream Data("out.dat");
 	
-	for (int i = 0; i < N; i++){
-		Data 
-			<< h_xPos[3*i] << " " 
-			<< h_yPos[3*i +1] << " " 
-			<< h_domainID[i]  << "\n";
-	}
-
 	Data.close();
     	return 0;
 }

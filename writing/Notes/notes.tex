@@ -344,6 +344,13 @@ Finally we can also try to mitigate the overheads introduced by CPU to GPU commu
 
 Due to possible overhead and simply no real improvement over the naive GPU version, we will omit the analysis using this method.
 
+\subsubsection{Data compression}
+
+\begin{itemize}
+	\item Why do we even use floats in the first place? wouldn't integers suit better since precision is uniformly equal?
+	\item Reduce transfered number of bits, sacrifice precision?
+\end{itemize}
+
 \subsection{Datapoints of supercomputers}
 
 We will compare the performance with the datapoints of Piz Daint, Summit and Alps which is a part of Eiger. We choose Piz Daint because we have the possibility to test the Code on its systems. We choose Eiger because we can also access its systems and it will give us a good reference values, due to it being a non hybrid supercomputer, meaning the nodes to not have GPU. Finally we analyze its performance on Summit, as its at the time of writing this thesis, one of the most capable supercomputers in the world.
@@ -443,26 +450,41 @@ The data-structure which stores the entire three needs to have following propert
 
 The most naive approach is to use a struct for each cell which stores information about the domain and keeps a pointer to the left and right cell. However since we in high performance systems, synchronizing pointers can be a bit of hassle, furthermore PKDGrav implements distributed arrays. Thus we can store all domain information in an array and simply keep track of the indices of its child cells. This can even be reduced further, since the right child cell is being created by the same process as the left child was. Thus we can assign the information about the right child in the positions left + 1 and only keep track of the index of the left child.
 
+The minimal amount of data we need to store for each cell is its exact boundaries, the begin and end index in the particles array, and finally a index of the left child. If we sketch out two cells as a memory layout it looks as follows:
 \begin{figure}[H]
 	\begin{center}
 		\begin{bytefield}{24}
-			\begin{rightwordgroup}{particle 0}
-				\memsection{0}{32}{4}{x}\\
-				\memsection{32}{64}{4}{y}\\
-				\memsection{64}{96}{4}{z}\\
+			\begin{rightwordgroup}{cell 0}
+				\memsection{0}{32}{2}{lower x}\\
+				\memsection{32}{64}{2}{lower y}\\
+				\memsection{64}{96}{2}{lower z}\\
+				\memsection{96}{128}{2}{upper x}\\
+				\memsection{128}{160}{2}{upper y}\\
+				\memsection{160}{192}{2}{upper z}\\
+				\memsection{192}{224}{2}{begin}\\
+				\memsection{224}{256}{2}{end}\\
+				\memsection{256}{288}{2}{left child}\\
 			\end{rightwordgroup}\\
-			\begin{rightwordgroup}{particle 1}
-				\memsection{96}{128}{4}{x}\\
-				\memsection{128}{160}{4}{y}\\
-				\memsection{160}{192}{4}{z}\\
+			\begin{rightwordgroup}{cell 1}
+				\memsection{288}{320}{2}{lower x}\\
+				\memsection{320}{352}{2}{lower y}\\
+				\memsection{352}{384}{2}{lower z}\\
+				\memsection{384}{416}{2}{upper x}\\
+				\memsection{416}{448}{2}{upper y}\\
+				\memsection{448}{480}{2}{upper z}\\
+				\memsection{480}{512}{2}{begin}\\
+				\memsection{512}{544}{2}{end}\\
+				\memsection{544}{576}{2}{left child}\\
 			\end{rightwordgroup}\\
 			
 		\end{bytefield}
 	\end{center}
 \end{figure}
 
-
+Note that in theory we could only store the split position and axis for each particle, which would only require 32 bits for the positions and 2 bits (for 3D) for the axis. However the exact domain information can then only be achieved by traversing the three starting from the root. We can however make use of this data-structure when the communication overhead is greater than the costs of reconstructing the datastrucutre. Thus this storage version can be thought of as a lossless data compression of the tree.
 \subsubsection{Particles}
+
+The particles need to be stored in an array. We can implement the array using c style arrays, std::array or even an std::vector. The disadvantage of std::array and std::vector is their speed. On the other c-style arrays are limited in terms of multi dimensional indexing and boundary checking. Thus we make use of the library blitz++ which combines the speed of C-style arrays with the functionality of the std::vector. Furthermore blitz++ uses the same memory layout we would expect from a C-style array which looks as follows:
 
 \begin{figure}[H]
 	\begin{center}
@@ -482,8 +504,7 @@ The most naive approach is to use a struct for each cell which stores informatio
 	\end{center}
 \end{figure}
 
-
-We are making use of the Blitz++ array. TODO
+Compressing particle position data is also a possibility. TODO
 
 
 \subsection{Parallel CPU Version}
