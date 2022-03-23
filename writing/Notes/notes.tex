@@ -445,8 +445,11 @@ We are making use of the Blitz++ array. TODO
 
 \subsection{Parallel CPU Version}
 
-To parallelize the ORB algorithms, we first need to think about which parts of the algorithm can be parallelized and yield in a performance improvement. The most obvious choice for parallelization is the counting part. In this case the main thread will send a cut position and each processor how many particles are on the left of this cut. It does so in a designated range of the entire particle array.
-Another strategy we can use, as soon as we have created two domains, rank 0 can process one domain and rank 1 can process the other domain. This has the advantage that not only the counting part, but also the costly reshuffling part of the ORB algorithm can be parallelized.
+To parallelize the ORB algorithms, we first need to think about which parts of the algorithm can be parallelized and yield in a performance improvement. The most obvious choice for parallelization is the counting part. In this case the main thread (rank 0) will send a cut position and each processor counts how many particles there are on the left of this cut positions. It does so in a designated range of the entire particle array, which is unique to each rank.
+
+Since we reshuffle the particles array after each cut we have found, we also need to broadcast the newly rearranged particles array the all non rank 0 threads.
+
+Another strategy we can use, as soon as we have creaqted two domains, rank 0 can process one domain and rank 1 can process the other domain. This has the advantage that not only the counting part, but also the costly reshuffling part of the ORB algorithm can be parallelized. Furthermore the amount of data which needs to be communicated between the different threads is smaller. This is due to the fact that as soon as we found our first cut, only half the array of particles 
 
 \vspace{5mm}
 
