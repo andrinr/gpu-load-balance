@@ -8,7 +8,7 @@
 
 class Orb {
 public:
-    blitz::Array<float, 2> *particles;
+    blitz::Array<float, 2>* particles;
     Cell* cells;
     MPI_Datatype mpi_cut_type;
 

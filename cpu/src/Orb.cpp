@@ -6,14 +6,14 @@ Orb::Orb(blitz::Array<float, 2> &p) {
     particles = particles;
     cells = new Cell[MAX_CELL_COUNT];
 
-    std::cout << "Size:" << (*particles).size() << std::endl;
+    std::cout << "Size:" << (*particles).rows() << std::endl;
 
     MPI_Init(NULL, NULL);
 
     MPI_Comm_size(MPI_COMM_WORLD, &np);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    /* create a type for struct CutDatad */
+    /* create a custom mpi data type for struct mpi_cut_data */
     const int nitems=4;
     int  blocklengths[4] = {1, 1, 1, 1};
     MPI_Datatype types[4] = {MPI_INT, MPI_INT, MPI_INT, MPI_FLOAT};
@@ -131,7 +131,7 @@ std::tuple<float, int> Orb::findCut(
         searchingSplit = !(abs(nLeft - half) < 10);
 
         for (int r = 1; r < np; r++) {
-            MPI_Send(&searchingSplit, 1, MPI_BOOL, r,  0, MPI_COMM_WORLD);
+            MPI_Send(&searchingSplit, 1, MPI_C_BOOL, r,  0, MPI_COMM_WORLD);
         }
 
         if (!searchingSplit) {
@@ -163,16 +163,18 @@ void Orb::operative() {
     stack.push(0);
     int counter = 1;
 
+    bool buildingTree = true;
+
     while (!stack.empty()) {
 
         // Broadcast not yet done
         for (int r = 1; r < np; r++) {
-            MPI_Send(&true, 1, MPI_BOOL, r,  0, MPI_COMM_WORLD);
+            MPI_Send(&buildingTree, 1, MPI_C_BOOL, r,  0, MPI_COMM_WORLD);
         }
 
         // Broadcast new particle array
         for (int r = 1; r < np; r++) {
-            MPI_Send(particles.data(), particles.size(), MPI_FLOAT, r, 0, MPI_COMM_WORLD);
+            MPI_Send(particles->data(), particles->size(), MPI_FLOAT, r, 0, MPI_COMM_WORLD);
         }
 
         int id = stack.top();
@@ -240,8 +242,9 @@ void Orb::operative() {
         reshuffleArray(axis, cell.begin, cell.end, cut);
     }
 
+    buildingTree = false;
     for (int r = 1; r < np; r++) {
-        MPI_Send(&false, 1, MPI_BOOL, r,  0, MPI_COMM_WORLD);
+        MPI_Send(&buildingTree, 1, MPI_C_BOOL, r,  0, MPI_COMM_WORLD);
     }
 }
 
@@ -254,7 +257,7 @@ void Orb::worker() {
     bool buildingTree = true;
 
     while(buildingTree) {
-        MPI_RECV(particles.data(), particles.size(), MPI_FLOAT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(particles->data(), particles->size(), MPI_FLOAT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
         while(searchingSplit) {
         
@@ -264,9 +267,9 @@ void Orb::worker() {
 
             MPI_Send(&nLeft, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
 
-            MPI_RECV(&searchingSplit, 1, MPI_BOOL, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(&searchingSplit, 1, MPI_C_BOOL, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
         }
-        MPI_RECV(&buildingTree, 1, MPI_BOOL, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(&buildingTree, 1, MPI_C_BOOL, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     }
 }
