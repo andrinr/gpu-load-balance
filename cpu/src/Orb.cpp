@@ -2,12 +2,7 @@
 #include <stack>
 #include <Orb.h>
 
-Orb::Orb(blitz::Array<float, 2> &p) {
-    particles = particles;
-    cells = new Cell[MAX_CELL_COUNT];
-
-    std::cout << "Size:" << (*particles).rows() << std::endl;
-
+Orb::Orb() {
     MPI_Init(NULL, NULL);
 
     MPI_Comm_size(MPI_COMM_WORLD, &np);
@@ -29,7 +24,12 @@ Orb::Orb(blitz::Array<float, 2> &p) {
     MPI_Type_commit(&mpi_cut_type);
 }
 
-void Orb::build() {
+void Orb::build(blitz::Array<float, 2> &p) {
+
+    particles = particles;
+    cells = new Cell[MAX_CELL_COUNT];
+
+    std::cout << "Size:" << (*particles).rows() << std::endl;
 
     std::cout << "Processor ID: " << rank << " Number of processes: " << np << std::endl;
 

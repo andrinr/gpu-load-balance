@@ -2,8 +2,9 @@
 \usepackage{algpseudocode}
 
 \usepackage{algorithm}
-\usepackage{float}% 
+\usepackage{float}
 \usepackage{tikz}
+\usepackage{bytefield}
 \usepackage{mymacros}
 \usepackage{qtree}
 %opening
@@ -431,6 +432,8 @@ TODO
 
 \subsection{Data-structure}
 
+\subsubsection{Tree}
+
 The data-structure which stores the entire three needs to have following properties:
 
 \begin{itemize}
@@ -439,6 +442,46 @@ The data-structure which stores the entire three needs to have following propert
 \end{itemize}
 
 The most naive approach is to use a struct for each cell which stores information about the domain and keeps a pointer to the left and right cell. However since we in high performance systems, synchronizing pointers can be a bit of hassle, furthermore PKDGrav implements distributed arrays. Thus we can store all domain information in an array and simply keep track of the indices of its child cells. This can even be reduced further, since the right child cell is being created by the same process as the left child was. Thus we can assign the information about the right child in the positions left + 1 and only keep track of the index of the left child.
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{bytefield}{24}
+			\begin{rightwordgroup}{particle 0}
+				\memsection{0}{32}{4}{x}\\
+				\memsection{32}{64}{4}{y}\\
+				\memsection{64}{96}{4}{z}\\
+			\end{rightwordgroup}\\
+			\begin{rightwordgroup}{particle 1}
+				\memsection{96}{128}{4}{x}\\
+				\memsection{128}{160}{4}{y}\\
+				\memsection{160}{192}{4}{z}\\
+			\end{rightwordgroup}\\
+			
+		\end{bytefield}
+	\end{center}
+\end{figure}
+
+
+\subsubsection{Particles}
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{bytefield}{24}
+			\begin{rightwordgroup}{particle 0}
+				\memsection{0}{32}{4}{x}\\
+				\memsection{32}{64}{4}{y}\\
+				\memsection{64}{96}{4}{z}\\
+			\end{rightwordgroup}\\
+			\begin{rightwordgroup}{particle 1}
+				\memsection{96}{128}{4}{x}\\
+				\memsection{128}{160}{4}{y}\\
+				\memsection{160}{192}{4}{z}\\
+			\end{rightwordgroup}\\
+		
+		\end{bytefield}
+	\end{center}
+\end{figure}
+
 
 We are making use of the Blitz++ array. TODO
 

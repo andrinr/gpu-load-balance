@@ -12,8 +12,8 @@ public:
     Cell* cells;
     MPI_Datatype mpi_cut_type;
 
-    Orb(blitz::Array<float, 2> &particles);
-    void build();
+    Orb();
+    void build(blitz::Array<float, 2> &particles);
 
 private:
     int rank;

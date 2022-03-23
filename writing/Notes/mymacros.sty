@@ -1,3 +1,5 @@
+%%% TIKZ %%%
+
 \newcommand{\randistr}[3]{
 	
 	\foreach \i in {1,...,#3}{
@@ -5,3 +7,16 @@
 		
 	}
 }
+
+% From: https://www.martin-demling.de/2011/06/memory-maps-in-latex-using-the-bytefield-package/
+\newcommand{\memsection}[4]{
+	\bytefieldsetup{bitheight=#3\baselineskip}	% define the height of the memsection
+	\bitbox[]{8}{
+		\texttt{\uppercase{#1}}	 % print end address
+		\\ \vspace{#3\baselineskip} \vspace{-2\baselineskip} \vspace{-#3pt} % do some spacing
+		\texttt{\uppercase{#2}} % print start address
+	}
+	\bitbox{16}{#4} % print box with caption
+}
+
+%%% OTHER %%%

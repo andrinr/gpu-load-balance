@@ -1,19 +1,17 @@
 #ifndef ORB_H // include guard
 #define ORB_H
 
-#include <mpi.h>
 #include "Cell.h"
 #include <tuple>
 #include <blitz/array.h>   
 
 class Orb {
 public:
-    blitz::Array<float, 2>* particles;
+    blitz::Array<float, 2>* h_particles;
     Cell* cells;
-    MPI_Datatype mpi_cut_type;
 
-    Orb(blitz::Array<float, 2> &particles);
-    void build();
+    Orb();
+    void build(blitz::Array<float, 2> &h_particles);
 
 private:
     int rank;

@@ -1,9 +1,4 @@
-#include "math.h"
-#include "stdio.h"
-#include <experimental/random>
-#include <iostream>
-#include <fstream>
-#include <assert.h>
+#include "Orb.h"
 
 __global__ void split(
 	int nPositions, 
@@ -62,53 +57,33 @@ __global__ void findDomainID(
 	}
 }
 
-int main() 
+int Orb::build(blitz::Array<float, 2> &h_particles) 
 {	
-	// 65k elements
-	int p = 23;
-	int N = 1<<p;
+	h_particles = h_particles;
 
-	// Memory size
-	int size = N * sizeof(int);
-	int unsignedSize = N * sizeof(unsigned int);
-
-	// Host memory
-	int* h_xPos = (int*)malloc(size);
-	int* h_yPos = (int*)malloc(size);
-	int* h_zPos = (int*)malloc(size);
-	
 	unsigned int* h_domainID = (unsigned int*)malloc(unsignedSize);
 
+	int size = h_particles->size();
+
 	// Device memory
-	int* d_xPos;
-	cudaMalloc(&d_xPos, size);
-
-	int* d_yPos;
-	cudaMalloc(&d_yPos, size);
-
-	int* d_zPos;
-	cudaMalloc(&d_zPos, size);
+	int* d_particles;
+	cudaMalloc(&d_particles, size);
 
 	unsigned int* d_domainID;
 	cudaMalloc(&d_domainID, unsignedSize);
 
-	// Data Initialisation
-	for (int i = 0; i < N; i++){
-		// xpos
-		h_xPos[i] = std::experimental::randint(INT_MIN, INT_MAX);
-		// ypos
-		h_yPos[i] = std::experimental::randint(INT_MIN, INT_MAX);
-		// zpos
-		h_zPos[i] = std::experimental::randint(INT_MIN, INT_MAX);
-	}
-
-	std::cout << "initialization finished \n";
-
 	// Copy to device	
-	cudaMemcpy(d_xPos, h_xPos, size, cudaMemcpyHostToDevice);
+	cudaMemcpy(d_particles, h_particles, size, cudaMemcpyHostToDevice);
 	
 	// Random initial guess
 	int splitPosition = 0;
+
+	// TODO 
+
+	// Questions: Directly use Blitz++ with CUDA?
+	
+
+
 
 	unsigned int nThreads = 256;
 	int nBlocks = (N + nThreads - 1) / nThreads;
