@@ -57,6 +57,8 @@ Non equal waiting functions for different particles are due to higher accelerati
 
 Let us consider a simple example to illustrate the point. Given the set of particles $A = {p_1, p_2, .., p_{2N/3}}$ and respectively $B = {p_{2N/3 + 1}, p_2, .., p_{N}}$. Let us now consider the that $\forall p \in A : w(p) = 1$ and $\forall p \in B : w(p) = 2$. If we assign all particles from set $A$ to process with rank 0 and the particles from B to rank 1. It is clear that $\sum_{p\in A}^{} w(p) = \sum_{p\in B}^{} w(p)$. Thus the two processors are balanced in terms of computing costs, but clearly they are not balanced in terms of memory size. In fact process with rank 0 has $2N/3$ elements and rank 1 has $N/3$ elements. Thus there will be processes there are memory slots which are not taken advantage of, which means we have a reduced total number of particles. As cosmological simulations profit from an increased number of particles, this also means that the quality of the simulation suffers when prioritizing workload balancing.
 
+This exact reasoning is also the reason we favour algorithms which can be computed in place, over potentially more efficient algorithms, which cannot be computed in place. For example the algorithm to find a binary cut could be improved by using the mean of means algorithm (TODO: Add reference), but it cannot be done in place, reducing the maximum number of particle we can simulate.
+
 
 If not denoted otherwise, we will assume $w(p_i) = 1$ for all particles in the simulation.
 
@@ -346,6 +348,7 @@ Due to possible overhead and simply no real improvement over the naive GPU versi
 
 \subsubsection{Data compression}
 
+Since for most computer the Interconnect bandwidth is greatly smaller than the Memory Bandwidth, we could potentially also think about compressing the particle data. This would increase computational costs, but would allow us to store a higher amount of particles and reduce the cost which comes from loading the particles from memory as well as sending the data over the Interconnect.
 \begin{itemize}
 	\item Why do we even use floats in the first place? wouldn't integers suit better since precision is uniformly equal?
 	\item Reduce transfered number of bits, sacrifice precision?
