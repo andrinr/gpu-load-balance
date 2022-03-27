@@ -12,7 +12,6 @@ Orb::Orb() {
     const int nitems=4;
     int  blocklengths[4] = {1, 1, 1, 1};
     MPI_Datatype types[4] = {MPI_INT, MPI_INT, MPI_INT, MPI_FLOAT};
-    MPI_Datatype mpi_cut_type;
     MPI_Aint offsets[4];
 
     offsets[0] = offsetof(Cut, begin);
@@ -26,7 +25,7 @@ Orb::Orb() {
 
 void Orb::build(blitz::Array<float, 2> &p) {
 
-    particles = particles;
+    particles = &p;
     cells = new Cell[MAX_CELL_COUNT];
 
     std::cout << "Size:" << (*particles).rows() << std::endl;
@@ -79,11 +78,11 @@ int Orb::count(int axis, int begin, int end, float split) {
         size = (end - begin) - size * (np - 1);
     }
 
-    std::cout << (*particles)(20,0) << std::endl;
+    //std::cout << (*particles)(20,0) << std::endl;
 
-    std::cout << "Size:" << (*particles).size() << "Begin:" << begin << "End" << end << std::endl;
+    //std::cout << "Size:" << (*particles).size() << "Begin:" << begin << "End" << end << std::endl;
     for (int j = begin + rank * size; j < begin + (rank + 1) * size; j++) {
-        std::cout << nLeft <<  " " << j << " " << begin + (rank + 1) * size << std::endl;
+        //std::cout << nLeft <<  " " << j << " " << begin + (rank + 1) * size << std::endl;
         nLeft += (*particles)(j, axis) < split;
     }
     //std::cout << "done" << std::endl;
@@ -110,13 +109,15 @@ std::tuple<float, int> Orb::findCut(
             begin, axis, end, cut
         };
         
-        bool searchingSplit = true;
+        int searchingSplit = 1;
 
         std::cout << "Cut:" << cut << std::endl;
 
         for (int r = 1; r < np; r++) {
             MPI_Send(&cutdata, 1, mpi_cut_type, r,  0, MPI_COMM_WORLD);
         }
+
+        std::cout << "reached:" << cut << std::endl;
 
         nLeft = count(axis, begin, end, cut);
 
@@ -128,13 +129,15 @@ std::tuple<float, int> Orb::findCut(
 
         std::cout << "n:" << nLeft << std::endl;
 
-        searchingSplit = !(abs(nLeft - half) < 10);
+        searchingSplit = int(!(abs(nLeft - half) < 10));
+
+        std::cout << searchingSplit << std::endl;
 
         for (int r = 1; r < np; r++) {
-            MPI_Send(&searchingSplit, 1, MPI_C_BOOL, r,  0, MPI_COMM_WORLD);
+            MPI_Send(&searchingSplit, 1, MPI_INT, r,  0, MPI_COMM_WORLD);
         }
 
-        if (!searchingSplit) {
+        if (searchingSplit == 0) {
             break;
         }
 
@@ -149,27 +152,34 @@ std::tuple<float, int> Orb::findCut(
 }
 
 void Orb::operative() {
+    const float lowerInit = -0.5;
+    const float upperInit = 0.5;
+
     Cell cell = Cell{
         0,
         COUNT,
         0,
         -1,
-        {-0.5, -0.5, -0.5},
-        {0.5, 0.5, 0.5}
     };
+
+    cell.lower = lowerInit;
+    cell.upper = upperInit;
+
     cells[0] = cell;
 
     std::stack<int> stack;
     stack.push(0);
     int counter = 1;
 
-    bool buildingTree = true;
+    bool buildingTree = 1;
 
     while (!stack.empty()) {
 
+        std::cout << "reached" << rank << std::endl;
+
         // Broadcast not yet done
         for (int r = 1; r < np; r++) {
-            MPI_Send(&buildingTree, 1, MPI_C_BOOL, r,  0, MPI_COMM_WORLD);
+            MPI_Send(&buildingTree, 1, MPI_INT, r,  0, MPI_COMM_WORLD);
         }
 
         // Broadcast new particle array
@@ -182,12 +192,14 @@ void Orb::operative() {
 
         Cell cell = cells[id];
 
-        std::cout << id << std::endl;
+        std::cout << "lower" << cell.lower << " upper:" << cell.upper << std::endl;
+
+
         float maxValue = 0;
-        int axis = -1;
+        int axis = 0;
 
         for (int i = 0; i < DIMENSIONS; i++) {
-            float size = cell.upper[i] - cell.lower[i];
+            float size = cell.upper(i) - cell.lower(i);
             if (size > maxValue) {
                 maxValue = size;
                 axis = i;
@@ -198,24 +210,24 @@ void Orb::operative() {
             continue;
         }
 
-        float left = cell.lower[axis];
-        float right = cell.upper[axis];
+        float left = cell.lower(axis);
+        float right = cell.upper(axis);
 
         float cut;
         int mid;
-        std::tie(cut, mid) =
-                findCut(axis, cell.begin, cell.end, left, right);
-
+        std::tie(cut, mid) = findCut(axis, cell.begin, cell.end, left, right);
 
         Cell leftChild = {
             cell.begin,
             mid,
             -1,
             counter,
-            {0,0,0},
-            {0,0,0}
+            cell.lower,
+            cell.upper
         };
+        leftChild.upper(axis) = cut;
         cells[counter] = leftChild;
+        cell.leftChildId = counter;
         stack.push(counter++);
 
         Cell rightChild = {
@@ -223,28 +235,21 @@ void Orb::operative() {
             cell.end,
             -1,
             counter,
-            {0,0,0},
-            {0,0,0}
+            cell.lower,
+            cell.upper
         };
+        rightChild.lower(axis) = cut;
         cells[counter] = rightChild;
         stack.push(counter++);
 
-        std::cout << id << std::endl;
-
-        std::copy(std::begin(cell.lower), std::end(cell.lower), std::begin(leftChild.lower));
-        std::copy(std::begin(cell.lower), std::end(cell.lower), std::begin(rightChild.lower));
-        std::copy(std::begin(cell.upper), std::end(cell.upper), std::begin(leftChild.upper));
-        std::copy(std::begin(cell.upper), std::end(cell.upper), std::begin(rightChild.upper));
-
-        leftChild.upper[axis] = cut;
-        rightChild.lower[axis] = cut;
+        std::cout << id << " axis:" << axis << std::endl;
 
         reshuffleArray(axis, cell.begin, cell.end, cut);
     }
 
-    buildingTree = false;
+    buildingTree = 0;
     for (int r = 1; r < np; r++) {
-        MPI_Send(&buildingTree, 1, MPI_C_BOOL, r,  0, MPI_COMM_WORLD);
+        MPI_Send(&buildingTree, 1, MPI_INT, r,  0, MPI_COMM_WORLD);
     }
 }
 
@@ -253,13 +258,19 @@ void Orb::worker() {
     int id;
     Cut cutData;
 
-    bool searchingSplit = true;
-    bool buildingTree = true;
+    int searchingSplit = 1;
+    int buildingTree = 1;
 
-    while(buildingTree) {
+    MPI_Recv(&buildingTree, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+    std::cout << "reached" << rank << "stat" << buildingTree << std::endl;
+
+    while(buildingTree == 1) {
         MPI_Recv(particles->data(), particles->size(), MPI_FLOAT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-        while(searchingSplit) {
+        std::cout << "reached" << rank << std::endl;
+
+        while(searchingSplit == 1) {
         
             MPI_Recv(&cutData, 1, mpi_cut_type, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
@@ -267,9 +278,13 @@ void Orb::worker() {
 
             MPI_Send(&nLeft, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
 
-            MPI_Recv(&searchingSplit, 1, MPI_C_BOOL, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(&searchingSplit, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
         }
-        MPI_Recv(&buildingTree, 1, MPI_C_BOOL, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+        std::cout << "found split" << rank << std::endl;
+        MPI_Recv(&buildingTree, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+        std::cout << "rank " << rank << "state" << buildingTree << std::endl;
     }
-}
+}   

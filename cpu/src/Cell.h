@@ -2,18 +2,15 @@
 #define CELL_H
 
 #include "constants.h"
-/**
- * @brief The Cells class is basically a wrapper around the array datastructure which 
- * holds all data of the unwrapped Cell tree datastructure.
- * 
- */
+#include <blitz/array.h>   
+
 struct Cell {
     int begin;
     int end;
     int id;
     int leftChildId;
-    float lower[DIMENSIONS];
-    float upper[DIMENSIONS];
+    blitz::TinyVector<float, DIMENSIONS> lower;
+    blitz::TinyVector<float, DIMENSIONS> upper;
 };
 
 struct Cut {

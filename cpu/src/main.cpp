@@ -21,8 +21,8 @@ int main()
 
     printf("Computing ORB... \n");
     
-    Orb orb = Orb(p);
-    orb.build();
+    Orb orb = Orb();
+    orb.build(p);
 
     printf("Done.\n");                                              
 
