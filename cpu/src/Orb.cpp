@@ -42,10 +42,6 @@ void Orb::build(blitz::Array<float, 2> &p) {
     MPI_Finalize();
 }
 
-// You can move them after each split
-// Or you have another array to keep track
-// Local and global shuffle, ??
-// 
 void Orb::reshuffleArray(int axis, int begin, int end, float split) {
     int i = begin;
     int j = end-1;
@@ -78,14 +74,10 @@ int Orb::count(int axis, int begin, int end, float split) {
         size = (end - begin) - size * (np - 1);
     }
 
-    //std::cout << (*particles)(20,0) << std::endl;
-
-    //std::cout << "Size:" << (*particles).size() << "Begin:" << begin << "End" << end << std::endl;
     for (int j = begin + rank * size; j < begin + (rank + 1) * size; j++) {
-        //std::cout << nLeft <<  " " << j << " " << begin + (rank + 1) * size << std::endl;
         nLeft += (*particles)(j, axis) < split;
     }
-    //std::cout << "done" << std::endl;
+
     return nLeft;
 }
 
@@ -114,16 +106,14 @@ std::tuple<float, int> Orb::findCut(
         std::cout << "Cut:" << cut << std::endl;
 
         for (int r = 1; r < np; r++) {
-            MPI_Send(&cutdata, 1, mpi_cut_type, r,  0, MPI_COMM_WORLD);
+            MPI_Send(&cutdata, 1, mpi_cut_type, r,  TAG_CUT_DATA, MPI_COMM_WORLD);
         }
-
-        std::cout << "reached:" << cut << std::endl;
 
         nLeft = count(axis, begin, end, cut);
 
         for (int r = 1; r < np; r++) {
             int count = 0;
-            MPI_Recv(&count, 1, MPI_INT, r,  0, MPI_COMM_WORLD,  MPI_STATUS_IGNORE);
+            MPI_Recv(&count, 1, MPI_INT, r,  TAG_CUT_COUNT, MPI_COMM_WORLD,  MPI_STATUS_IGNORE);
             nLeft += count;
         }
 
@@ -131,10 +121,10 @@ std::tuple<float, int> Orb::findCut(
 
         searchingSplit = int(!(abs(nLeft - half) < 10));
 
-        std::cout << searchingSplit << std::endl;
+        std::cout << "searching" << searchingSplit << std::endl;
 
         for (int r = 1; r < np; r++) {
-            MPI_Send(&searchingSplit, 1, MPI_INT, r,  0, MPI_COMM_WORLD);
+            MPI_Send(&searchingSplit, 1, MPI_INT, r,  TAG_CUT_STATUS, MPI_COMM_WORLD);
         }
 
         if (searchingSplit == 0) {
@@ -175,16 +165,30 @@ void Orb::operative() {
 
     while (!stack.empty()) {
 
-        std::cout << "reached" << rank << std::endl;
+        std::cout << "next iteration" << rank << std::endl;
 
-        // Broadcast not yet done
         for (int r = 1; r < np; r++) {
-            MPI_Send(&buildingTree, 1, MPI_INT, r,  0, MPI_COMM_WORLD);
-        }
-
-        // Broadcast new particle array
-        for (int r = 1; r < np; r++) {
-            MPI_Send(particles->data(), particles->size(), MPI_FLOAT, r, 0, MPI_COMM_WORLD);
+            // Signal not yet done
+            std::cout << "stat" << buildingTree << std::endl;
+            MPI_Ssend(
+                &buildingTree, 
+                1, 
+                MPI_INT, 
+                r,  
+                TAG_TREE_STATUS, 
+                MPI_COMM_WORLD
+            );
+            std::cout << "sent" << std::endl;
+            // Broadcast new particles array
+            MPI_Send(
+                particles->data(), 
+                particles->size(), 
+                MPI_FLOAT, 
+                r, 
+                TAG_PARTICLES, 
+                MPI_COMM_WORLD
+            );
+            std::cout << "sent" << std::endl;
         }
 
         int id = stack.top();
@@ -249,7 +253,14 @@ void Orb::operative() {
 
     buildingTree = 0;
     for (int r = 1; r < np; r++) {
-        MPI_Send(&buildingTree, 1, MPI_INT, r,  0, MPI_COMM_WORLD);
+        MPI_Send(
+            &buildingTree, 
+            1,
+            MPI_INT, 
+            r,  
+            TAG_TREE_STATUS, 
+            MPI_COMM_WORLD
+        );
     }
 }
 
@@ -261,29 +272,77 @@ void Orb::worker() {
     int searchingSplit = 1;
     int buildingTree = 1;
 
-    MPI_Recv(&buildingTree, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(
+        &buildingTree, 
+        1, 
+        MPI_INT, 
+        0, 
+        TAG_TREE_STATUS, 
+        MPI_COMM_WORLD, 
+        MPI_STATUS_IGNORE
+    );
 
     std::cout << "reached" << rank << "stat" << buildingTree << std::endl;
 
     while(buildingTree == 1) {
-        MPI_Recv(particles->data(), particles->size(), MPI_FLOAT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(
+            particles->data(), 
+            particles->size(), 
+            MPI_FLOAT, 
+            0, 
+            TAG_PARTICLES, 
+            MPI_COMM_WORLD, 
+            MPI_STATUS_IGNORE
+        );
 
         std::cout << "reached" << rank << std::endl;
 
         while(searchingSplit == 1) {
         
-            MPI_Recv(&cutData, 1, mpi_cut_type, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(
+                &cutData, 
+                1, 
+                mpi_cut_type, 
+                0, 
+                TAG_CUT_DATA, 
+                MPI_COMM_WORLD, 
+                MPI_STATUS_IGNORE
+            );
 
             int nLeft = count(cutData.axis, cutData.begin, cutData.end, cutData.pos);
 
-            MPI_Send(&nLeft, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+            MPI_Send(
+                &nLeft, 
+                1, 
+                MPI_INT, 
+                0, 
+                TAG_CUT_COUNT,
+                MPI_COMM_WORLD
+            );
 
-            MPI_Recv(&searchingSplit, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(
+                &searchingSplit, 
+                1, 
+                MPI_INT, 
+                0, 
+                TAG_CUT_STATUS, 
+                MPI_COMM_WORLD, 
+                MPI_STATUS_IGNORE
+            );
 
         }
 
         std::cout << "found split" << rank << std::endl;
-        MPI_Recv(&buildingTree, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+        MPI_Recv(
+            &buildingTree, 
+            1, 
+            MPI_INT, 
+            0, 
+            TAG_TREE_STATUS, 
+            MPI_COMM_WORLD, 
+            MPI_STATUS_IGNORE
+        );
 
         std::cout << "rank " << rank << "state" << buildingTree << std::endl;
     }

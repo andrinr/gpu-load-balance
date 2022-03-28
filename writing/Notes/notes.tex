@@ -1,17 +1,23 @@
 \documentclass[]{article}
-\usepackage{algpseudocode}
 
+% Packages
+\usepackage{algpseudocode}
 \usepackage{algorithm}
 \usepackage{float}
 \usepackage{tikz}
 \usepackage{bytefield}
-\usepackage{mymacros}
 \usepackage{qtree}
 \usepackage{xcolor}
-%opening
+
+% Dependencies
+\usepackage{mymacros}
+
+
+% Title
 \title{Notes}
 \author{Andrin Rehmann}
 
+% Start
 \begin{document}
 
 \maketitle
@@ -236,7 +242,7 @@ We always choose the dimension which is the biggest to perform the next cut. Thi
 	\end{algorithmic}
 \end{algorithm}
 
-
+% Hoar partitioning
 \begin{algorithm}[H]
 	\caption{Reshuffle algorithm}\label{euclid}
 	\begin{algorithmic}[1]
@@ -266,6 +272,13 @@ We always choose the dimension which is the biggest to perform the next cut. Thi
 \section{Theoretical analysis of ORB speedup by GPU acceleration}
 
 In order to have a broad idea what speedup we can expect by implementing a GPU version, we first need to understand which parts of the code are suited to be done on the GPU. The GPU profits from a highly parallelized architecture, this means that it performs exceptionally when vectorization can be applied to large set of values. But the GPU has another strength over the CPU, which may be lesser known. The memory bandwidth between the GPU and its memory is much greater than the memory bandwidth between the CPU and GPU. Since the time used for calculations is a lot smaller due the algorithm only requiring few and simple operations and is negligible in comparison to memory loading times, we omit speed-ups which are introduced by parallelizing calculations and instead focus on the memory access times. Thus for the section of theoretical analysis we assume that the waiting function is always $w(p) = 0$.
+
+\TODO{Find tflops}
+
+% Compare flops with speed of memory
+% Add small experiment
+% Memory Bandwidth Cliff
+
 
 \subsection{Assumptions} 
 \begin{itemize}
@@ -576,7 +589,7 @@ To parallelize the ORB algorithms, we first need to think about which parts of t
 
 Since we reshuffle the particles array after each cut we have found, we also need to broadcast the newly rearranged particles array the all non rank 0 threads.
 
-Another strategy we can use, as soon as we have creaqted two domains, rank 0 can process one domain and rank 1 can process the other domain. This has the advantage that not only the counting part, but also the costly reshuffling part of the ORB algorithm can be parallelized. Furthermore the amount of data which needs to be communicated between the different threads is smaller. This is due to the fact that as soon as we found our first cut, only half the array of particles 
+Another strategy we can use, as soon as we have created two domains, rank 0 can process one domain and rank 1 can process the other domain. This has the advantage that not only the counting part, but also the costly reshuffling part of the ORB algorithm can be parallelized. Furthermore the amount of data which needs to be communicated between the different threads is smaller. This is due to the fact that as soon as we found our first cut, only half the array of particles 
 
 \vspace{5mm}
 

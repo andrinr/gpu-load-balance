@@ -18,6 +18,12 @@ public:
 private:
     int rank;
     int np;
+
+    static const int TAG_TREE_STATUS = 0;
+    static const int TAG_CUT_STATUS = 1;
+    static const int TAG_CUT_DATA = 2;
+    static const int TAG_CUT_COUNT = 3;
+    static const int TAG_PARTICLES = 4;
     
     void reshuffleArray(int axis, int begin, int end, float split);
     int count(int axis, int start, int end, float cut);
