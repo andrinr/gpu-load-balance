@@ -40,9 +40,9 @@ The computational effort required in modern N-Body simulations can thus be split
 
 Before the implementation of FMM into codes, and particularly before the era of modern accelerated computing (e.g., SIMD vectorization and GPU computing) the forces calculations dominated the computational cost. In more recent simulations, each category is about one third of the total calculation time\cite{2017ComAC...4....2P}. This makes the tree building and load balancing subjects to great performance gains, since GPU acceleration is usually not exploited. 
 
-This project proposes to implement ORB with the CUDA API to accelerate load balancing.
+This project proposes to implement ORB with the GPU using CUDA to accelerate load balancing.
 
-\section{ORB Algorithm}
+\section{Orthogonal Recursive Bisection (ORB)}
 
 
 %https://de.overleaf.com/learn/latex/TikZ_package
@@ -50,7 +50,7 @@ This project proposes to implement ORB with the CUDA API to accelerate load bala
 The ORB Algorithm can be used to partition a multi dimensional domain into subdomains based on spatial proximity. The advantage of subdividing the domain into smaller subdomains is two folds:
 
 \begin{itemize}
-	\item For simulation code and more specifically for the Fast Multipole Method these domains can be leveraged to greatly accelerate the simulation time. 
+	\item For simulation code and more specifically for the Fast Multipole Method these domains can be leveraged to greatly accelerate the simulation time. \TODO{expand}
 	\item The workload can be equally distributed among nodes and processors in large computing systems.
 \end{itemize} 
 
@@ -58,13 +58,13 @@ The ORB Algorithm can be used to partition a multi dimensional domain into subdo
 The general idea of the ORB algorithm is to split a $k$ dimensional domain containing $N$ particles into $np$ subdomains using a recursive procedure. This can be repeated until the number of smallest subdomains is equal to the total count of processors or nodes. The final goal is an equal distribution of the workload and data, thus the subdomain sizes should be chosen such that the number of particles is equal among nodes / processors.
 
 \subsection{Memory and Workload Balancing}
-For the ORB algorithms itself, the relation between the number of processors and the workload holds steady. But for the simulation certain particles require more timesteps, thus more computational effort, than others. We denote the workload per particle as the waiting function $w(p_i)$ where $p_i \in {p_1, p_2, ..., p_N}$.
+For the ORB algorithms itself, the relation between the number of processors and the workload holds steady. However during simulation certain particles require more timesteps, thus more computational effort, than others. We denote the workload per particle as the weighting function $w(p_i)$ where $p_i \in {p_1, p_2, ..., p_N}$.
 
-Non equal waiting functions for different particles are due to higher accelerations and greater proximity to strong gravitational influences. This in turn requires a higher accuracy to mitigate errors. When we try to balance the workload, this implies drawbacks in terms of memory balance. 
+Non equal waiting functions for different particles are due to higher accelerations and greater proximity to strong gravitational influences. This in turn requires a higher integrations accuracy to mitigate errors. When we try to balance the workload, this implies drawbacks in terms of memory balance. 
 
 Let us consider a simple example to illustrate the point. Given the set of particles $A = {p_1, p_2, .., p_{2N/3}}$ and respectively $B = {p_{2N/3 + 1}, p_2, .., p_{N}}$. Let us now consider the that $\forall p \in A : w(p) = 1$ and $\forall p \in B : w(p) = 2$. If we assign all particles from set $A$ to process with rank 0 and the particles from B to rank 1. It is clear that $\sum_{p\in A}^{} w(p) = \sum_{p\in B}^{} w(p)$. Thus the two processors are balanced in terms of computing costs, but clearly they are not balanced in terms of memory size. In fact process with rank 0 has $2N/3$ elements and rank 1 has $N/3$ elements. Thus there will be processes there are memory slots which are not taken advantage of, which means we have a reduced total number of particles. As cosmological simulations profit from an increased number of particles, this also means that the quality of the simulation suffers when prioritizing workload balancing.
 
-This exact reasoning is also the reason we favour algorithms which can be computed in place, over potentially more efficient algorithms, which cannot be computed in place. For example the algorithm to find a binary cut could be improved by using the mean of means algorithm (\TODO{Add reference}), but it cannot be done in place, reducing the maximum number of particle we can simulate.
+This exact reasoning is also the reason we favour algorithms which can be computed in place, over potentially more efficient algorithms, which cannot be computed in place. For example the algorithm to find a binary cut could be improved by using the mean of means algorithm (\TODO{Add reference}), but it cannot be done in place, reducing the maximum number of particle we can simulate. \TODO{Memory not the issue, rather out of scope for this work, maybe look into it}
 
 
 If not denoted otherwise, we will assume $w(p_i) = 1$ for all particles in the simulation.
