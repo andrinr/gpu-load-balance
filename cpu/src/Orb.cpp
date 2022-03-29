@@ -178,6 +178,10 @@ void Orb::operative() {
                 TAG_TREE_STATUS, 
                 MPI_COMM_WORLD
             );
+
+        }
+
+        for (int r = 1; r < np; r++) {
             std::cout << "sent" << std::endl;
             // Broadcast new particles array
             MPI_Send(
@@ -272,6 +276,8 @@ void Orb::worker() {
     int searchingSplit = 1;
     int buildingTree = 1;
 
+    MPI_Status status;
+
     MPI_Recv(
         &buildingTree, 
         1, 
@@ -341,9 +347,13 @@ void Orb::worker() {
             0, 
             TAG_TREE_STATUS, 
             MPI_COMM_WORLD, 
-            MPI_STATUS_IGNORE
+            &status
         );
 
-        std::cout << "rank " << rank << "state" << buildingTree << std::endl;
+        std::cout <<
+         "rank " << rank << 
+         "state" << buildingTree << 
+         "mpi stat" << status.MPI_SOURCE << 
+         "mpi tag" << status.MPI_TAG << std::endl;
     }
 }   
