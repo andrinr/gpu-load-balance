@@ -1,13 +1,25 @@
 \documentclass[]{article}
 
 % Packages
+
+% Pseudocode
 \usepackage{algpseudocode}
 \usepackage{algorithm}
+
+% Placing
 \usepackage{float}
+% Drawing
 \usepackage{tikz}
+% Memory maps
 \usepackage{bytefield}
+% Simple trees
 \usepackage{qtree}
+% Custom colors
 \usepackage{xcolor}
+
+% Plots
+\usepackage{pgfplots}
+\pgfplotsset{compat = newest}
 
 % Dependencies
 \usepackage{mymacros}
@@ -40,14 +52,17 @@ The computational effort required in modern N-Body simulations can thus be split
 
 Before the implementation of FMM into codes, and particularly before the era of modern accelerated computing (e.g., SIMD vectorization and GPU computing) the forces calculations dominated the computational cost. In more recent simulations, each category is about one third of the total calculation time\cite{2017ComAC...4....2P}. This makes the tree building and load balancing subjects to great performance gains, since GPU acceleration is usually not exploited. 
 
-This project proposes to implement ORB with the GPU using CUDA to accelerate load balancing.
+This project proposes to implement Tree Building with the GPU using CUDA to accelerate load balancing.
+
 
 \section{Orthogonal Recursive Bisection (ORB)}
 
 
 %https://de.overleaf.com/learn/latex/TikZ_package
 %https://texample.net/tikz/examples/
-The ORB Algorithm can be used to partition a multi dimensional domain into subdomains based on spatial proximity. The advantage of subdividing the domain into smaller subdomains is two folds:
+The ORB Algorithm can be used to partition a multi dimensional domain into subdomains based on spatial proximity. It does so by building an unbalanced binary tree. For the sake of simplicity we will refer to a left child of a node with index $i$ as $i*2$ and the right child respectively as $i*2 + 1$. The parent node can be determined with $\lfloor \frac{i}{2} \rfloor$. Finally we have $i = 1$ for the root node.
+
+The advantage of subdividing the domain into smaller subdomains is two folds:
 
 \begin{itemize}
 	\item For simulation code and more specifically for the Fast Multipole Method these domains can be leveraged to greatly accelerate the simulation time. \TODO{expand}
@@ -55,28 +70,28 @@ The ORB Algorithm can be used to partition a multi dimensional domain into subdo
 \end{itemize} 
 
 
-The general idea of the ORB algorithm is to split a $k$ dimensional domain containing $N$ particles into $np$ subdomains using a recursive procedure. This can be repeated until the number of smallest subdomains is equal to the total count of processors or nodes. The final goal is an equal distribution of the workload and data, thus the subdomain sizes should be chosen such that the number of particles is equal among nodes / processors.
+The general idea of the algorithm is to split a $k$ dimensional domain containing $N$ particles into $d$ subdomains using a recursive procedure. This can be repeated until the number of smallest subdomains is equal to the total count of processors or nodes. The final goal is an equal distribution of the workload and data, thus the subdomain sizes should be chosen such that the number of particles is equal among nodes / processors.
 
-\subsection{Memory and Workload Balancing}
+For a clearer terminology, we will refer to a domain as a cell. Furthermore the subdomain of a domain is the child cell of a cell, and likewise we also have the concept of a parent cell. The parent cell thus always encompasses the two child cells.
+
+\subsection{Memory and Workload Balancing}\label{sec:balancing}
 For the ORB algorithms itself, the relation between the number of processors and the workload holds steady. However during simulation certain particles require more timesteps, thus more computational effort, than others. We denote the workload per particle as the weighting function $w(p_i)$ where $p_i \in {p_1, p_2, ..., p_N}$.
 
 Non equal waiting functions for different particles are due to higher accelerations and greater proximity to strong gravitational influences. This in turn requires a higher integrations accuracy to mitigate errors. When we try to balance the workload, this implies drawbacks in terms of memory balance. 
 
 Let us consider a simple example to illustrate the point. Given the set of particles $A = {p_1, p_2, .., p_{2N/3}}$ and respectively $B = {p_{2N/3 + 1}, p_2, .., p_{N}}$. Let us now consider the that $\forall p \in A : w(p) = 1$ and $\forall p \in B : w(p) = 2$. If we assign all particles from set $A$ to process with rank 0 and the particles from B to rank 1. It is clear that $\sum_{p\in A}^{} w(p) = \sum_{p\in B}^{} w(p)$. Thus the two processors are balanced in terms of computing costs, but clearly they are not balanced in terms of memory size. In fact process with rank 0 has $2N/3$ elements and rank 1 has $N/3$ elements. Thus there will be processes there are memory slots which are not taken advantage of, which means we have a reduced total number of particles. As cosmological simulations profit from an increased number of particles, this also means that the quality of the simulation suffers when prioritizing workload balancing.
 
-This exact reasoning is also the reason we favour algorithms which can be computed in place, over potentially more efficient algorithms, which cannot be computed in place. For example the algorithm to find a binary cut could be improved by using the mean of means algorithm (\TODO{Add reference}), but it cannot be done in place, reducing the maximum number of particle we can simulate. \TODO{Memory not the issue, rather out of scope for this work, maybe look into it}
-
-
-If not denoted otherwise, we will assume $w(p_i) = 1$ for all particles in the simulation.
 
 \subsection{ORB for power of twos}
 
-Let us first make the assumption that $np$ is a power of two. In this case we can search for a cut such that 50\% of the particles are on the left side and likewise on the right side of the cut. The dimension of the cut is always the axis where the size of the domain is the largest. This ensures that we do not get very thin shapes, generally closer to a square. This in turn is very beneficial for the FMM as it has a higher precision on more squarish shapes.  The position of the cut can be found in $O(log(N))$ using a binary search. We can introduce an even tighter bound when assuming each particle is being stored as a 32 bit precision number. In this case we have reached the maximum precision after $O(32)$ iterations. After such a cut has been found, we can create two new subdomains and recursively apply the algorithm on both of them until we have reached the desired number of subdomains $np$. 
+
+Let us first make the assumption that $d$ is a power of two. In this case we can search for a cut such that 50\% of the particles are on the left side and likewise on the right side of the cut. The dimension of the cut is always the axis where the size of the domain is the largest. This ensures that we do not get thin shapes. \TODO{Insert smartness about FMM} This in turn is very beneficial for the FMM as it has a higher precision on more squarish shapes.  The position of the cut can be found in $O(log(N))$ using a binary search. We can introduce an even tighter bound when assuming each particle is being stored as a 32 bit precision number. In this case we have reached the maximum precision after $O(32)$ iterations. After such a cut has been found, we can create two new subdomains and recursively apply the algorithm on both of them until we have reached the desired number of subdomains $d$. 
  
 \vspace{5mm}
 
 \def\x{8}
 \def\y{8}
+\def\s{5}
 
 \def\spx{0.45}
 \def\spya{0.5}
@@ -85,19 +100,19 @@ Let us first make the assumption that $np$ is a power of two. In this case we ca
 \begin{center}
 	\begin{tikzpicture}[scale=0.33]
 		\pgfmathsetseed{2};
-		\randistr{\x}{\y}{100};
+		\exdistr{\x}{\y}{\s};
 		\draw (0,0) rectangle (\x, \y);
-		\node[below] at (.5*\x,\y){$root cell$};
+		\node[below] at (.5*\x,\y){$cell_1$};
 	\end{tikzpicture}
 	\qquad
 	\begin{tikzpicture}[scale=0.33]
 		\pgfmathsetseed{2};
-		\randistr{\x}{\y}{100};
+		\exdistr{\x}{\y}{\s};
 		\draw (0,0) rectangle (\x * \spx, \y);
-		\node[below] at (.25*\x,\y){$cell1$};
+		\node[below] at (.25*\x,\y){$cell_2$};
 		
 		\draw (\x  * \spx, 0) rectangle (\x, \y);
-		\node[below] at (.75*\x,\y){$cell2$};
+		\node[below] at (.75*\x,\y){$cell_3$};
 		
 		\vspace{2mm}
 		
@@ -105,18 +120,18 @@ Let us first make the assumption that $np$ is a power of two. In this case we ca
 	\qquad
 	\begin{tikzpicture}[scale=0.33]
 		\pgfmathsetseed{2};
-		\randistr{\x}{\y}{100};
+		\exdistr{\x}{\y}{\s};
 		\draw (0,0) rectangle (\x * \spx, \y * \spya);
-		\node[below] at (.25*\x,\y * \spya){$cell2$};
+		\node[below] at (.25*\x,\y * \spya){$cell_4$};
 		
 		\draw (0,\y * \spya) rectangle (\x * \spx, \y);
-		\node[below] at (.25*\x,\y){$cell3$};
+		\node[below] at (.25*\x,\y){$cell_5$};
 		
 		\draw (\x * \spx,0) rectangle (\x, \y * \spyb);
-		\node[below] at (.75*\x,\y * \spyb){$cell4$};
+		\node[below] at (.75*\x,\y * \spyb){$cell_6$};
 		
 		\draw (\x * \spx,\y * \spyb) rectangle (\x, \y);
-		\node[below] at (.75*\x,\y){$cell5$};
+		\node[below] at (.75*\x,\y){$cell_7$};
 		
 		\vspace{2mm}
 	
@@ -126,47 +141,60 @@ Let us first make the assumption that $np$ is a power of two. In this case we ca
 \label{fig:balorb}
 \end{figure}
 
-For a clearer terminology, we will from now on refer to a domain as a cell. Furthermore the subdomain of a domain is the child cell of a cell, and likewise we also have the concept of a parent cell.
-
 \vspace{5mm}
 
 When each cell keeps track of its child cells, we have built a tree datastructure. For instance for our simple domain composition of depth 3 from Figure \ref{fig:balorb} we end up with structure as depicted in Figure \ref{fig:baltree} In this tree each cell represents a node, the root node is the cell which encompasses the entire space and particles and finally its leaves can be assigned to a processor / node. Note that the tree is not balanced, but each node has either two children or is a leaf. 
 
 \begin{figure}[H]
-\Tree[.rootcell [.cell1 [.cell2 ]
-[.cell3 ]]
-[.cell4 [.cell5 ]
-[.cell5 ]]]
+\Tree[.cell_{1} [.cell_{2} [.cell_{4} ]
+[.cell_{5} ]]
+[.cell_{3} [.cell_{6} ]
+[.cell_{7} ]]]
 \caption{Tree datastructure of depth 3}
 \label{fig:baltree}
 \end{figure}
 
 \subsection{ORB in the general case}
 
-Let us now consider the general case where $np$ can be any integer number. 
+Let us now consider the general case where $d$ can be any integer number. 
 
-In this case we chose the cut such that we have 50\% of particles to the left and right. But we define the number of particles on the left side by $l = \left \lceil{\frac{np}{2}}\right \rceil$. Consequently the number of particles on the right are $r = np - l$. In the next iteration of the recursion, the left child cell will set $np = l$ and the right side $np = r$. This ensures that we end up with the right number of domains.
+In this case we define the desired number of particles on the left side of the cut as follows:
 
-\def\spx{0.36}
+\begin{center}
+	\begin{equation}
+		l_{i} = \left \lceil \frac{ \lceil\frac{d_{i}}{2} \rceil }{d_{i}} \times N \right \rceil 
+	\end{equation}
+\end{center}
+
+ Consequently the number of particles on the right side of the cut are: 
+ 
+ \begin{center}
+ 	\begin{equation}
+ 		r_{i} = N - l_{i}
+ 	\end{equation}
+ \end{center}
+ 
+ The variable $d_{i}$ is defined in a recursive manner. We have $d_{i} = l_{\lfloor i/2 \rfloor}$ if $cell_i$ is a left child of its parent, otherwise we have $d_{i} = r_{\lfloor i/2 \rfloor}$.
+
 \def\spya{0.5}
-\def\spyb{0.6}
+\def\spyb{0.5}
 \begin{figure}[H]
 	\begin{center}
 		\begin{tikzpicture}[scale=0.33]
 			\pgfmathsetseed{2};
-			\randistr{\x}{\y}{100};
+			\exdistr{\x}{\y}{\s};
 			\draw (0,0) rectangle (\x, \y);
-			\node[below] at (.5*\x,\y){$root cell$};
+			\node[below] at (.5*\x,\y){$cell_1$};
 		\end{tikzpicture}
 		\qquad
 		\begin{tikzpicture}[scale=0.33]
 			\pgfmathsetseed{2};
-			\randistr{\x}{\y}{100};
+			\exdistr{\x}{\y}{\s};
 			\draw (0,0) rectangle (\x * \spx, \y);
-			\node[below] at (\spx * 0.5 * \x,\y){$cell1$};
+			\node[below] at (\spx * 0.5 * \x,\y){$cell_2$};
 			
 			\draw (\x  * \spx, 0) rectangle (\x, \y);
-			\node[below] at (0.63 *\x,\y){$cell2$};
+			\node[below] at (0.63 *\x,\y){$cell_3$};
 			
 			\vspace{2mm}
 			
@@ -174,15 +202,15 @@ In this case we chose the cut such that we have 50\% of particles to the left an
 		\qquad
 		\begin{tikzpicture}[scale=0.33]
 			\pgfmathsetseed{2};
-			\randistr{\x}{\y}{100};
+			\exdistr{\x}{\y}{\s};
 			\draw (0,0) rectangle (\x * \spx, \y);
-			\node[below] at (\spx * 0.5 * \x,\y){$cell1$};
+			\node[below] at (\spx * 0.5 * \x,\y){$cell_4$};
 			
-			\draw (\x * \spx,0) rectangle (\x, \y * \spyb);
-			\node[below] at (.75*\x,\y * \spyb){$cell2$};
+			\draw (0,0) rectangle (\spx * \x, \y * \spyb);
+			\node[below] at (.25*\x,\y * \spyb){$cell_5$};
 			
-			\draw (\x * \spx,\y * \spyb) rectangle (\x, \y);
-			\node[below] at (.75*\x,\y){$cell3$};
+			\draw (\x * \spx,0) rectangle (\x, \y);
+			\node[below] at (.75*\x,\y){$cell_3$};
 			
 			\vspace{2mm}
 			
@@ -192,35 +220,32 @@ In this case we chose the cut such that we have 50\% of particles to the left an
 \end{figure}
 
 \begin{figure}[H]
-	\Tree[.rootcell [.cell1 ]
-	[.cell2 [.cell3  ]
-	[.cell4 ]]]
+	\Tree[.cell_1 [.cell_2 [.cell_4 ] [.cell_5 ] ]
+	[.cell_3 ]]
 	\caption{Tree datastructure of depth 3}
 \end{figure}
 
+
+\subsection{Median Finding Algorithms}
+
+Finding the median of a large particle array is an essential step for ORB. We will thus explore different algorithms alongside their advantages and disadvantages for our specific use case.
+For our case we refrain from using approximation algorithms. In theory this would be possible, but we would get similar issues as described in described in \ref{sec:balancing}. Since we cannot make any assumpotions 
+
+\subsubsection{Binary Search}
+
+\subsubsection{Median of Medians}
+This exact reasoning is also the reason we favour algorithms which can be computed in place, over potentially more efficient algorithms, which cannot be computed in place. For example the algorithm to find a binary cut could be improved by using the mean of means algorithm (\TODO{Add reference}), but it cannot be done in place, reducing the maximum number of particle we can simulate. \TODO{Memory not the issue, rather out of scope for this work, maybe look into it}
+
+If not denoted otherwise, we will assume $w(p_i) = 1$ for all particles in the simulation.
+
 \subsection{Pseudocode}
 
-We always choose the dimension which is the biggest to perform the next cut. This has the advantage of yielding domains which are of a shape closely approximating a square. Square domains are of great importance for the performance and efficiency of the FFM (Fast Multipole Method).
+We define $p$ as the number of bits we use to store a coordinate axis, where $p$ stands for precision.
 
-\begin{algorithm}[H]
-	\caption{The ORB main routine}\label{euclid}
-	\begin{algorithmic}[1]
-		\Procedure{orb}{$cornerA, cornerB ,particles, np$}
-		\State $size = cornerB - cornerA$
-		\State $axis = maxIndex(size.x, size.y, size.z)$ \Comment{Get index of max size}
-		
-		\State $left = cornerA[axis]$
-		\State $right = cornerB[axis]$
-		\newline
-		\State $cut = cut(left, right, axis, particles)$
-		\State $mid = reshuffle(split, axis, particles)$
-		\newline
-		
-		\TODO{Finish this}
-		\State \Call {orb}{cornerA, cornerB}
-		\EndProcedure
-	\end{algorithmic}
-\end{algorithm}
+
+\subsubsection{Find Cut Algorithm}
+	
+\TODO{Add runtime analysis}
 
 \begin{algorithm}[H]
 	\caption{Find cut algorithm}\label{euclid}
@@ -241,6 +266,10 @@ We always choose the dimension which is the biggest to perform the next cut. Thi
 		\EndProcedure
 	\end{algorithmic}
 \end{algorithm}
+
+\subsubsection{Reshuffling Algorithm}
+
+\TODO{Add runtime, Hoar Partitioning}
 
 % Hoar partitioning
 \begin{algorithm}[H]
@@ -266,6 +295,29 @@ We always choose the dimension which is the biggest to perform the next cut. Thi
 	\end{algorithmic}
 \end{algorithm}
 
+\subsubsection{Main routine}
+
+\begin{algorithm}[H]
+	\caption{The ORB main routine}\label{euclid}
+	\begin{algorithmic}[1]
+		\Procedure{orb}{$cornerA, cornerB ,particles, np$}
+		\State $size = cornerB - cornerA$
+		\State $axis = maxIndex(size.x, size.y, size.z)$ \Comment{Get index of max size}
+		
+		\State $left = cornerA[axis]$
+		\State $right = cornerB[axis]$
+		\newline
+		\State $cut = cut(left, right, axis, particles)$
+		\State $mid = reshuffle(split, axis, particles)$
+		\newline
+		
+		\TODO{Finish this}
+		\State \Call {orb}{cornerA, cornerB}
+		\EndProcedure
+	\end{algorithmic}
+\end{algorithm}
+
+
 \vspace{5mm}
 
 
@@ -282,17 +334,14 @@ In order to have a broad idea what speedup we can expect by implementing a GPU v
 
 \subsection{Assumptions} 
 \begin{itemize}
-	\item 
-	One particle requires 32 bytes of storage. Where the XYZ coordinates require $4\times3 = 12$ bytes of storage, the rest is used for additional information.
-	
 	\item
-	A single iteration of the binary cut algorithm requires $32 \times N$ operations.
+	One particle consists of an X, Y and Z coordinate, each stored as a $p$ = 32 bit = 8bytes precision number. Thus the combined  XYZ coordinates require $4\times3 = 12$ bytes of storage.
 	
 	\item 
 	All particles are assumed to be stored in the CPU memory initially.
 	
 	\item
-	We perform the analysis on one billion particles. This means we need 32 GB storage for all the particles and 12 GB for only the XYZ positions. This translates to $10^9 \times 4 bytes = 4 GB$, assuming floating point precision. 
+	We perform the analysis on one billion particles. This translates to $10^9 \times  12 bytes = 12 GB$.
 
 \end{itemize}
 
@@ -306,7 +355,7 @@ To analyze the runtime for the CPU we are using Equation \ref{eq:cpu}. The const
 
 \begin{center}
 	\begin{equation}
-			32 \times \frac{ s }{B_{CPU}} = t
+			p \times \frac{ s }{B_{CPU}} = t
 			\label{eq:cpu}
 	\end{equation}
 \end{center}
@@ -318,7 +367,7 @@ The Equation \ref{eq:gpu} for the GPU is similar, the only difference being that
 
 \begin{center}
 	\begin{equation}
-		32 \times \frac{s}{B_{GPU}} + \frac{s}{I}  + \frac{s}{B_{CPU}}= t
+		p \times \frac{s}{B_{GPU}} + \frac{s}{I}  + \frac{s}{B_{CPU}}= t
 		\label{eq:gpu}
 	\end{equation}
 \end{center}
@@ -328,18 +377,19 @@ The Equation \ref{eq:gpu} for the GPU is similar, the only difference being that
 
 \subsubsection{GPU tree building}
 
-Let us now consider an alternative way of computing binary cuts. We will build part of the tree on the GPU itself. This will allow us to reduce the very costly overheads imposed by transfering data from the CPU to the GPU. The maximum number of cuts we can perform is 32. After 32 cuts we have $2^{32}$ domains, and have reached the precision limit of the floating point positions. Note that in this case we also need to send back the domain information from the GPU to the CPU. For 
+Let us now consider an alternative way of computing binary cuts. We will build part of the tree on the GPU itself. This will allow us to reduce the very costly overheads imposed by transferring data from the CPU to the GPU. The maximum number of cuts we can perform is $p \times 3$. After p cuts we have $2^{p \times 3}$ leaf cells, and have reached the precision. Note that in this case we also need to send back the information about the built tree from the GPU to the CPU. 
 
+\TODO{Too strong of a simplification}
 \begin{center}
 	\begin{equation}
-		32 \times 32 \times \frac{s}{B_{CPU}} = t
+		d \times p \times \frac{s}{B_{CPU}} = t
 		\label{eq:cputree}
 	\end{equation}
 \end{center}
 
 \begin{center}
 	\begin{equation}
-		32 \times 32 \times \frac{s}{B_{GPU}} + 2 \times \frac{s}{I} = t
+		d \times p \times \frac{s}{B_{GPU}} + 2 \times \frac{s}{I} = t
 		\label{eq:gputree}
 	\end{equation}
 \end{center}
@@ -351,12 +401,12 @@ Finally we can also try to mitigate the overheads introduced by CPU to GPU commu
 
 \begin{center}
 	\begin{equation}
-		31 \times 32 \times \frac{s}{B_{GPU}} + 2 \times \frac{s}{I} = t
+		(d-1) \times p \times \frac{s}{B_{GPU}} + 2 \times \frac{s}{I} = t
 		\label{eq:gpubatch}
 	\end{equation}
 \end{center}
 
-Due to possible overhead and simply no real improvement over the naive GPU version, we will omit the analysis using this method.
+Due to possible overhead and no real improvement over the naive GPU version, we will omit the analysis using this method.
 
 \subsubsection{Data compression}
 
@@ -367,6 +417,7 @@ Since for most computer the Interconnect bandwidth is greatly smaller than the M
 	\item Reduce transfered number of bits, sacrifice precision?
 \end{itemize}
 
+\TODO{Add plots?}
 \subsection{Datapoints of supercomputers}
 
 We will compare the performance with the datapoints of Piz Daint, Summit and Alps which is a part of Eiger. We choose Piz Daint because we have the possibility to test the Code on its systems. We choose Eiger because we can also access its systems and it will give us a good reference values, due to it being a non hybrid supercomputer, meaning the nodes to not have GPU. Finally we analyze its performance on Summit, as its at the time of writing this thesis, one of the most capable supercomputers in the world.
@@ -391,6 +442,8 @@ We will compare the performance with the datapoints of Piz Daint, Summit and Alp
 \label{fig:datapoints}
 \end{figure}
 
+We can now plug-in the values we obtained from different supercomputers in our equations.  We will assume a precision $p = 32$ bits which is sensible in the case of astrophysical simulations. \TODO{Add reference}.
+
 \normalfont
 \subsection{Piz Daint} 
 
@@ -405,12 +458,20 @@ The naive implementation yields the following speeds for the naive CPU  implemen
 	\end{equation}
 \end{center}
 
+
 And the corresponding GPU implementation:
 \begin{center}
 	\begin{equation}
 		32 \times \frac{12 GB}{732 GB/s} + \frac{12 GB}{32 GB/s}  + \frac{12 GB}{68 GB/s} = 1.08s
 	\end{equation}
 \end{center}
+
+
+\begin{tikzpicture}
+	\begin{axis}[xmin = -1, xmax = 13, ymin=-1, ymax=6]
+		\addplot[domain = 0:12,blue] {(32 * x / 68) / (32 * x / 732 + x /32 + x/68) };
+	\end{axis}
+\end{tikzpicture}
 
 This yields in a speed of:
 \begin{center}
@@ -454,14 +515,14 @@ The naive implementation yields the following speeds for the naive CPU  implemen
 
 \begin{center}
 	\begin{equation}
-		32 \times \frac{ 12 GB }{170 GB/s} = 2.56s
+		32 \times \frac{ 12 GB }{170 GB/s \times 2} = 2.56s
 	\end{equation}
 \end{center}
 
 And the corresponding GPU implementation:
 \begin{center}
 	\begin{equation}
-		32 \times \frac{12 GB}{900 GB/s} + \frac{12 GB}{50 GB/s}  + \frac{12 GB}{170 GB/s} = 0.74s
+		32 \times \frac{12 GB}{900 GB/s \times 6} + \frac{12 GB}{50 GB/s \ times 6}  + \frac{12 GB}{170 GB/s \ times 2} = 0.74s
 	\end{equation}
 \end{center}
 
@@ -585,14 +646,17 @@ The particles need to be stored in an array. We can implement the array using c 
 
 \subsection{Parallel CPU Version}
 
-To parallelize the ORB algorithms, we first need to think about which parts of the algorithm can be parallelized and yield in a performance improvement. The most obvious choice for parallelization is the counting part. In this case the main thread (rank 0) will send a cut position and each processor counts how many particles there are on the left of this cut positions. It does so in a designated range of the entire particle array, which is unique to each rank.
+To parallelize the ORB algorithms, we first need to think about which parts of the algorithm can be parallelized and yield in a performance improvement. The most obvious choice for parallelization is the counting part from the binary cut algorithm. In this case the main thread (rank 0) will send a cut position and each processor counts how many particles there are on the left of this cut positions. It does so in a designated range of the entire particle array, which is unique to each rank.
 
-Since we reshuffle the particles array after each cut we have found, we also need to broadcast the newly rearranged particles array the all non rank 0 threads.
+\subsubsection{Local Reshuffling}
+
+\subsubsection{Global Reshuffling}
 
 Another strategy we can use, as soon as we have created two domains, rank 0 can process one domain and rank 1 can process the other domain. This has the advantage that not only the counting part, but also the costly reshuffling part of the ORB algorithm can be parallelized. Furthermore the amount of data which needs to be communicated between the different threads is smaller. This is due to the fact that as soon as we found our first cut, only half the array of particles 
 
 \vspace{5mm}
 
+\subsubsection{Non parallelizable parts}
 The reason why it so difficult to parallelize the reshuffling part is that it is very difficult to do in place. If we cannot perform it in place, we will probably have to use twice the memory capacity, which is will increase the maximum possible $N$ by a factor of two, which is not ideal.
 
 \TODO{Extend section}

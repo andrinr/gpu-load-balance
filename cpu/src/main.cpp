@@ -3,16 +3,21 @@
 #include "constants.h"
 #include <blitz/array.h>   
 
-int main()
+int main(int argc, char** argv) {
 {
+    int rank, np;
+    MPI_Init(&argc,&argv);
+
+    MPI_Comm_size(MPI_COMM_WORLD, np);
+    MPI_Comm_rank(MPI_COMM_WORLD, rank);
+
     // Init positions
     blitz::Array<float, 2> p(COUNT, 3);
     p = 0;
-    //blitz::allocateArrays(blitz::shape(COUNT,3), p);
-
+    
     printf("Initializing... \n");
 
-    // Set a seed
+    srand(rank);
     for (int i = 0; i < COUNT; i++) {
         for (int d = 0; d < DIMENSIONS; d++) {
             p(i,d) = (float)rand()/(float)(RAND_MAX) - 0.5;
@@ -21,6 +26,7 @@ int main()
 
     printf("Computing ORB... \n");
     
+    // call orb()
     Orb orb = Orb();
     orb.build(p);
 
