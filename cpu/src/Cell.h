@@ -15,18 +15,14 @@ struct Cell {
         int end, 
         int id,
         int leftChildId,
-        blitz::TinyVector<float, DIMENSIONS> l, 
-        blitz::TinyVector<float, DIMENSIONS> u) {
+        float lower[3], 
+        float upper[3]) {
         begin = being;
         end = end;
         id = id;
         leftChildId = leftChildId;
-        lower[0] = l(0);
-        lower[1] = l(1);
-        lower[2] = l(2);
-        upper[0] = u(0);
-        upper[1] = u(1);
-        upper[2] = u(2);
+        lower = lower;
+        upper = upper;
     }
 };
 

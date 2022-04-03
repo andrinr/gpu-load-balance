@@ -64,12 +64,22 @@ int Orb::count(int axis, int begin, int end, float split) {
     return nLeft;
 }
 
-std::tuple<float, int> Orb::findCut(
-    int axis,
-    int begin,
-    int end,
-    float left,
-    float right) {
+std::tuple<float, int> Orb::findCut(Cell &cell) {
+
+    float maxValue = 0;
+    int axis = 0;
+
+    for (int i = 0; i < DIMENSIONS; i++) {
+        float size = cell.upper[i] - cell.lower[i];
+        if (size > maxValue) {
+            maxValue = size;
+            axis = i;
+        }
+    }
+
+    float left = cell.lower[axis];
+    float right = cell.upper[axis];
+
 
     int half = (end - begin) / 2;
 
@@ -81,12 +91,12 @@ std::tuple<float, int> Orb::findCut(
         g_count = 0;
 
         Cut cutdata = {
-            begin, axis, end, cut
+            cell.id, axis, cut
         };
         
         int searchingSplit = 1;
 
-        MPI_Bcast(&cutdata, 1, mpi_cut_type, 0, MPI_COMM_WORLD);
+        MPI_Bcast(&cutdata, 1, MPI_CUT, 0, MPI_COMM_WORLD);
         
         int l_count = count(axis, begin, end, cut);
 
@@ -99,11 +109,7 @@ std::tuple<float, int> Orb::findCut(
             0,
             MPI_COMM_WORLD);
 
-        std::cout << "n:" << l_count << std::endl;
-
         searchingSplit = int(!(abs(l_count - half) < 10));
-
-        std::cout << "searching" << searchingSplit << std::endl;
 
         for (int r = 1; r < np; r++) {
             MPI_Send(&searchingSplit, 1, MPI_INT, r,  TAG_CUT_STATUS, MPI_COMM_WORLD);
@@ -134,7 +140,6 @@ void Orb::operative() {
         -1,
     };
 
-
     blitz::TinyVector<float, DIMENSIONS> lower;
     blitz::TinyVector<float, DIMENSIONS> upper;
 
@@ -161,51 +166,38 @@ void Orb::operative() {
 
         Cell cell = cells[id];
 
-        float maxValue = 0;
-        int axis = 0;
-
-        for (int i = 0; i < DIMENSIONS; i++) {
-            float size = cell.upper(i) - cell.lower(i);
-            if (size > maxValue) {
-                maxValue = size;
-                axis = i;
-            }
-        }
-
         if (cell.end - cell.begin <= (float) COUNT / DOMAIN_COUNT) {
             // flawed logic?
             continue;
         }
 
-        float left = cell.lower(axis);
-        float right = cell.upper(axis);
-
         float cut;
         int mid;
-        std::tie(cut, mid) = findCut(axis, cell.begin, cell.end, left, right);
+        std::tie(cut, mid) = findCut(cell);
 
-        Cell leftChild = {
+        Cell leftChild (
             cell.begin,
             mid,
             -1,
             counter,
             cell.lower,
             cell.upper
-        };
-        leftChild.upper(axis) = cut;
+        );
+
+        leftChild.upper[axis] = cut;
         cells[counter] = leftChild;
         cell.leftChildId = counter;
         stack.push(counter++);
 
-        Cell rightChild = {
+        Cell rightChild (
             mid,
             cell.end,
             -1,
             counter,
             cell.lower,
             cell.upper
-        };
-        rightChild.lower(axis) = cut;
+        );
+        rightChild.lower[axis] = cut;
         cells[counter] = rightChild;
         stack.push(counter++);
 
@@ -237,27 +229,15 @@ void Orb::worker() {
 
         while(searchingSplit == 1) {
         
-            MPI_Recv(
+            MPI_Bcast(
                 &cutData, 
                 1, 
-                mpi_cut_type, 
+                MPI_CUT, 
                 0, 
-                TAG_CUT_DATA, 
-                MPI_COMM_WORLD, 
-                MPI_STATUS_IGNORE
-            );
-
-            int nLeft = count(cutData.axis, cutData.begin, cutData.end, cutData.pos);
-
-            MPI_Send(
-                &nLeft, 
-                1, 
-                MPI_INT, 
-                0, 
-                TAG_CUT_COUNT,
                 MPI_COMM_WORLD
             );
 
+            int l_count = count(cutData.axis, cutData.begin, cutData.end, cutData.pos);
 
             MPI_Reduce(
                 &l_count,
@@ -268,14 +248,12 @@ void Orb::worker() {
                 0,
                 MPI_COMM_WORLD);
 
-            MPI_Recv(
+            MPI_Bcast(
                 &searchingSplit, 
                 1, 
                 MPI_INT, 
-                0, 
-                TAG_CUT_STATUS, 
-                MPI_COMM_WORLD, 
-                MPI_STATUS_IGNORE
+                0,  
+                MPI_COMM_WORLD
             );
 
         }
