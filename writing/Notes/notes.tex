@@ -652,116 +652,52 @@ To parallelize the ORB algorithms, we first need to think about which parts of t
 \def\wxa{3}
 \def\wxb{6}
 
-\def\ta{12}
-\def\tb{11}
-\def\tc{10}
-\def\td{9}
-\def\te{8}
-\def\tf{7}
-\def\tg{6}
-\def\th{5}
-\def\ti{4}
-\def\tj{3}
-\def\tk{2}
-\def\tl{1}
+\def\ta{15}
+\def\tb{14}
+\def\tc{13}
+\def\td{12}
+\def\te{11}
+\def\tf{10}
+\def\tg{9}
+\def\th{8}
+\def\ti{7}
+\def\tj{6}
+\def\tk{5}
+\def\tl{4}
+\def\tm{3}
+\def\tn{2}
+\def\to{1}
 
 \begin{figure}
 	\begin{center}
 		\begin{tikzpicture}
+				
+			\timeline{6}{16}{3}
 			
-			\draw [-stealth](\ox,13) -- (\ox,0);
-			\node[yshift=0.5cm] at (\ox,13) {Operative};
-			\draw [-stealth](\wxa,13) -- (\wxa,0);
-			\node[yshift=0.5cm] at (\wxa,13) {Worker A};
-			\draw [-stealth](\wxb,13) -- (\wxb,0);
-			\node[yshift=0.5cm] at (\wxb,13) {Worker B};
 			
-			\draw [dashed](\ox cm - 1cm ,\ta cm + 0.5cm) -- (\wxb cm + 1cm,\ta cm + 0.5cm);
-			\node[xshift=-0.3cm] at (\ox cm - 1cm, \ta cm + 0.5cm) {$t_0$};
+			\parallelloop{-2}{15.5}{8}{0.5}{loop till all cells found};
 		
-			\draw [dashed](\ox cm - 1cm ,\tl cm - 0.5cm) -- (\wxb cm + 1cm,\tl cm - 0.5cm);
-			\node[xshift=-0.3cm] at (\ox cm - 1cm, \tl cm - 0.5cm) {$t_n$};
-		
-			%\draw [dashed, -stealth](\ox cm - 1cm ,\ti cm - 0.5cm) -- (\ox cm - 1cm ,\tb cm + 0.5cm);
-			\draw [line width=0.5mm](\ox cm - 1cm ,\ti cm - 0.5cm) -- (\wxb cm + 1cm,\ti cm - 0.5cm);
-			\draw [line width=0.5mm, -{stealth[scale=4]}](\ox cm - 1cm ,\ti cm - 0.5cm) -- (\ox cm - 1cm ,\ta cm - 0.5cm);
-			\draw [line width=0.5mm](\ox cm - 1cm ,\ta cm - 0.5cm) -- (\wxb cm + 1cm,\ta cm - 0.5cm);
-			\draw [line width=0.5mm](\wxb cm + 1cm,\ti cm - 0.5cm) -- (\wxb cm + 1cm,\ta cm - 0.5cm);
-			\node[xshift=0.3cm,  rotate=-90] at (\wxb cm + 1cm,\te cm - 0.5cm) {loop till correct split};
+			\parallelloop{-1}{11.5}{7}{3.5}{loop till cut found};
 			
+			\communication{Broadcast cells}{6}{15};
+						
+			\process{local\\ reshuffle}{0}{14};
+			\process{local\\ reshuffle}{3}{14};
+			\process{local\\ reshuffle}{6}{14};
 			
-			\node[rectangle,
-			draw = black,
-			text = black,
-			anchor = west,
-			fill = white,
-			minimum width = \wxb cm, 
-			minimum height = 0.5cm] (r) at (\ox,\ta) {Broadcast Cells};
-			
-			\node[rectangle,
-			draw = black,
-			text = black,
-			anchor = west,
-			fill = white,
-			align=center,
-			rotate=-90,
-			minimum width = 2 cm, 
-			minimum height = 0.5cm] (r) at (\ox,\tb) {compute\\ split};
+			\process{compute\\ cut}{0}{11};
 			
 			 
-			\node[rectangle,
-			draw = black,
-			text = black,
-			anchor = west,
-			fill = white,
-			minimum width = \wxb cm, 
-			minimum height = 0.5cm] (r) at (\ox,\te) {Broadcast Cut};
+			\communication{Broadcast cut from operative}{6}{8};
 			
-			\node[rectangle,
-			draw = black,
-			text = black,
-			anchor = west,
-			align=center,
-			fill = white,
-			rotate=-90,
-			minimum width = 2 cm, 
-			minimum height = 0.5cm] (r) at (\ox,\tf) {count};
+			\process{count}{0}{7};
+			\process{count}{3}{7};
+			\process{count}{6}{7};
+	
 			
-			\node[rectangle,
-			draw = black,
-			text = black,
-			anchor = west,
-			fill = white,
-			rotate=-90,
-			minimum width = 2 cm, 
-			minimum height = 0.5cm] (r) at (\wxa,\tf) {count};
+			\communication{Reduce count to operative}{6}{4};
 			
-			\node[rectangle,
-			draw = black,
-			text = black,
-			anchor = west,
-			fill = white,
-			rotate=-90,
-			minimum width = 2 cm, 
-			minimum height = 0.5cm] (r) at (\wxb,\tf) {count};
-			
-			\node[rectangle,
-			draw = black,
-			text = black,
-			anchor = west,
-			fill = white,
-			minimum width = \wxb cm, 
-			minimum height = 0.5cm] (r) at (\ox,\ti) {Reduce Count};
-			
-			\node[rectangle,
-			draw = black,
-			text = black,
-			anchor = west,
-			fill = white,
-			align=center,
-			rotate=-90,
-			minimum width = 2 cm, 
-			minimum height = 0.5cm] (r) at (\ox,\tj) {generate\\ new \\ cells};
+			\process{generate\\ new \\ cells}{0}{3};
 
 		\end{tikzpicture}
 	\end{center}
