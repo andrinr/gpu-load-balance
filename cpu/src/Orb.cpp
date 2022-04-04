@@ -6,8 +6,9 @@ Orb::Orb(int rank, int np) {
     rank = rank;
     np = np;
 
+    (*indexBounds)(COUNT, 2);
+
     MPI_CELL = createMPICell();
-    MPI_CUT = createMPICut();
 }
 
 void Orb::build(blitz::Array<float, 2> &p) {
@@ -25,27 +26,27 @@ void Orb::build(blitz::Array<float, 2> &p) {
     MPI_Finalize();
 }
 
-void Orb::reshuffleArray(int axis, int begin, int end, float split) {
+int Orb::reshuffleArray(int axis, int begin, int end, float cut) {
     int i = begin;
-    int j = end-1;
 
-    while (i < j) {
-        if ((*particles)(i, axis) < split) {
-            i += 1;
+    for (int j = 0; j < end: j++) {
+        if ((*particles)(j, axis) < cut) {
+            // Swap
+            swap(i, j);
+            i = i + 1;
         }
-        else if ((*particles)(j, axis) > split) {
-            j -= 1;
-        }
-        else {
-            for (int d = 0; d < DIMENSIONS; d++) {
-                float tmp = (*particles)(i, d);
-                (*particles)(i, d) = (*particles)(j, d);
-                (*particles)(j, d) = tmp;
-            }
+    }
 
-            i += 1;
-            j -= 1;
-        }
+    swap(i, end);
+
+    return i;
+}
+
+void Orb::swap(int a, int b) {
+    for (int d = 0; d < DIMENSIONS; d++) {
+        float tmp = (*particles)(i, d);
+        (*particles)(i, d) = (*particles)(j, d);
+        (*particles)(j, d) = tmp;
     }
 }
 
@@ -64,22 +65,12 @@ int Orb::count(int axis, int begin, int end, float split) {
     return nLeft;
 }
 
-std::tuple<float, int> Orb::findCut(Cell &cell) {
+float Orb::findCut(Cell &cell, int axis, int begin, int end) {
 
-    float maxValue = 0;
-    int axis = 0;
-
-    for (int i = 0; i < DIMENSIONS; i++) {
-        float size = cell.upper[i] - cell.lower[i];
-        if (size > maxValue) {
-            maxValue = size;
-            axis = i;
-        }
-    }
+    MPI_Bcast(&axis, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
     float left = cell.lower[axis];
     float right = cell.upper[axis];
-
 
     int half = (end - begin) / 2;
 
@@ -90,32 +81,16 @@ std::tuple<float, int> Orb::findCut(Cell &cell) {
         cut = (right - left) / 2.0 + left;
         g_count = 0;
 
-        Cut cutdata = {
-            cell.id, axis, cut
-        };
-        
         int searchingSplit = 1;
-
-        MPI_Bcast(&cutdata, 1, MPI_CUT, 0, MPI_COMM_WORLD);
+        MPI_Bcast(&cut, 1, MPI_INT, 0, MPI_COMM_WORLD);
         
         int l_count = count(axis, begin, end, cut);
 
-        MPI_Reduce(
-            &l_count,
-            &g_count,
-            int 1,
-            MPI_INT,
-            MPI_SUM,
-            0,
-            MPI_COMM_WORLD);
+        MPI_Reduce(&l_count, &g_count, int 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
-        searchingSplit = int(!(abs(l_count - half) < 10));
-
-        for (int r = 1; r < np; r++) {
-            MPI_Send(&searchingSplit, 1, MPI_INT, r,  TAG_CUT_STATUS, MPI_COMM_WORLD);
-        }
-
-        if (searchingSplit == 0) {
+        if !(abs(l_count - half) < 10) {
+            axis = -1;
+            MPI_Bcast(&axis, 1, MPI_INT, 0, MPI_COMM_WORLD);
             break;
         }
 
@@ -126,154 +101,124 @@ std::tuple<float, int> Orb::findCut(Cell &cell) {
         }
     }
 
-    return {cut, g_count + begin};
+    return cut;
 }
 
 void Orb::operative() {
     const float lowerInit = -0.5;
     const float upperInit = 0.5;
 
-    Cell cell = Cell{
-        0,
-        COUNT,
-        0,
-        -1,
-    };
+    float[DIMENSIONS] lower = {lowerInit, lowerInit, lowerInit};
+    float[DIMENSIONS] upper = {upperInit, upperInit, upperInit};
 
-    blitz::TinyVector<float, DIMENSIONS> lower;
-    blitz::TinyVector<float, DIMENSIONS> upper;
-
-    cell.lower = lowerInit;
-    cell.upper = upperInit;
+    Cell cell(0, -1, lower, upper);
 
     cells[0] = cell;
 
     std::stack<int> stack;
     stack.push(0);
     int counter = 1;
-
-    bool buildingTree = 1;
+    int id = -1;
 
     while (!stack.empty()) {
-
-        std::cout << "next iteration" << rank << std::endl;
-
-
-        MPI_Bcast(&buildingTree, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
-        int id = stack.top();
+        id = stack.top();
         stack.pop();
 
         Cell cell = cells[id];
 
-        if (cell.end - cell.begin <= (float) COUNT / DOMAIN_COUNT) {
-            // flawed logic?
+        int begin = (*indexBounds)(id, 0);
+        int end = (*indexBounds)(id, 1);
+
+        if (end - begin <= (float) COUNT / DOMAIN_COUNT) {
             continue;
         }
 
-        float cut;
-        int mid;
-        std::tie(cut, mid) = findCut(cell);
+        cell.leftChildId = counter;
 
-        Cell leftChild (
-            cell.begin,
-            mid,
-            -1,
-            counter,
-            cell.lower,
-            cell.upper
-        );
+        MPI_Bcast(&id, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        MPI_Bcast(&counter, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        MPI_Bcast(&cells, counter, MPI_CELL, 0, MPI_COMM_WORLD);
+
+
+        float maxValue = 0;
+        int axis = 0;
+
+        for (int i = 0; i < DIMENSIONS; i++) {
+            float size = cell.upper[i] - cell.lower[i];
+            if (size > maxValue) {
+                maxValue = size;
+                axis = i;
+            }
+        }
+
+        float cut = findCut(cell, axis, begin, end);
+        int mid = reshuffleArray(axis, begin, end, cut);
+
+        Cell leftChild (-1, counter, cell.lower, cell.upper);
+
+        (*indexBounds)(counter, 0) = begin;
+        (*indexBounds)(counter, 1) = mid;
 
         leftChild.upper[axis] = cut;
         cells[counter] = leftChild;
-        cell.leftChildId = counter;
         stack.push(counter++);
 
-        Cell rightChild (
-            mid,
-            cell.end,
-            -1,
-            counter,
-            cell.lower,
-            cell.upper
-        );
+        Cell rightChild (-1, counter, cell.lower, cell.upper);
+        (*indexBounds)(counter, 0) = mid;
+        (*indexBounds)(counter, 1) = end;
+
         rightChild.lower[axis] = cut;
         cells[counter] = rightChild;
         stack.push(counter++);
-
-        std::cout << id << " axis:" << axis << std::endl;
-
-        reshuffleArray(axis, cell.begin, cell.end, cut);
     }
 
-    buildingTree = 0;
-    MPI_Bcast(&buildingTree, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    id = -1;
+    MPI_Bcast(&id, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&counter, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&cells, counter, MPI_CELL, 0, MPI_COMM_WORLD);
 }
 
 void Orb::worker() {
     float cut;
     int id;
-    Cut cutData;
 
-    int searchingSplit = 1;
-    int buildingTree = 1;
+    int axis = 1;
+    int counter = 1;
 
     MPI_Status status;
 
-    MPI_Bcast(&buildingTree, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&id, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&counter, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&cells, counter, MPI_CELL, 0, MPI_COMM_WORLD);
 
+    std::cout << "reached" << rank << "stat" << counter << std::endl;
 
-    std::cout << "reached" << rank << "stat" << buildingTree << std::endl;
-
-    while(buildingTree == 1) {
-
-        while(searchingSplit == 1) {
+    while(id != -1) {
         
-            MPI_Bcast(
-                &cutData, 
-                1, 
-                MPI_CUT, 
-                0, 
-                MPI_COMM_WORLD
-            );
+        int begin = (*indexBounds)(id, 0);
+        int end = (*indexBounds)(id, 1);
 
-            int l_count = count(cutData.axis, cutData.begin, cutData.end, cutData.pos);
+        MPI_Bcast(&axis, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-            MPI_Reduce(
-                &l_count,
-                NULL,
-                int 1,
-                MPI_INT,
-                MPI_SUM,
-                0,
-                MPI_COMM_WORLD);
+        while(axis != -1) {
 
-            MPI_Bcast(
-                &searchingSplit, 
-                1, 
-                MPI_INT, 
-                0,  
-                MPI_COMM_WORLD
-            );
+            MPI_Bcast(&cut, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
+            int l_count = count(axis, begin, end, cut);
+
+            MPI_Reduce(&l_count, NULL, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+
+            MPI_Bcast(&axis, 1, MPI_INT, 0, MPI_COMM_WORLD);
         }
 
-        std::cout << "found split" << rank << std::endl;
-
-        MPI_Recv(
-            &buildingTree, 
-            1, 
-            MPI_INT, 
-            0, 
-            TAG_TREE_STATUS, 
-            MPI_COMM_WORLD, 
-            &status
-        );
-
-        std::cout <<
-         "rank " << rank << 
-         "state" << buildingTree << 
-         "mpi stat" << status.MPI_SOURCE << 
-         "mpi tag" << status.MPI_TAG << std::endl;
+        int mid = reshuffleArray(axis, begin, end, cut);
+        (*indexBounds)(counter, 0) = begin;
+        (*indexBounds)(counter, 1) = mid;
+        (*indexBounds)(counter + 1, 0) = mid;
+        (*indexBounds)(counter + 1, 0) = end;
+     
+        MPI_Bcast(&counter, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        MPI_Bcast(&id, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        MPI_Bcast(&cells, counter, MPI_CELL, 0, MPI_COMM_WORLD);
     }
-}   
+}

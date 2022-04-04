@@ -679,31 +679,74 @@ To parallelize the ORB algorithms, we first need to think about which parts of t
 		
 			\parallelloop{-1}{11.5}{7}{3.5}{loop till cut found};
 			
-			\communication{Broadcast cells}{6}{15};
+			\communication{Broadcast cells}{7}{15};
 						
 			\process{local\\ reshuffle}{0}{14};
-			\process{local\\ reshuffle}{3}{14};
+			\process{local\\ reshuffle}{2}{14};
+			\process{local\\ reshuffle}{4}{14};
 			\process{local\\ reshuffle}{6}{14};
 			
 			\process{compute\\ cut}{0}{11};
 			
 			 
-			\communication{Broadcast cut from operative}{6}{8};
+			\communication{Broadcast cut from operative}{7}{8};
 			
-			\process{count}{0}{7};
-			\process{count}{3}{7};
-			\process{count}{6}{7};
+			\process{local \\ count}{0}{7};
+			\process{local \\ count}{2}{7};
+			\process{local \\ count}{4}{7};
+			\process{local \\ count}{6}{7};
 	
 			
-			\communication{Reduce count to operative}{6}{4};
+			\communication{Reduce count to operative}{7}{4};
 			
 			\process{generate\\ new \\ cells}{0}{3};
 
 		\end{tikzpicture}
 	\end{center}
-\caption{Single iteration of parallelized ORB for np = 3}
+\caption{Parallelized ORB for np = 4 and local reshuffling}
 \label{fig:orb_parallel}
 \end{figure}
+
+
+\begin{figure}
+	\begin{center}
+		\begin{tikzpicture}
+			
+			\timeline{6}{16}{3}
+			
+			
+			\parallelloop{-1.25}{15.75}{3}{0.5}{loop till all cells found};
+			
+			\parallelloop{-1}{11.5}{2.75}{3.25}{loop till cut found};
+			
+			\communication{Broadcast \\ cells}{3}{15};
+			
+			\process{global\\ reshuffle}{0}{14};
+			\process{global\\ reshuffle}{2}{14};
+			\process{global\\ reshuffle}{4}{14};
+			\process{global\\ reshuffle}{6}{14};
+			
+			\process{compute\\ cut}{0}{11};
+			
+			
+			\communication{Broadcast cut \\ from operative}{3}{8};
+			
+			\process{local \\ count}{0}{7};
+			\process{local \\ count}{2}{7};
+			\process{local \\ count}{4}{7};
+			\process{local \\ count}{6}{7};
+			
+			
+			\communication{Reduce count \\ to operative}{3}{4};
+			
+			\process{generate\\ new \\ cells}{0}{3};
+			
+		\end{tikzpicture}
+	\end{center}
+	\caption{Parallelized ORB for np = 4}
+	\label{fig:orb_parallel}
+\end{figure}
+
 \subsubsection{Local Reshuffling}
 
 \subsubsection{Global Reshuffling}

@@ -5,20 +5,14 @@
 #include <blitz/array.h>   
 
 struct Cell {
-    int begin;
-    int end;
     int id;
     int leftChildId;
     float lower[3], upper[3];
     Cell(
-        int begin,
-        int end, 
         int id,
         int leftChildId,
         float lower[3], 
         float upper[3]) {
-        begin = being;
-        end = end;
         id = id;
         leftChildId = leftChildId;
         lower = lower;
@@ -28,43 +22,20 @@ struct Cell {
 
 MPI_Datatype createMPICell() {
     MPI_Datatype MPI_CELL;
-    const int nitems=6;
-    int  blocklengths[nitems] = {1, 1, 1, 1, DIMENSIONS, DIMENSIONS};
-    MPI_Datatype types[nitems] = {MPI_INT, MPI_INT, MPI_INT, MPI_FLOAT, MPI_FLOAT};
+    const int nitems=4;
+    int  blocklengths[nitems] = {1, 1, DIMENSIONS, DIMENSIONS};
+    MPI_Datatype types[nitems] = {MPI_INT, MPI_FLOAT, MPI_FLOAT};
     MPI_Aint offsets[nitems];
 
-    offsets[0] = offsetof(Cell, begin);
-    offsets[1] = offsetof(Cell, end);
-    offsets[2] = offsetof(Cell, id);
-    offsets[3] = offsetof(Cell, leftChildId);
-    offsets[4] = offsetof(Cell, lower);
-    offsets[5] = offsetof(Cell, upper);
+    offsets[0] = offsetof(Cell, id);
+    offsets[1] = offsetof(Cell, leftChildId);
+    offsets[2] = offsetof(Cell, lower);
+    offsets[3] = offsetof(Cell, upper);
 
     MPI_Type_create_struct(nitems, blocklengths, offsets, types, &MPI_CELL);
     MPI_Type_commit(&MPI_CELL);
 
     return MPI_CELL;
-}
-
-struct Cut {
-    int cellId;
-    int axis;
-    float pos;
-};
-
-MPI_Datatype createMPICut() {
-    MPI_Datatype MPI_CUT;
-    const int nitems=3;
-    int  blocklengths[nitems] = {1, 1, 1};
-    MPI_Datatype types[nitems] = {MPI_INT, MPI_INT, MPI_FLOAT};
-    MPI_Aint offsets[nitems];
-
-    offsets[0] = offsetof(Cut, cellId);
-    offsets[1] = offsetof(Cut, axis);
-    offsets[2] = offsetof(Cut, pos);
-
-    MPI_Type_create_struct(nitems, blocklengths, offsets, types, &MPI_CUT);
-    MPI_Type_commit(&MPI_CUT);
 }
 
 #endif // CELL_H
