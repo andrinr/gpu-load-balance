@@ -29,7 +29,10 @@ int main(int argc, char** argv) {
     Orb orb(rank, np);
     orb.build(p);
 
-    printf("Done.\n");                                              
+    printf("Done.\n");       
+
+    
+    MPI_Finalize();                                       
 
     return 0;
 }

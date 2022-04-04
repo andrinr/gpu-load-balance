@@ -60,7 +60,7 @@ This project proposes to implement Tree Building with the GPU using CUDA to acce
 
 %https://de.overleaf.com/learn/latex/TikZ_package
 %https://texample.net/tikz/examples/
-The ORB Algorithm can be used to partition a multi dimensional domain into subdomains based on spatial proximity. It does so by building an unbalanced binary tree. For the sake of simplicity we will refer to a left child of a node with index $i$ as $i*2$ and the right child respectively as $i*2 + 1$. The parent node can be determined with $\lfloor \frac{i}{2} \rfloor$. Finally we have $i = 1$ for the root node.
+The ORB Algorithm is used to partition a multi dimensional domain into subdomains based on spatial proximity. It does so by building an unbalanced binary tree. To explain the the algorithm we will refer to a left child of a node with index $i$ as $i*2$ and the right child respectively as $i*2 + 1$. The parent node can be determined with $\lfloor \frac{i}{2} \rfloor$. Finally we have $i = 1$ for the root node. Node that the actual code will not use the same system, but we will discuss this in a later section.
 
 The advantage of subdividing the domain into smaller subdomains is two folds:
 
@@ -69,15 +69,26 @@ The advantage of subdividing the domain into smaller subdomains is two folds:
 	\item The workload can be equally distributed among nodes and processors in large computing systems.
 \end{itemize} 
 
-
 The general idea of the algorithm is to split a $k$ dimensional domain containing $N$ particles into $d$ subdomains using a recursive procedure. This can be repeated until the number of smallest subdomains is equal to the total count of processors or nodes. The final goal is an equal distribution of the workload and data, thus the subdomain sizes should be chosen such that the number of particles is equal among nodes / processors.
 
-For a clearer terminology, we will refer to a domain as a cell. Furthermore the subdomain of a domain is the child cell of a cell, and likewise we also have the concept of a parent cell. The parent cell thus always encompasses the two child cells.
+For a clearer terminology, we will refer to a node in the tree as a cell. The cell not only keeps track of its children, but also stores information about the domain it encompasses. In this tree the parent cell always encompasses the entire domains of its two child cells. Furthermore the domain of a child cell cannot exceed the boundaries of its parent domain. 
+
+\subsection{Target Data}
+
+\TODO{Write about properties of datasets}
+
+\subsection{Computing Systems}
+
+\TODO{Write about systems which can be used to test data and systems which are worth considering while estimating runtimes of this approach.}
+
+\subsection{PKDGrav}
+
+\TODO{Brief summary of PKDGrav and how this work can be used to improve PKDGrav}
 
 \subsection{Memory and Workload Balancing}\label{sec:balancing}
-For the ORB algorithms itself, the relation between the number of processors and the workload holds steady. However during simulation certain particles require more timesteps, thus more computational effort, than others. We denote the workload per particle as the weighting function $w(p_i)$ where $p_i \in {p_1, p_2, ..., p_N}$.
+During the simulation certain particles require more time steps, thus more computational effort, than others. We denote the workload per particle as the weighting function $w(p_i)$ where $p_i \in {p_1, p_2, ..., p_N}$.
 
-Non equal waiting functions for different particles are due to higher accelerations and greater proximity to strong gravitational influences. This in turn requires a higher integrations accuracy to mitigate errors. When we try to balance the workload, this implies drawbacks in terms of memory balance. 
+Non equal weighting functions for different particles are due to higher accelerations and greater proximity to strong gravitational influences. This in turn requires a higher integrations accuracy to mitigate errors. When we try to balance the workload, this implies drawbacks in terms of memory balance. 
 
 Let us consider a simple example to illustrate the point. Given the set of particles $A = {p_1, p_2, .., p_{2N/3}}$ and respectively $B = {p_{2N/3 + 1}, p_2, .., p_{N}}$. Let us now consider the that $\forall p \in A : w(p) = 1$ and $\forall p \in B : w(p) = 2$. If we assign all particles from set $A$ to process with rank 0 and the particles from B to rank 1. It is clear that $\sum_{p\in A}^{} w(p) = \sum_{p\in B}^{} w(p)$. Thus the two processors are balanced in terms of computing costs, but clearly they are not balanced in terms of memory size. In fact process with rank 0 has $2N/3$ elements and rank 1 has $N/3$ elements. Thus there will be processes there are memory slots which are not taken advantage of, which means we have a reduced total number of particles. As cosmological simulations profit from an increased number of particles, this also means that the quality of the simulation suffers when prioritizing workload balancing.
 
@@ -267,33 +278,33 @@ We define $p$ as the number of bits we use to store a coordinate axis, where $p$
 	\end{algorithmic}
 \end{algorithm}
 
+We analyse the runtime of the cut algorithm as follows: Inside the loop we need to count the number of particles on the left side of the cut. Since the particles are not ordered, we need to sweep over all particles which leaves us with a runtime of $O(N)$. Furthermore we need to estimate the number of times the while loop is repeated. We denote the precision of the cut as $p$. This means the cut operation is stored with $p$ bits. 
+Let us consider the case where we search for the split on an integer domain of the size $2^{32}$ which equates a 32 bit precision integer number. With each iteration we cut in half the integer domain. Thus after the first iteration the domain size is $2^{31}$. It is therefore where easy to verify that a maximum of 32 repetitions can be performed before our domain reaches a size of $2^0$. In this case the cut cannot be improved as it has already reached the maximum precision. We conclude a worst case performance of $O(N \times 32)$. 
+
+The average case is harder to estimate and it also depends on the number of particles. Let us assume a uniform random distribution of particles. In this case the average distance between two particles is $\frac{2^{p}}{N}$. \TODO{Extend}
+
 \subsubsection{Reshuffling Algorithm}
 
-\TODO{Add runtime, Hoar Partitioning}
-
-% Hoar partitioning
 \begin{algorithm}[H]
 	\caption{Reshuffle algorithm}\label{euclid}
 	\begin{algorithmic}[1]
-		\Procedure{reshuffle}{$split, axis ,particles$}
+		\Procedure{reshuffle}{$cut, axis ,particles$}
 		\State $i = 0$
-		\State $j = particles.lenghth - 1$
 		
-		\While{$i < j$}
-		\If{$particles[i,axis] < split$}
+		\For{j in {0,..,particles.len() - 1}}
+		\If{$particles[js,axis] < split$}
 		\State $i = i + 1$
-		\ElsIf{$particles[j,axis] < split$}
-		\State $j = j - 1$
-		\Else
-		\State $tmp = particles[i,:]$
-		\State $particles[i,:] = particles[j,:]$
-		\State $particles[j,:] = tmp$
+		\State $particles.swap(i,j)$
 		\EndIf
-		\EndWhile\label{euclidendwhile}
+		\EndFor
 		
+		\State $particles.swap(i,particles.len() - 1)$
+		\State \Return $i$
 		\EndProcedure
 	\end{algorithmic}
 \end{algorithm}
+
+The reshuffle algorithm has a clearly observable runtime of $O(N)$ since we iterate over all particles once.
 
 \subsubsection{Main routine}
 
@@ -325,14 +336,8 @@ We define $p$ as the number of bits we use to store a coordinate axis, where $p$
 
 In order to have a broad idea what speedup we can expect by implementing a GPU version, we first need to understand which parts of the code are suited to be done on the GPU. The GPU profits from a highly parallelized architecture, this means that it performs exceptionally when vectorization can be applied to large set of values. But the GPU has another strength over the CPU, which may be lesser known. The memory bandwidth between the GPU and its memory is much greater than the memory bandwidth between the CPU and GPU. Since the time used for calculations is a lot smaller due the algorithm only requiring few and simple operations and is negligible in comparison to memory loading times, we omit speed-ups which are introduced by parallelizing calculations and instead focus on the memory access times. Thus for the section of theoretical analysis we assume that the waiting function is always $w(p) = 0$.
 
-\TODO{Find tflops}
+To analyse the runtime for the CPU we are using Equation \ref{eq:cpu}. For the analysis we make following assumptions:
 
-% Compare flops with speed of memory
-% Add small experiment
-% Memory Bandwidth Cliff
-
-
-\subsection{Assumptions} 
 \begin{itemize}
 	\item
 	One particle consists of an X, Y and Z coordinate, each stored as a $p$ = 32 bit = 8bytes precision number. Thus the combined  XYZ coordinates require $4\times3 = 12$ bytes of storage.
@@ -342,16 +347,21 @@ In order to have a broad idea what speedup we can expect by implementing a GPU v
 	
 	\item
 	We perform the analysis on one billion particles. This translates to $10^9 \times  12 bytes = 12 GB$.
-
+	
 \end{itemize}
+
+\TODO{Find tflops}
+
+% Compare flops with speed of memory
+% Add small experiment
+% Memory Bandwidth Cliff
+Let us assume a CPU with a clock speed of $cps$ per second. 
 
 \subsection{Runtime estimations}
 
 \TODO{Add introduction}
 
 \subsubsection{Naive implementation}
-
-To analyze the runtime for the CPU we are using Equation \ref{eq:cpu}. The constant 32 represents the iterations which are necessary to find a cut. To find a cut we need to sweep 32 times over the entire array of particles, thus we multiply it by the data size $s$ divided by the cpu memory bandwidth denoted as $B_{CPU}$.
 
 \begin{center}
 	\begin{equation}
@@ -467,13 +477,13 @@ And the corresponding GPU implementation:
 \end{center}
 
 
-\begin{tikzpicture}
-	\begin{axis}[xmin = -1, xmax = 13, ymin=-1, ymax=6]
-		\addplot[domain = 0:12,blue] {(32 * x / 68) / (32 * x / 732 + x /32 + x/68) };
-	\end{axis}
-\end{tikzpicture}
+%\begin{tikzpicture}
+%	\begin{axis}[xmin = -1, xmax = 13, ymin=-1, ymax=6]
+%		\addplot[domain = 0:12,blue] {(32 * x / 68) / (32 * x / 732 + x /32 + x/68) };
+%	\end{axis}
+%\end{tikzpicture}
 
-This yields in a speed of:
+This yields in a speed-up of:
 \begin{center}
 	\begin{equation}
 		\frac{5.65s}{1.08} = 5.25
@@ -496,7 +506,7 @@ And the corresponding GPU implementation:
 	\end{equation}
 \end{center}
 
-This yields in a speed of:
+This yields in a speed-up of:
 \begin{center}
 	\begin{equation}
 		\frac{180s}{17.71} = 10.2
@@ -526,7 +536,7 @@ And the corresponding GPU implementation:
 	\end{equation}
 \end{center}
 
-This yields in a speed of:
+This yields in a speed-up of:
 \begin{center}
 	\begin{equation}
 		\frac{2.56s}{0.74s} = 3.06
@@ -549,7 +559,7 @@ And the corresponding GPU implementation:
 	\end{equation}
 \end{center}
 
-This yields in a speed of:
+This yields in a speed-up of:
 \begin{center}
 	\begin{equation}
 		\frac{70.28s}{14.2s} = 4.95
@@ -705,46 +715,6 @@ To parallelize the ORB algorithms, we first need to think about which parts of t
 	\end{center}
 \caption{Parallelized ORB for np = 4 and local reshuffling}
 \label{fig:orb_parallel}
-\end{figure}
-
-
-\begin{figure}
-	\begin{center}
-		\begin{tikzpicture}
-			
-			\timeline{6}{16}{3}
-			
-			
-			\parallelloop{-1.25}{15.75}{3}{0.5}{loop till all cells found};
-			
-			\parallelloop{-1}{11.5}{2.75}{3.25}{loop till cut found};
-			
-			\communication{Broadcast \\ cells}{3}{15};
-			
-			\process{global\\ reshuffle}{0}{14};
-			\process{global\\ reshuffle}{2}{14};
-			\process{global\\ reshuffle}{4}{14};
-			\process{global\\ reshuffle}{6}{14};
-			
-			\process{compute\\ cut}{0}{11};
-			
-			
-			\communication{Broadcast cut \\ from operative}{3}{8};
-			
-			\process{local \\ count}{0}{7};
-			\process{local \\ count}{2}{7};
-			\process{local \\ count}{4}{7};
-			\process{local \\ count}{6}{7};
-			
-			
-			\communication{Reduce count \\ to operative}{3}{4};
-			
-			\process{generate\\ new \\ cells}{0}{3};
-			
-		\end{tikzpicture}
-	\end{center}
-	\caption{Parallelized ORB for np = 4}
-	\label{fig:orb_parallel}
 \end{figure}
 
 \subsubsection{Local Reshuffling}

@@ -4,15 +4,15 @@
 #include <mpi.h>
 #include "Cell.h"
 #include <tuple>
+#include <vector>
 #include <blitz/array.h>   
 
 class Orb {
 public:
     blitz::Array<float, 2>* particles;
-    blitz::Array<int, 2>* indexBounds;
-
-    Cell* cells;
-    int nCells;
+    std::vector<int> cellBegin;
+    std::vector<int> cellEnd;
+    std::vector<Cell> cells;
 
     MPI_Datatype MPI_CUT;
     MPI_Datatype MPI_CELL;
