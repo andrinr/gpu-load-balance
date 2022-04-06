@@ -10,6 +10,8 @@ int main(int argc, char** argv) {
     MPI_Comm_size(MPI_COMM_WORLD, &np);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
+    std::cout << "Process " << rank + 1 << " out of " << np << std::endl;
+
     // Init positions
     blitz::Array<float, 2> p(COUNT, 3);
     p = 0;
@@ -23,10 +25,13 @@ int main(int argc, char** argv) {
         }
     }
 
-    printf("Computing ORB... \n");
+    printf("Initiate ORB... \n");
     
     // call orb()
     Orb orb(rank, np);
+
+    printf("Build ORB... \n");
+
     orb.build(p);
 
     printf("Done.\n");       

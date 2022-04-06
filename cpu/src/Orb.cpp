@@ -20,9 +20,9 @@ MPI_Datatype createCell() {
     return MPI_CELL;
 }
 
-Orb::Orb(int rank, int np) {
-    rank = rank;
-    np = np;
+Orb::Orb(int r, int n) {
+    rank = r;
+    np = n;
 
     MPI_CELL = createCell();
 }
@@ -30,6 +30,7 @@ Orb::Orb(int rank, int np) {
 void Orb::build(blitz::Array<float, 2> &p) {
     particles = &p;
 
+    std::cout << rank << std::endl;
     if (rank == 0) {
         operative();
     }
@@ -48,7 +49,7 @@ int Orb::reshuffleArray(int axis, int begin, int end, float cut) {
         }
     }
 
-    swap(i, end);
+    swap(i, end - 1);
 
     return i;
 }
@@ -63,13 +64,8 @@ void Orb::swap(int a, int b) {
 
 int Orb::count(int axis, int begin, int end, float split) {
     int nLeft = 0;
-    int size = (end - begin + np - 1) / np;
 
-    if (rank == 0) {
-        size = (end - begin) - size * (np - 1);
-    }
-
-    for (int j = begin + rank * size; j < begin + (rank + 1) * size; j++) {
+    for (int j = begin; j < end; j++) {
         nLeft += (*particles)(j, axis) < split;
     }
 
@@ -91,6 +87,8 @@ float Orb::findCut(Cell &cell, int axis, int begin, int end) {
 
         cut = (right + left) / 2.0;
         g_count = 0;
+
+        std::cout << cut << std::endl;
 
         int searchingSplit = 1;
         MPI_Bcast(&cut, 1, MPI_INT, 0, MPI_COMM_WORLD);
@@ -123,11 +121,10 @@ void Orb::operative() {
     float upper[DIMENSIONS] = {upperInit, upperInit, upperInit};
 
     Cell cell(0, -1, lower, upper);
-
+    cells.push_back(cell);
+    
     cellBegin.push_back(0);
     cellEnd.push_back(COUNT);
-
-    cells.push_back(cell);
 
     std::stack<int> stack;
     stack.push(0);
@@ -147,6 +144,8 @@ void Orb::operative() {
             continue;
         }
 
+        std::cout << "id " << id << " begin " << begin << " end " << end <<  std::endl;
+
         cell.leftChildId = counter;
 
         MPI_Bcast(&id, 1, MPI_INT, 0, MPI_COMM_WORLD);
@@ -164,8 +163,12 @@ void Orb::operative() {
             }
         }
 
+        std::cout << std::fixed << "Operative: Compute cut between " << cell.lower[axis] << " and " << cell.upper[axis]  << std::endl;
         float cut = findCut(cell, axis, begin, end);
+        std::cout << "Found cut at " << cut << std::endl;
+        std::cout << "Reshuffle array" << std::endl;
         int mid = reshuffleArray(axis, begin, end, cut);
+        std::cout << "Found middle at " << mid << std::endl;
 
         Cell leftChild (-1, counter, cell.lower, cell.upper);
         std::copy(std::begin(cell.lower), std::end(cell.lower), std::begin(leftChild.lower));
