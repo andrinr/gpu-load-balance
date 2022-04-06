@@ -247,12 +247,12 @@ The simplest algorithm is the binary search algorithm. It always cuts the domain
 
 
 \begin{algorithm}[H]
-	\caption{Find cut algorithm}\label{algo:cut}
+	\caption{Find cut}\label{algo:cut}
 	\begin{algorithmic}[1]
 		\Procedure{cut}{$left, right, axis ,particles$}
 		\State $nLeft = 0$
 		\State $split = (right - left) / 2 + left $ \Comment{Initial guess}
-		\While{$abs(nLeft - particles.length/2) > 1 $}
+		\While{$abs(nLeft - particles.length/2) > 0 $}
 		\State $split = (right - left) / 2 + left $
 		\State $nLeft\gets sum(particles[:,axis] < split)$
 		\If{$nLeft <= particles.len / 2$}
@@ -270,6 +270,51 @@ We analyse the runtime of the cut algorithm as follows: Inside the loop we need 
 Let us consider the case where we search for the split on an integer domain of the size $2^{32}$ which equates a 32 bit precision integer number. With each iteration we cut in half the integer domain. Thus after the first iteration the domain size is $2^{31}$. It is therefore where easy to verify that a maximum of 32 repetitions can be performed before our domain reaches a size of $2^0$. In this case the cut cannot be improved as it has already reached the maximum precision. We conclude a worst case performance of $O(N \times 32)$. 
 
 The average case is harder to estimate and it also depends on the number of particles. Let us assume a uniform random distribution of particles. In this case the average distance between two particles is $\frac{2^{p}}{N}$. \TODO{Extend}
+
+
+\subsubsection{Deterministic Binary search with early stopping }
+
+In this version we will replace the while loop by a for loop, furthermore we will add an early stopping condition. We will show that this change (1) improves the runtime and (2) is actually necessary in some cases.
+
+\begin{algorithm}[H]
+	\caption{Deterministic find cut with early stopping}\label{algo:cut}
+	\begin{algorithmic}[1]
+		\Procedure{cut}{$left, right, axis ,particles$}
+		\State $nLeft = 0$
+		\State $split = (right - left) / 2 + left $ \Comment{Initial guess}
+		\For{j in {0,..,p}}
+		\If{$abs(nLeft - particles.length/2) < \alpha $}
+		\State break
+		\EndIf
+		\State $split = (right - left) / 2 + left $
+		\State $nLeft\gets sum(particles[:,axis] < split)$
+		\If{$nLeft <= particles.len / 2$}
+		\State $left = split$
+		\Else 
+		\State $right = split$
+		\EndIf
+		\EndFor
+		\State \Return $split$
+		\EndProcedure
+	\end{algorithmic}
+\end{algorithm}
+
+Let us consider the following example particle distribution where $particle_1$ and $particle_2$ have identical x coordinates. 
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+			\draw [ dashed](5 cm, 0 cm) -- (5 cm, 3 cm);
+			\cutoffdistr{10}{3}{3};
+			\draw (0,0) rectangle (10, 3);
+		\end{tikzpicture}
+	\end{center}
+\end{figure}
+
+If we want to split this domain, there would not exists a correct split, where $nLeft$ is equal to $\frac{N}{2}$. In fact this example can be made more extreme by adding more particles which are distributed along a the line.
+The $\alpha$ value defines by how many particles the final cut value can be off from the actual ideal median value. In this case we would assign $particle_0$ to the left child cell and the other particles to the right child cell. Since we can extend this example where our $\alpha$ value should be equal to $N$, we also replace the while with a for loop. Since we have already shown that the maximum number of iterations is equal to $p$, we can make use of this to avoid infinite loops. 
+
+Considering the runtime improvements, we will show that the introduction of the $\alpha$ value brings some improvements. \TODO{Elaborate}
 
 \subsubsection{Binary Search with improved guessing}
 
@@ -293,9 +338,6 @@ As we can see in \ref{algo:cut}, the initial guess of the cut is simply the cent
 \end{figure}
 
 The underlying distribution is a normal distribution. \TODO{Add reference to section about data}. We can see that the algorithm will have to sweep 3 times over the entire array to get into the region of the actual median. One suggestion for improvement is to use an approximated median as a guess for the first split. We can sample 100 particles and find their median in constant time. Then we will run the binary cut algorithm using the approximated median as an initial guess. This can reduce the runtime by a few iterations, however we cannot make any assessment about the runtime, as this improvement will make the algorithm even slower on some distributions. Let us for example consider the uniform distribution, in this case the addition is pure overhead as the center is already the most accurate initial guess.
-
-
-\subsubsection{Binary search with early stopping}
 
 
 \subsubsection{Histogramming}

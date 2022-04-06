@@ -9,7 +9,6 @@
 }
 
 \newcommand{\exdistr}[3]{
-	
 	\filldraw [red] (0.3*#1,0.3*#2) circle (#3pt) node [anchor=west]{};
 	\filldraw [red] (0.05*#1,0.6*#2) circle (#3pt) node [anchor=west]{};
 	\filldraw [red] (0.4*#1,0.8*#2) circle (#3pt) node [anchor=west]{};
@@ -17,9 +16,20 @@
 	\filldraw [red] (0.2*#1,0.1*#2) circle (#3pt) node [anchor=west]{};
 	\filldraw [red] (0.6*#1,0.4*#2) circle (#3pt) node [anchor=west]{};
 	\filldraw [red] (0.76*#1,0.81*#2) circle (#3pt) node [anchor=west]{};
-	
-		
+}
 
+\newcommand{\cutoffdistr}[3]{
+	\filldraw [red] (0.2*#1,0.5*#2) circle (#3pt) node [anchor=west]{};
+	\node[yshift=0.3cm, xshift=-0.7cm] at (0.2*#1,0.5*#2) {$particle_0$};
+	
+	\filldraw [red] (0.5*#1,0.2*#2) circle (#3pt) node [anchor=west]{};
+	\node[yshift=0.3cm, xshift=-0.7cm] at (0.5*#1,0.2*#2) {$particle_1$};
+	
+	\filldraw [red] (0.5*#1,0.8*#2) circle (#3pt) node [anchor=west]{};
+	\node[yshift=0.3cm, xshift=-0.7cm] at (0.5*#1,0.8*#2) {$particle_2$};
+	
+	\filldraw [red] (0.8*#1,0.5*#2) circle (#3pt) node [anchor=west]{};
+	\node[yshift=0.3cm, xshift=-0.7cm] at (0.8*#1,0.5*#2) {$particle_3$};
 }
 
 % From: https://www.martin-demling.de/2011/06/memory-maps-in-latex-using-the-bytefield-package/
