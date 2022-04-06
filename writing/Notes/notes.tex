@@ -77,6 +77,8 @@ For a clearer terminology, we will refer to a node in the tree as a cell. The ce
 
 \TODO{Write about properties of datasets}
 
+\Q{Ask Doug}
+
 \subsection{Computing Systems}
 
 \TODO{Write about systems which can be used to test data and systems which are worth considering while estimating runtimes of this approach.}
@@ -238,14 +240,14 @@ Let us now consider the general case where $d$ can be any integer number for a n
 \subsection{Median Finding Algorithms}
 
 Finding the median of a large particle array is an essential step for ORB. We will thus explore different algorithms alongside their advantages and disadvantages for our specific use case.
-For our case we refrain from using approximation algorithms. In theory this would be possible, but we would get similar issues as described in described in \ref{sec:balancing}. Since we cannot make any assumpotions 
+Note that there exists approximation algorithms for example the median of medians algorithms. But the correctness guarantee of the median lying between 30\% and 70\% is not good enough in our case. If we were to implement such an approximation algorithms we would run into similar issues as described in \ref{sec:balancing}. But in this case the unequal memory balancing do not have the advantage of equal workload balancing, which in turn will worsen the performance and the maximum number of workable particles. Thus we will only consider approximation algorithms, if their approximation to the ideal values are very exact and can be determined.
 
 \subsubsection{Binary Search}
 The simplest algorithm is the binary search algorithm. It always cuts the domain in half along a given axis. Next it counts the number of particles on the left side of the cut, in case the particles are less than half of all the particles, it clear that the cut was too far to the left, and the new right boundary of the domain is the cut. In case the particles are more than half, we set the the left boundary as the cut. This is repeated until we either reach an exact split, a cut-off value or reach the precision limit of the data.
 
 
 \begin{algorithm}[H]
-	\caption{Find cut algorithm}\label{euclid}
+	\caption{Find cut algorithm}\label{algo:cut}
 	\begin{algorithmic}[1]
 		\Procedure{cut}{$left, right, axis ,particles$}
 		\State $nLeft = 0$
@@ -269,15 +271,32 @@ Let us consider the case where we search for the split on an integer domain of t
 
 The average case is harder to estimate and it also depends on the number of particles. Let us assume a uniform random distribution of particles. In this case the average distance between two particles is $\frac{2^{p}}{N}$. \TODO{Extend}
 
-\subsubsection{Imprived Binary Search}
+\subsubsection{Binary Search with improved guessing}
+
+As we can see in \ref{algo:cut}, the initial guess of the cut is simply the center of the domain. But if we consider non uniform distributions, this initial guess can possibly rather bad. Let us consider the following example:
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+			\def\mean{0.1}
+			\def\sigma{0.1}
+			\def\pi{3.14159265359}
+			\begin{axis}[xmin = 0, xmax = 1, ymin=0, ymax=5, samples=60]
+				\addplot[domain = 0:1,blue] {1 / (\sigma * sqrt(2 * \pi)) * exp(-0.5 * ((x - \mean) / \sigma)^2) };
+				\draw (axis cs:0.5,0) -- node[left]{$c_0$} (axis cs:0.5,5);
+				\draw (axis cs:0.25,0) -- node[left]{$c_1$} (axis cs:0.25,5);
+				\draw (axis cs:0.125,0) -- node[left]{$c_2$} (axis cs:0.125,5);
+			\end{axis}
+		\end{tikzpicture}
+	\end{center}
+	\caption{3 iterations of binary search with naive initial guess}\label{euclid}
+\end{figure}
+
+The underlying distribution is a normal distribution. \TODO{Add reference to section about data}. We can see that the algorithm will have to sweep 3 times over the entire array to get into the region of the actual median. One suggestion for improvement is to use an approximated median as a guess for the first split. We can sample 100 particles and find their median in constant time. Then we will run the binary cut algorithm using the approximated median as an initial guess. This can reduce the runtime by a few iterations, however we cannot make any assessment about the runtime, as this improvement will make the algorithm even slower on some distributions. Let us for example consider the uniform distribution, in this case the addition is pure overhead as the center is already the most accurate initial guess.
 
 
-\subsubsection{Median of Medians}
-This exact reasoning is also the reason we favour algorithms which can be computed in place, over potentially more efficient algorithms, which cannot be computed in place. For example the algorithm to find a binary cut could be improved by using the mean of means algorithm (\TODO{Add reference}), but it cannot be done in place, reducing the maximum number of particle we can simulate. \TODO{Memory not the issue, rather out of scope for this work, maybe look into it}
+\subsubsection{Binary search with early stopping}
 
-If not denoted otherwise, we will assume $w(p_i) = 1$ for all particles in the simulation.
-
-\TODO{Approximation Algorithm, so maybe lets not consider this}
 
 \subsubsection{Histogramming}
 
@@ -655,31 +674,13 @@ The particles need to be stored in an array. We can implement the array using c 
 \TODO{Data compression notice here?}
 
 
-\subsection{Parallel CPU Version}
+\subsection{Parallel Version Using Processes}
 
 To parallelize the ORB algorithms, we first need to think about which parts of the algorithm can be parallelized and yield in a performance improvement. The most obvious choice for parallelization is the counting part from the binary cut algorithm. In this case the main thread (rank 0) will send a cut position and each processor counts how many particles there are on the left of this cut positions. It does so in a designated range of the entire particle array, which is unique to each rank.
 
-\def\ox{0}
-\def\wxa{3}
-\def\wxb{6}
+\subsubsection{Local Reshuffling}
 
-\def\ta{15}
-\def\tb{14}
-\def\tc{13}
-\def\td{12}
-\def\te{11}
-\def\tf{10}
-\def\tg{9}
-\def\th{8}
-\def\ti{7}
-\def\tj{6}
-\def\tk{5}
-\def\tl{4}
-\def\tm{3}
-\def\tn{2}
-\def\to{1}
-
-\begin{figure}
+\begin{figure}[H]
 	\begin{center}
 		\begin{tikzpicture}
 				
@@ -690,7 +691,7 @@ To parallelize the ORB algorithms, we first need to think about which parts of t
 		
 			\parallelloop{-1}{11.5}{7}{3.5}{loop till cut found};
 			
-			\communication{Broadcast cells}{7}{15};
+			\communication{Broadcast cells}{0}{7}{15};
 						
 			\process{local\\ reshuffle}{0}{14};
 			\process{local\\ reshuffle}{2}{14};
@@ -700,7 +701,7 @@ To parallelize the ORB algorithms, we first need to think about which parts of t
 			\process{compute\\ cut}{0}{11};
 			
 			 
-			\communication{Broadcast cut from operative}{7}{8};
+			\communication{Broadcast cut from operative}{0}{7}{8};
 			
 			\process{local \\ count}{0}{7};
 			\process{local \\ count}{2}{7};
@@ -708,7 +709,7 @@ To parallelize the ORB algorithms, we first need to think about which parts of t
 			\process{local \\ count}{6}{7};
 	
 			
-			\communication{Reduce count to operative}{7}{4};
+			\communication{Reduce count to operative}{0}{7}{4};
 			
 			\process{generate\\ new \\ cells}{0}{3};
 
@@ -718,11 +719,36 @@ To parallelize the ORB algorithms, we first need to think about which parts of t
 \label{fig:orb_parallel}
 \end{figure}
 
-\subsubsection{Local Reshuffling}
-
 \subsubsection{Global Reshuffling}
 
 Another strategy we can use, as soon as we have created two domains, rank 0 can process one domain and rank 1 can process the other domain. This has the advantage that not only the counting part, but also the costly reshuffling part of the ORB algorithm can be parallelized. Furthermore the amount of data which needs to be communicated between the different threads is smaller. This is due to the fact that as soon as we found our first cut, only half the array of particles 
+
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+			
+			\timeline{6}{8}{3}
+
+			\communication{Compute cut}{0}{7}{7};
+			\communication{Generate and Broadcast new cells}{0}{7}{6};
+			
+			\communication{Global reshuffle}{0}{7}{5};
+			
+			\communication{Compute cut}{0}{3}{4};
+			\communication{Generate and \\ Broadcast new cells}{0}{3}{3};
+			\communication{Global reshuffle}{0}{3}{2};
+			
+			\communication{Compute cut}{4}{7}{4};
+			\communication{Generate and \\ Broadcast new cells}{4}{7}{3};
+			\communication{Global reshuffle}{4}{7}{2};
+			
+			
+		\end{tikzpicture}
+	\end{center}
+	\caption{Parallelized ORB for np = 4 and global reshuffling}
+	\label{fig:orb_parallel}
+\end{figure}
 
 \vspace{5mm}
 

@@ -34,17 +34,20 @@
 }
 
 %%% Parallel Processing Diagrams %%%
-\newcommand{\communication}[3]{
+
+% text, x start, x end, y pos
+\newcommand{\communication}[4]{
 	\node[rectangle,
 	draw = black,
 	text = black,
 	anchor = west,
 	fill = white,
 	align=center,
-	minimum width = #2 cm, 
-	minimum height = 0.5cm] (r) at (-0.5cm,#3) {#1};
+	minimum width = #3 cm - #2 cm, 
+	minimum height = 0.5cm] (r) at (#2 cm - 0.5 cm,#4) {#1};
 }
 
+% text, x pos, y pos
 \newcommand{\process}[3]{
 	\node[rectangle,
 	draw = black,
@@ -57,12 +60,13 @@
 	minimum height = 0.5cm] (r) at (#2,#3) {#1};
 }
 
+% x size, y size, number of worker threads
 \newcommand{\timeline}[3] {
 	\draw [dashed](-2cm ,#2 cm) -- (#1 cm,#2 cm);
-	\node[xshift=-0.3cm] at (\ox cm - 2cm, \ta cm + 1cm) {$t_0$};
+	\node[xshift=-0.3cm] at (- 2cm, #2 cm) {$t_0$};
 	
-	\draw [dashed](\ox cm - 2cm ,\to cm - 1cm) -- (\wxb cm,\to cm - 1cm);
-	\node[xshift=-0.3cm] at (\ox cm -2cm, \to cm - 1cm) {$t_n$};
+	\draw [dashed](- 2cm ,0cm) -- (#1 cm,0cm);
+	\node[xshift=-0.3cm] at (-2cm, 0 cm) {$t_n$};
 	 
 	\foreach \i in {0,...,#3}
 	{
@@ -86,4 +90,10 @@
 \color{red}
 \textbf{TODO:} #1
 \color{black}
+}
+
+\newcommand{\Q}[1]{
+	\color{green}
+	\textbf{TODO:} #1
+	\color{black}
 }
