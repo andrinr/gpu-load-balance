@@ -6,6 +6,7 @@
 *.bbl
 *.blg
 *.xdp-*
+*.toc
 
 # Editor files
 .vscode/
