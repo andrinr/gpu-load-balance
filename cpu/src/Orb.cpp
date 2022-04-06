@@ -203,6 +203,9 @@ void Orb::worker() {
     int axis = 1;
     int counter = 1;
 
+    cellBegin.push_back(0);
+    cellEnd.push_back(COUNT);
+
     MPI_Status status;
 
     MPI_Bcast(&id, 1, MPI_INT, 0, MPI_COMM_WORLD);

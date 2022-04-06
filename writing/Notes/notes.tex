@@ -96,7 +96,7 @@ Let us consider a simple example to illustrate the point. Given the set of parti
 \subsection{ORB for power of twos}
 
 
-Let us first make the assumption that $d$ is a power of two. In this case we can search for a cut such that 50\% of the particles are on the left side and likewise on the right side of the cut. The dimension of the cut is always the axis where the size of the domain is the largest. This ensures that we do not get thin shapes. \TODO{Insert smartness about FMM} This in turn is very beneficial for the FMM as it has a higher precision on more squarish shapes.  The position of the cut can be found in $O(log(N))$ using a binary search. We can introduce an even tighter bound when assuming each particle is being stored as a 32 bit precision number. In this case we have reached the maximum precision after $O(32)$ iterations. After such a cut has been found, we can create two new subdomains and recursively apply the algorithm on both of them until we have reached the desired number of subdomains $d$. 
+Let us first make the assumption that $d$ is a power of two. In this case we can search for a cut such that 50\% of the particles are on the left side and likewise on the right side of the cut. The dimension of the cut is always the axis where the size of the domain is the largest. This ensures that we do not get thin shapes. \TODO{Insert smartness about FMM} This in turn is very beneficial for the FMM as it has a higher precision on more squarish shapes. After such a cut has been found, we can create two new subdomains and recursively apply the algorithm on both of them until we have reached the desired number of subdomains $d$. 
  
 \vspace{5mm}
 
@@ -167,9 +167,7 @@ When each cell keeps track of its child cells, we have built a tree datastructur
 
 \subsection{ORB in the general case}
 
-Let us now consider the general case where $d$ can be any integer number. 
-
-In this case we define the desired number of particles on the left side of the cut as follows:
+Let us now consider the general case where $d$ can be any integer number for a node with index $i$. In this case we define the desired number of particles on the left side of the cut as follows:
 
 \begin{center}
 	\begin{equation}
@@ -243,20 +241,8 @@ Finding the median of a large particle array is an essential step for ORB. We wi
 For our case we refrain from using approximation algorithms. In theory this would be possible, but we would get similar issues as described in described in \ref{sec:balancing}. Since we cannot make any assumpotions 
 
 \subsubsection{Binary Search}
+The simplest algorithm is the binary search algorithm. It always cuts the domain in half along a given axis. Next it counts the number of particles on the left side of the cut, in case the particles are less than half of all the particles, it clear that the cut was too far to the left, and the new right boundary of the domain is the cut. In case the particles are more than half, we set the the left boundary as the cut. This is repeated until we either reach an exact split, a cut-off value or reach the precision limit of the data.
 
-\subsubsection{Median of Medians}
-This exact reasoning is also the reason we favour algorithms which can be computed in place, over potentially more efficient algorithms, which cannot be computed in place. For example the algorithm to find a binary cut could be improved by using the mean of means algorithm (\TODO{Add reference}), but it cannot be done in place, reducing the maximum number of particle we can simulate. \TODO{Memory not the issue, rather out of scope for this work, maybe look into it}
-
-If not denoted otherwise, we will assume $w(p_i) = 1$ for all particles in the simulation.
-
-\subsection{Pseudocode}
-
-We define $p$ as the number of bits we use to store a coordinate axis, where $p$ stands for precision.
-
-
-\subsubsection{Find Cut Algorithm}
-	
-\TODO{Add runtime analysis}
 
 \begin{algorithm}[H]
 	\caption{Find cut algorithm}\label{euclid}
@@ -283,7 +269,22 @@ Let us consider the case where we search for the split on an integer domain of t
 
 The average case is harder to estimate and it also depends on the number of particles. Let us assume a uniform random distribution of particles. In this case the average distance between two particles is $\frac{2^{p}}{N}$. \TODO{Extend}
 
-\subsubsection{Reshuffling Algorithm}
+\subsubsection{Imprived Binary Search}
+
+
+\subsubsection{Median of Medians}
+This exact reasoning is also the reason we favour algorithms which can be computed in place, over potentially more efficient algorithms, which cannot be computed in place. For example the algorithm to find a binary cut could be improved by using the mean of means algorithm (\TODO{Add reference}), but it cannot be done in place, reducing the maximum number of particle we can simulate. \TODO{Memory not the issue, rather out of scope for this work, maybe look into it}
+
+If not denoted otherwise, we will assume $w(p_i) = 1$ for all particles in the simulation.
+
+\TODO{Approximation Algorithm, so maybe lets not consider this}
+
+\subsubsection{Histogramming}
+
+
+
+
+\subsection{Reshuffling Algorithm}
 
 \begin{algorithm}[H]
 	\caption{Reshuffle algorithm}\label{euclid}
@@ -304,9 +305,9 @@ The average case is harder to estimate and it also depends on the number of part
 	\end{algorithmic}
 \end{algorithm}
 
-The reshuffle algorithm has a clearly observable runtime of $O(N)$ since we iterate over all particles once.
+The reshuffle algorithm has a clearly observable runtime of $O(N)$ since we iterate over all particles once. Since we need to touch each element at least once to reshuffle the entire array there is no better algorithm than this.
 
-\subsubsection{Main routine}
+\subsection{ORB Main routine}
 
 \begin{algorithm}[H]
 	\caption{The ORB main routine}\label{euclid}
@@ -357,7 +358,7 @@ To analyse the runtime for the CPU we are using Equation \ref{eq:cpu}. For the a
 % Memory Bandwidth Cliff
 Let us assume a CPU with a clock speed of $cps$ per second. 
 
-\subsection{Runtime estimations}
+\subsection{Runtime estimations on a single node}
 
 \TODO{Add introduction}
 
