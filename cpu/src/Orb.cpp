@@ -42,7 +42,7 @@ void Orb::build(blitz::Array<float, 2> &p) {
 int Orb::reshuffleArray(int axis, int begin, int end, float cut) {
     int i = begin;
 
-    for (int j = 0; j < end; j++) {
+    for (int j = begin; j < end; j++) {
         if ((*particles)(j, axis) < cut) {
             swap(i, j);
             i = i + 1;
@@ -121,6 +121,9 @@ void Orb::operative() {
     float upper[DIMENSIONS] = {upperInit, upperInit, upperInit};
 
     Cell cell(0, -1, lower, upper);
+
+    std::cout << cell.lower[0] << ":" << cell.lower[1] << ":" << cell.lower[2] << std::endl;
+
     cells.push_back(cell);
     
     cellBegin.push_back(0);
@@ -171,9 +174,7 @@ void Orb::operative() {
         std::cout << "Found middle at " << mid << std::endl;
 
         Cell leftChild (-1, counter, cell.lower, cell.upper);
-        std::copy(std::begin(cell.lower), std::end(cell.lower), std::begin(leftChild.lower));
-        std::copy(std::begin(cell.upper), std::end(cell.upper), std::begin(leftChild.upper));
-
+        
         cellBegin.push_back(begin);
         cellEnd.push_back(mid);
 
@@ -182,8 +183,6 @@ void Orb::operative() {
         stack.push(counter++);
 
         Cell rightChild (-1, counter, cell.lower, cell.upper);
-        std::copy(std::begin(cell.lower), std::end(cell.lower), std::begin(rightChild.lower));
-        std::copy(std::begin(cell.upper), std::end(cell.upper), std::begin(rightChild.upper));
 
         cellBegin.push_back(mid);
         cellEnd.push_back(end);

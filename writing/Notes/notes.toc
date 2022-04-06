@@ -1,0 +1,40 @@
+\contentsline {section}{\numberline {1}Introduction}{3}{}%
+\contentsline {section}{\numberline {2}Orthogonal Recursive Bisection (ORB)}{3}{}%
+\contentsline {subsection}{\numberline {2.1}Target Data}{4}{}%
+\contentsline {subsection}{\numberline {2.2}Computing Systems}{4}{}%
+\contentsline {subsection}{\numberline {2.3}PKDGrav}{4}{}%
+\contentsline {subsection}{\numberline {2.4}Memory and Workload Balancing}{4}{}%
+\contentsline {subsection}{\numberline {2.5}ORB for power of twos}{5}{}%
+\contentsline {subsection}{\numberline {2.6}ORB in the general case}{6}{}%
+\contentsline {subsection}{\numberline {2.7}Median Finding Algorithms}{7}{}%
+\contentsline {subsubsection}{\numberline {2.7.1}Binary Search}{7}{}%
+\contentsline {subsubsection}{\numberline {2.7.2}Deterministic Binary search with early stopping }{8}{}%
+\contentsline {subsubsection}{\numberline {2.7.3}Binary Search with improved guessing}{9}{}%
+\contentsline {subsubsection}{\numberline {2.7.4}Histogramming}{10}{}%
+\contentsline {subsection}{\numberline {2.8}Reshuffling Algorithm}{10}{}%
+\contentsline {subsection}{\numberline {2.9}ORB Main routine}{11}{}%
+\contentsline {section}{\numberline {3}Theoretical analysis of ORB speedup by GPU acceleration}{11}{}%
+\contentsline {subsection}{\numberline {3.1}Runtime estimations on a single node}{12}{}%
+\contentsline {subsubsection}{\numberline {3.1.1}Naive implementation}{12}{}%
+\contentsline {subsubsection}{\numberline {3.1.2}GPU tree building}{12}{}%
+\contentsline {subsubsection}{\numberline {3.1.3}Batch loading}{12}{}%
+\contentsline {subsubsection}{\numberline {3.1.4}Data compression}{13}{}%
+\contentsline {subsection}{\numberline {3.2}Datapoints of supercomputers}{13}{}%
+\contentsline {subsection}{\numberline {3.3}Piz Daint}{14}{}%
+\contentsline {subsubsection}{\numberline {3.3.1}Naive implementation}{14}{}%
+\contentsline {subsubsection}{\numberline {3.3.2}GPU Tree Building}{14}{}%
+\contentsline {subsection}{\numberline {3.4}Summit}{15}{}%
+\contentsline {subsubsection}{\numberline {3.4.1}Naive implementation}{15}{}%
+\contentsline {subsubsection}{\numberline {3.4.2}GPU Tree Building}{15}{}%
+\contentsline {subsection}{\numberline {3.5}Eiger}{16}{}%
+\contentsline {subsection}{\numberline {3.6}Conclusion}{16}{}%
+\contentsline {section}{\numberline {4}Implementation}{16}{}%
+\contentsline {subsection}{\numberline {4.1}Data-structure}{16}{}%
+\contentsline {subsubsection}{\numberline {4.1.1}Tree}{16}{}%
+\contentsline {subsubsection}{\numberline {4.1.2}Particles}{18}{}%
+\contentsline {subsection}{\numberline {4.2}Parallel Version Using Processes}{18}{}%
+\contentsline {subsubsection}{\numberline {4.2.1}Local Reshuffling}{19}{}%
+\contentsline {subsubsection}{\numberline {4.2.2}Global Reshuffling}{20}{}%
+\contentsline {subsubsection}{\numberline {4.2.3}Non parallelizable parts}{20}{}%
+\contentsline {subsection}{\numberline {4.3}Parallel Version Using CUDA }{21}{}%
+\contentsline {subsubsection}{\numberline {4.3.1}CUDA Memory Model}{21}{}%
