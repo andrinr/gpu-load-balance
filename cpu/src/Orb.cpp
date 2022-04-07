@@ -74,12 +74,12 @@ int Orb::count(int axis, int begin, int end, float split) {
 
 float Orb::findCut(Cell &cell, int axis, int begin, int end) {
 
-    MPI_Bcast(&axis, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
     float left = cell.lower[axis];
     float right = cell.upper[axis];
 
     int half = (end - begin) / 2;
+
+    int searchingCut = 1;
 
     float cut;
     int g_count;
@@ -88,9 +88,8 @@ float Orb::findCut(Cell &cell, int axis, int begin, int end) {
         cut = (right + left) / 2.0;
         g_count = 0;
 
-        std::cout << cut << std::endl;
+        std::cout << "operative " << cut << std::endl;
 
-        int searchingSplit = 1;
         MPI_Bcast(&cut, 1, MPI_INT, 0, MPI_COMM_WORLD);
         
         int l_count = count(axis, begin, end, cut);
@@ -98,10 +97,12 @@ float Orb::findCut(Cell &cell, int axis, int begin, int end) {
         MPI_Reduce(&l_count, &g_count, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
         if (abs(l_count - half) < 2) {
-            axis = -1;
-            MPI_Bcast(&axis, 1, MPI_INT, 0, MPI_COMM_WORLD);
+            searchingCut = 0;
+            MPI_Bcast(&searchingCut, 1, MPI_INT, 0, MPI_COMM_WORLD);
             break;
         }
+
+        MPI_Bcast(&searchingCut, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
         if (l_count > half) {
             right = cut;
@@ -165,8 +166,10 @@ void Orb::operative() {
                 axis = i;
             }
         }
+        MPI_Bcast(&axis, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
         std::cout << std::fixed << "Operative: Compute cut between " << cell.lower[axis] << " and " << cell.upper[axis]  << std::endl;
+
         float cut = findCut(cell, axis, begin, end);
         std::cout << "Found cut at " << cut << std::endl;
         std::cout << "Reshuffle array" << std::endl;
@@ -201,8 +204,6 @@ void Orb::operative() {
 void Orb::worker() {
     float cut;
     int id;
-
-    int axis = 1;
     int counter = 1;
 
     cellBegin.push_back(0);
@@ -218,18 +219,26 @@ void Orb::worker() {
         
         int begin = cellBegin[id];
         int end = cellEnd[id];
+        int axis;
+        int searchingCut = 1;
 
         MPI_Bcast(&axis, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-        while(axis != -1) {
+        while(searchingCut == 1) {
 
             MPI_Bcast(&cut, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
+            std::cout << "worker " << cut << std::endl;
+
             int l_count = count(axis, begin, end, cut);
+
+            std::cout << "l_count " << l_count << std::endl;
 
             MPI_Reduce(&l_count, NULL, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
-            MPI_Bcast(&axis, 1, MPI_INT, 0, MPI_COMM_WORLD);
+            std::cout << "done " << std::endl;
+
+            MPI_Bcast(&searchingCut, 1, MPI_INT, 0, MPI_COMM_WORLD);
         }
 
         int mid = reshuffleArray(axis, begin, end, cut);
