@@ -22,7 +22,6 @@ struct Cell {
         upper[0] = upper_[0];
         upper[1] = upper_[1];
         upper[2] = upper_[2];
-
     }
 };
 

@@ -88,8 +88,6 @@ float Orb::findCut(Cell &cell, int axis, int begin, int end) {
         cut = (right + left) / 2.0;
         g_count = 0;
 
-        std::cout << "operative " << cut << std::endl;
-
         MPI_Bcast(&cut, 1, MPI_INT, 0, MPI_COMM_WORLD);
         
         int l_count = count(axis, begin, end, cut);
@@ -115,6 +113,7 @@ float Orb::findCut(Cell &cell, int axis, int begin, int end) {
 }
 
 void Orb::operative() {
+    // init
     const float lowerInit = -0.5;
     const float upperInit = 0.5;
 
@@ -123,8 +122,6 @@ void Orb::operative() {
 
     Cell cell(0, -1, lower, upper);
 
-    std::cout << cell.lower[0] << ":" << cell.lower[1] << ":" << cell.lower[2] << std::endl;
-
     cells.push_back(cell);
     
     cellBegin.push_back(0);
@@ -132,11 +129,11 @@ void Orb::operative() {
 
     std::stack<int> stack;
     stack.push(0);
-    int counter = 1;
-    int id = -1;
+
+    int buildingTree = 1;
 
     while (!stack.empty()) {
-        id = stack.top();
+        int id = stack.top();
         stack.pop();
 
         Cell cell = cells[id];
@@ -148,13 +145,10 @@ void Orb::operative() {
             continue;
         }
 
-        std::cout << "id " << id << " begin " << begin << " end " << end <<  std::endl;
+        cell.leftChildId = cells.size();
 
-        cell.leftChildId = counter;
-
-        MPI_Bcast(&id, 1, MPI_INT, 0, MPI_COMM_WORLD);
-        MPI_Bcast(&counter, 1, MPI_INT, 0, MPI_COMM_WORLD);
-        MPI_Bcast(&cells, counter, MPI_CELL, 0, MPI_COMM_WORLD);
+        MPI_Bcast(&buildingTree, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        MPI_Bcast(&cells[id], 1, MPI_CELL, 0, MPI_COMM_WORLD);
 
         float maxValue = 0;
         int axis = 0;
@@ -168,57 +162,52 @@ void Orb::operative() {
         }
         MPI_Bcast(&axis, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-        std::cout << std::fixed << "Operative: Compute cut between " << cell.lower[axis] << " and " << cell.upper[axis]  << std::endl;
-
         float cut = findCut(cell, axis, begin, end);
-        std::cout << "Found cut at " << cut << std::endl;
-        std::cout << "Reshuffle array" << std::endl;
+        std::cout << "Operative: Found cut at " << cut << std::endl;
         int mid = reshuffleArray(axis, begin, end, cut);
-        std::cout << "Found middle at " << mid << std::endl;
 
-        Cell leftChild (-1, counter, cell.lower, cell.upper);
+        Cell leftChild (cells.size(), -1, cell.lower, cell.upper);
         
         cellBegin.push_back(begin);
         cellEnd.push_back(mid);
 
         leftChild.upper[axis] = cut;
+        stack.push(cells.size());
         cells.push_back(leftChild);
-        stack.push(counter++);
 
-        Cell rightChild (-1, counter, cell.lower, cell.upper);
+        Cell rightChild (cells.size(), -1, cell.lower, cell.upper);
 
         cellBegin.push_back(mid);
         cellEnd.push_back(end);
 
         rightChild.lower[axis] = cut;
+        stack.push(cells.size());
         cells.push_back(rightChild);
-        stack.push(counter++);
     }
 
-    id = -1;
-    MPI_Bcast(&id, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(&counter, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(&cells, counter, MPI_CELL, 0, MPI_COMM_WORLD);
+    buildingTree = 0;
+    MPI_Bcast(&buildingTree, 1, MPI_INT, 0, MPI_COMM_WORLD);
 }
 
 void Orb::worker() {
-    float cut;
-    int id;
-    int counter = 1;
+    int buildingTree = 1;
 
     cellBegin.push_back(0);
     cellEnd.push_back(COUNT);
 
-    MPI_Status status;
+    float lower[DIMENSIONS] = {0., 0., 0.};
+    float upper[DIMENSIONS] = {0., 0., 0.};
+    Cell cell(
+        -1, -1, lower, upper
+    );
 
-    MPI_Bcast(&id, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(&counter, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(&cells, counter, MPI_CELL, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&buildingTree, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&cell, 1, MPI_CELL, 0, MPI_COMM_WORLD);
 
-    while(id != -1) {
-        
-        int begin = cellBegin[id];
-        int end = cellEnd[id];
+    while(buildingTree == 1) {
+        float cut;
+        int begin = cellBegin[cell.id];
+        int end = cellEnd[cell.id];
         int axis;
         int searchingCut = 1;
 
@@ -228,15 +217,8 @@ void Orb::worker() {
 
             MPI_Bcast(&cut, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-            std::cout << "worker " << cut << std::endl;
-
             int l_count = count(axis, begin, end, cut);
-
-            std::cout << "l_count " << l_count << std::endl;
-
             MPI_Reduce(&l_count, NULL, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-
-            std::cout << "done " << std::endl;
 
             MPI_Bcast(&searchingCut, 1, MPI_INT, 0, MPI_COMM_WORLD);
         }
@@ -247,8 +229,10 @@ void Orb::worker() {
         cellBegin.push_back(mid);
         cellEnd.push_back(end);
      
-        MPI_Bcast(&counter, 1, MPI_INT, 0, MPI_COMM_WORLD);
-        MPI_Bcast(&id, 1, MPI_INT, 0, MPI_COMM_WORLD);
-        MPI_Bcast(&cells, counter, MPI_CELL, 0, MPI_COMM_WORLD);
+        MPI_Bcast(&buildingTree, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        if (buildingTree == 0){
+            break;
+        }
+        MPI_Bcast(&cells, 1, MPI_CELL, 0, MPI_COMM_WORLD);
     }
 }
