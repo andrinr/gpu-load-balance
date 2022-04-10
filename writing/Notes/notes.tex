@@ -16,6 +16,8 @@
 \usepackage{qtree}
 % Custom colors
 \usepackage{xcolor}
+% Comments
+\usepackage{verbatim}
 
 % Plots
 \usepackage{pgfplots}
@@ -81,7 +83,8 @@ For a clearer terminology, we will refer to a node in the tree as a cell. The ce
 \subsection{Target Data}
 
 \TODO{Write about properties of datasets}
-
+ 
+Large scales similar to uniform, if we zoom in not uniform at all anymore.
 \Q{Ask Doug}
 
 \subsection{Computing Systems}
@@ -242,13 +245,17 @@ Let us now consider the general case where $d$ can be any integer number for a n
 \end{figure}
 
 
-\subsection{Median Finding Algorithms}
+\subsection{Binary Search}
 
-Finding the median of a large particle array is an essential step for ORB. We will thus explore different algorithms alongside their advantages and disadvantages for our specific use case.
-Note that there exists approximation algorithms for example the median of medians algorithms. But the correctness guarantee of the median lying between 30\% and 70\% is not good enough in our case. If we were to implement such an approximation algorithms we would run into similar issues as described in \ref{sec:balancing}. But in this case the unequal memory balancing do not have the advantage of equal workload balancing, which in turn will worsen the performance and the maximum number of workable particles. Thus we will only consider approximation algorithms, if their approximation to the ideal values are very exact and can be determined.
 
-\subsubsection{Binary Search}
-The simplest algorithm is the binary search algorithm. It always cuts the domain in half along a given axis. Next it counts the number of particles on the left side of the cut, in case the particles are less than half of all the particles, it clear that the cut was too far to the left, and the new right boundary of the domain is the cut. In case the particles are more than half, we set the the left boundary as the cut. This is repeated until we either reach an exact split, a cut-off value or reach the precision limit of the data.
+%Finding the median of a large particle array is an essential step for ORB. We will thus explore different algorithms alongside their advantages and disadvantages for our specific use case.
+%Note that there exists approximation algorithms for example the median of medians algorithms. But the correctness guarantee of the median lying between 30\% and 70\% is not good enough in our case. If we were to implement such an approximation algorithms we would run into similar issues as described in \ref{sec:balancing}. But in this case the unequal memory balancing do not have the advantage of equal workload balancing, which in turn will worsen the performance and the maximum number of workable particles. Thus we will only consider approximation algorithms, if their approximation to the ideal values are very exact and can be determined.
+
+In order to find the right position for a cut, we make use of the binary search algorithm. Due to time constraints we will not investigate the use of approximate algorithms and leave this open to further work. 
+
+\subsubsection{Basic Binary Search}
+
+The first step is to make an estimation for a cut. In our case we simply assume it to be In principle the binary cut counts the number of particles on the left side of the of an initial cut.  in case the particles are less than half of all the particles, it clear that the cut was too far to the left, and the new right boundary of the domain is the cut. In case the particles are more than half, we set the the left boundary as the cut. This is repeated until we either reach an exact split, a cut-off value or reach the precision limit of the data.
 
 
 \begin{algorithm}[H]
@@ -277,7 +284,7 @@ Let us consider the case where we search for the split on an integer domain of t
 The average case is harder to estimate and it also depends on the number of particles. Let us assume a uniform random distribution of particles. In this case the average distance between two particles is $\frac{2^{p}}{N}$. \TODO{Extend}
 
 
-\subsubsection{Deterministic Binary search with early stopping }
+\subsubsection{Improved Binary Search}
 
 In this version we will replace the while loop by a for loop, furthermore we will add an early stopping condition. We will show that this change (1) improves the runtime and (2) is actually necessary in some cases.
 
@@ -321,6 +328,9 @@ The $\alpha$ value defines by how many particles the final cut value can be off 
 
 Considering the runtime improvements, we will show that the introduction of the $\alpha$ value brings some improvements. \TODO{Elaborate}
 
+
+\begin{comment}
+
 \subsubsection{Binary Search with improved guessing}
 
 As we can see in \ref{algo:cut}, the initial guess of the cut is simply the center of the domain. But if we consider non uniform distributions, this initial guess can possibly rather bad. Let us consider the following example:
@@ -343,10 +353,7 @@ As we can see in \ref{algo:cut}, the initial guess of the cut is simply the cent
 \end{figure}
 
 The underlying distribution is a normal distribution. \TODO{Add reference to section about data}. We can see that the algorithm will have to sweep 3 times over the entire array to get into the region of the actual median. One suggestion for improvement is to use an approximated median as a guess for the first split. We can sample 100 particles and find their median in constant time. Then we will run the binary cut algorithm using the approximated median as an initial guess. This can reduce the runtime by a few iterations, however we cannot make any assessment about the runtime, as this improvement will make the algorithm even slower on some distributions. Let us for example consider the uniform distribution, in this case the addition is pure overhead as the center is already the most accurate initial guess.
-
-
-\subsubsection{Histogramming}
-
+\end{comment}
 
 
 
@@ -413,7 +420,7 @@ To analyse the runtime for the CPU we are using Equation \ref{eq:cpu}. For the a
 	All particles are assumed to be stored in the CPU memory initially.
 	
 	\item
-	We perform the analysis on one billion particles. This translates to $10^9 \times  12 bytes = 12 GB$.
+	We perform the analysis on one billion particles. This translates to $10^9 \times  12 bytes = 12 GB$. We refere to the size of the data as $s$.
 	
 \end{itemize}
 
@@ -427,6 +434,10 @@ Let us assume a CPU with a clock speed of $cps$ per second.
 \subsection{Runtime estimations on a single node}
 
 \TODO{Add introduction}
+\TODO{Argue that is is similar on multinode systems as global reshuffling }
+
+
+\TODO{Local partitioninig is not necessarily better, but simpler. }
 
 \subsubsection{Naive implementation}
 
@@ -457,16 +468,17 @@ The Equation \ref{eq:gpu} for the GPU is similar, the only difference being that
 Let us now consider an alternative way of computing binary cuts. We will build part of the tree on the GPU itself. This will allow us to reduce the very costly overheads imposed by transferring data from the CPU to the GPU. The maximum number of cuts we can perform is $p \times 3$. After p cuts we have $2^{p \times 3}$ leaf cells, and have reached the precision. Note that in this case we also need to send back the information about the built tree from the GPU to the CPU. 
 
 \TODO{Too strong of a simplification}
+\TODO{its log(d)}
 \begin{center}
 	\begin{equation}
-		d \times p \times \frac{s}{B_{CPU}} = t
+		log(d) \times p \times \frac{s}{B_{CPU}} = t
 		\label{eq:cputree}
 	\end{equation}
 \end{center}
 
 \begin{center}
 	\begin{equation}
-		d \times p \times \frac{s}{B_{GPU}} + 2 \times \frac{s}{I} = t
+		log(d) \times p \times \frac{s}{B_{GPU}} + 2 \times \frac{s}{I} = t
 		\label{eq:gputree}
 	\end{equation}
 \end{center}
@@ -529,14 +541,17 @@ Let us plugin the values from Figure \ref{fig:datapoints} into the corresponding
 \subsubsection{Naive implementation}
 The naive implementation yields the following speeds for the naive CPU  implementation:
 
+\pgfmathparse{32 * 12 / 68}
+
 \begin{center}
 	\begin{equation}
-		32 \times \frac{ 12 GB }{68 GB/s} = 5.65s
+		32 \times \frac{ 12 GB }{68 GB/s} = \pgfmathresult s
 	\end{equation}
 \end{center}
 
 
 And the corresponding GPU implementation:
+\pgfmathparse{ * 12 / 68}
 \begin{center}
 	\begin{equation}
 		32 \times \frac{12 GB}{732 GB/s} + \frac{12 GB}{32 GB/s}  + \frac{12 GB}{68 GB/s} = 1.08s
@@ -796,6 +811,8 @@ Another strategy we can use, as soon as we have created two domains, rank 0 can 
 	\caption{Parallelized ORB for np = 4 and global reshuffling}
 	\label{fig:orb_parallel}
 \end{figure}
+
+\TODO{Argue from communication standpoint. }
 
 \vspace{5mm}
 
