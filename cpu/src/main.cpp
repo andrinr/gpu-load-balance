@@ -13,13 +13,13 @@ int main(int argc, char** argv) {
     std::cout << "Process " << rank + 1 << " out of " << np << std::endl;
 
     // Init positions
-    blitz::Array<float, 2> p(COUNT, 3);
+    blitz::Array<float, 2> p(floor(COUNT / np), 3);
     p = 0;
     
     printf("Initializing... \n");
 
     srand(rank);
-    for (int i = 0; i < COUNT; i++) {
+    for (int i = 0; i < p.rows(); i++) {
         for (int d = 0; d < DIMENSIONS; d++) {
             p(i,d) = (float)rand()/(float)(RAND_MAX) - 0.5;
         }

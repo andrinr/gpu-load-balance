@@ -41,6 +41,7 @@
 
 \tableofcontents
 
+\newpage
 \section{Introduction}
 
 
@@ -62,6 +63,27 @@ Before the implementation of FMM into codes, and particularly before the era of 
 This project proposes to implement Tree Building with the GPU using CUDA to accelerate load balancing.
 
 
+\subsection{Fast Multipole Method (FFM)}
+
+\subsubsection{Spherical Harmonics}
+
+
+
+\subsection{Target Data}
+
+\TODO{Write about properties of datasets}
+
+\Q{Ask Doug}
+
+\subsection{Computing Systems}
+
+\TODO{Write about systems which can be used to test data and systems which are worth considering while estimating runtimes of this approach.}
+
+\subsection{PKDGrav}
+
+\TODO{Brief summary of PKDGrav and how this work can be used to improve PKDGrav}
+
+\newpage
 \section{Orthogonal Recursive Bisection (ORB)}
 
 
@@ -94,6 +116,7 @@ Large scales similar to uniform, if we zoom in not uniform at all anymore.
 \subsection{PKDGrav}
 
 \TODO{Brief summary of PKDGrav and how this work can be used to improve PKDGrav}
+
 
 \subsection{Memory and Workload Balancing}\label{sec:balancing}
 During the simulation certain particles require more time steps, thus more computational effort, than others. We denote the workload per particle as the weighting function $w(p_i)$ where $p_i \in {p_1, p_2, ..., p_N}$.
@@ -405,7 +428,7 @@ The reshuffle algorithm has a clearly observable runtime of $O(N)$ since we iter
 
 \vspace{5mm}
 
-
+\newpage
 \section{Theoretical analysis of ORB speedup by GPU acceleration}
 
 In order to have a broad idea what speedup we can expect by implementing a GPU version, we first need to understand which parts of the code are suited to be done on the GPU. The GPU profits from a highly parallelized architecture, this means that it performs exceptionally when vectorization can be applied to large set of values. But the GPU has another strength over the CPU, which may be lesser known. The memory bandwidth between the GPU and its memory is much greater than the memory bandwidth between the CPU and GPU. Since the time used for calculations is a lot smaller due the algorithm only requiring few and simple operations and is negligible in comparison to memory loading times, we omit speed-ups which are introduced by parallelizing calculations and instead focus on the memory access times. Thus for the section of theoretical analysis we assume that the waiting function is always $w(p) = 0$.
@@ -551,7 +574,7 @@ The naive implementation yields the following speeds for the naive CPU  implemen
 
 
 And the corresponding GPU implementation:
-\pgfmathparse{ * 12 / 68}
+\pgfmathparse{ 32 * 12 / 68}
 \begin{center}
 	\begin{equation}
 		32 \times \frac{12 GB}{732 GB/s} + \frac{12 GB}{32 GB/s}  + \frac{12 GB}{68 GB/s} = 1.08s
@@ -664,6 +687,7 @@ This yields in a speed-up of:
 
 We conclude that the GPU version with GPU Tree building enabled yields the best speedup and also performs a lot better than the CPU version. Also we can observe that the speedup is bounded by $\frac{B_{GPU}}{B_{CPU}}$/ \TODO{Add reasoning}
 
+\newpage
 \section{Implementation}
 
 \subsection{Data-structure}
