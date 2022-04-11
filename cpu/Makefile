@@ -29,7 +29,7 @@ CPPFLAGS := $(INC_FLAGS) -MMD -MP
 
 LDFLAGS := -lblitz
 
-DEBUGFLAGS := -g -DBZ_DEBUG #!! Not working !!
+DEBUGFLAGS := -DBZ_DEBUG# --param mpi all --level 9
 
 # The final build step.
 $(BUILD_DIR)/$(TARGET_EXEC): $(OBJS)

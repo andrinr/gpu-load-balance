@@ -88,16 +88,24 @@ float Orb::findCut(Cell &cell, int axis, int begin, int end) {
 
     float cut;
     int g_count;
-    for (int i = 0; i < 32; i++) {
+    for (int i = 0; i < PRECISION; i++) {
 
         cut = (right + left) / 2.0;
-        g_count = 0;
 
-        MPI_Bcast(&cut, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        std::cout << "op reached 3" << std::endl;
+
+        MPI_Bcast(&cut, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
+
+        std::cout << "op reached 4" << std::endl;
 
         int l_count = count(axis, begin, end, cut);
 
+        std::cout << l_count << std::endl;
+        g_count = 0;
         MPI_Reduce(&l_count, &g_count, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+
+        std::cout << "op reached 5" << std::endl;
+
 
         std::cout << "op " << cut << " count " << g_count << std::endl;
 
@@ -129,6 +137,7 @@ void Orb::operative() {
 
     Cell cell(0, -1, lower, upper);
 
+    std::vector<Cell> cells;
     cells.push_back(cell);
     
     cellBegin.push_back(0);
@@ -168,7 +177,12 @@ void Orb::operative() {
             }
         }
 
+        std::cout << "op reached" << std::endl;
+
         MPI_Bcast(&axis, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+        std::cout << "op reached 2" << std::endl;
+
         float cut = findCut(cell, axis, begin, end);
         std::cout << "Operative: Found cut at " << cut << " on axis " << axis << std::endl;
         int mid = reshuffleArray(axis, begin, end, cut);
@@ -227,12 +241,18 @@ void Orb::worker() {
 
         while(searchingCut == 1) {
 
-            MPI_Bcast(&cut, 1, MPI_INT, 0, MPI_COMM_WORLD);
+            MPI_Bcast(&cut, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
             int l_count = count(axis, begin, end, cut);
+            std::cout << "w reahed 1 " << l_count <<  std::endl;
+
             MPI_Reduce(&l_count, NULL, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
+            std::cout << "w reahed 2" << std::endl;
+
             MPI_Bcast(&searchingCut, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+            std::cout << "w reahed 3" << std::endl;
         }
 
         int mid = reshuffleArray(axis, begin, end, cut);
@@ -245,6 +265,6 @@ void Orb::worker() {
         if (buildingTree == 0){
             break;
         }
-        MPI_Bcast(&cells, 1, MPI_CELL, 0, MPI_COMM_WORLD);
+        MPI_Bcast(&cell, 1, MPI_CELL, 0, MPI_COMM_WORLD);
     }
 }

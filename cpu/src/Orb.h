@@ -12,7 +12,6 @@ public:
     blitz::Array<float, 2>* particles;
     std::vector<int> cellBegin;
     std::vector<int> cellEnd;
-    std::vector<Cell> cells;
 
     MPI_Datatype MPI_CUT;
     MPI_Datatype MPI_CELL;

@@ -18,6 +18,8 @@
 \usepackage{xcolor}
 % Comments
 \usepackage{verbatim}
+% math symbols
+\usepackage{amssymb}
 
 % Plots
 \usepackage{pgfplots}
@@ -62,20 +64,44 @@ Before the implementation of FMM into codes, and particularly before the era of 
 
 This project proposes to implement Tree Building with the GPU using CUDA to accelerate load balancing.
 
-
-\subsection{Fast Multipole Method (FFM)}
-
-\subsubsection{Spherical Harmonics}
-
-
-
-\subsection{Target Data}
+\subsection{Target Data}\label{section:target-data}
 
 \TODO{Write about properties of datasets}
 
+The target data consists of $N$ particles where each particle has several data points and introduce the following definitions:
+
+\begin{itemize}
+	\item We define a particle as $p_i$  where $i \in \{0,...,N\}$. 
+	\item We define the size of the spatial domain with $\vec{b}$ where we have $\vec{b} \in \mathbb{R}^3$. 
+	\item We define the coordinates of a particle as $\vec{x_i}$ for which holds $\{\vec{x} | -\frac{\vec{b}}{2} < \vec{x} < \frac{\vec{b}}{2} \}$.
+	
+\end{itemize}
+
+\begin{figure}
+	\begin{center}
+		\begin{tikzpicture}
+			\randistr{10}{5}{100}
+			\draw (0,0) rectangle (10, 5);
+			\filldraw  (0,0) circle (3pt) node [anchor=west]{};
+			\node[yshift=0.3cm, xshift=-0.3cm] at (0,0) {$-\frac{b}{2}$};
+			
+			\filldraw  (10,5) circle (3pt) node [anchor=west]{};
+			\node[yshift=0.3cm, xshift=-0.3cm] at (10,5) {$\frac{b}{2}$};
+		\end{tikzpicture}
+	\end{center}
+\caption{Unfiorm random distribution of 3D coordinates in square domain projected onto a 2d plane}
+\end{figure}
+
 \Q{Ask Doug}
 
-\subsection{Computing Systems}
+\subsection{Force Integration and FFM}\label{section:force-integration}
+
+\TODO{Write about how the very unequal data can also affect integration }
+Non equal weighting functions for different particles are due to higher accelerations and greater proximity to strong gravitational influences. This in turn requires a higher integrations accuracy to mitigate errors. When we try to balance the workload, this implies drawbacks in terms of memory balance. 
+
+
+
+\subsection{Target Computing Systems}\label{section:target-systems}
 
 \TODO{Write about systems which can be used to test data and systems which are worth considering while estimating runtimes of this approach.}
 
@@ -89,49 +115,61 @@ This project proposes to implement Tree Building with the GPU using CUDA to acce
 
 %https://de.overleaf.com/learn/latex/TikZ_package
 %https://texample.net/tikz/examples/
-The ORB Algorithm is used to partition a multi dimensional domain into subdomains based on spatial proximity. It does so by building an unbalanced binary tree. To explain the the algorithm we will refer to a left child of a node with index $i$ as $i*2$ and the right child respectively as $i*2 + 1$. The parent node can be determined with $\lfloor \frac{i}{2} \rfloor$. Finally we have $i = 1$ for the root node. Node that the actual code will not use the same system, but we will discuss this in a later section.
-
-The advantage of subdividing the domain into smaller subdomains is two folds:
+In this section we will introduce the ORB algorithm along with subroutines. We will use the concept of binary trees and in order to have clear understanding of steps of the algorithm, we will use the following terminologies: 
 
 \begin{itemize}
-	\item For simulation code and more specifically for the Fast Multipole Method these domains can be leveraged to greatly accelerate the simulation time. \TODO{expand}
-	\item The workload can be equally distributed among nodes and processors in large computing systems.
-\end{itemize} 
-
-The general idea of the algorithm is to split a $k$ dimensional domain containing $N$ particles into $d$ subdomains using a recursive procedure. This can be repeated until the number of smallest subdomains is equal to the total count of processors or nodes. The final goal is an equal distribution of the workload and data, thus the subdomain sizes should be chosen such that the number of particles is equal among nodes / processors.
-
-For a clearer terminology, we will refer to a node in the tree as a cell. The cell not only keeps track of its children, but also stores information about the domain it encompasses. In this tree the parent cell always encompasses the entire domains of its two child cells. Furthermore the domain of a child cell cannot exceed the boundaries of its parent domain. 
-
-\subsection{Target Data}
-
-\TODO{Write about properties of datasets}
- 
-Large scales similar to uniform, if we zoom in not uniform at all anymore.
-\Q{Ask Doug}
-
-\subsection{Computing Systems}
-
-\TODO{Write about systems which can be used to test data and systems which are worth considering while estimating runtimes of this approach.}
-
-\subsection{PKDGrav}
-
-\TODO{Brief summary of PKDGrav and how this work can be used to improve PKDGrav}
+	\item The left child of a node with index $i$ has the index $2\times i$. 
+	\item The right child of a node with index $i$ has the index $i*2 + 1$. 
+	\item The parent of a node with index $i$ has the index $\lfloor \frac{i}{2} \rfloor$. 
+	\item The root node has the index $i$.
+	\item The domain of a node is the area it compasses. 
+\end{itemize}
 
 
+In principle the ORB Algorithm is used to partition a multi dimensional domain into subdomains based on spatial proximity. It does so by splitting a $k$ dimensional domain containing $N$ particles into $d$ subdomains using a recursive procedure. During the recursive process, we store all intermediate domains a binary tree. We can leverage the resulting binary in two ways:
+
+\begin{enumerate}
+	\item For simulation code and more specifically for the Fast Multipole Method the tree can be leveraged to greatly accelerate the simulation time. \TODO{expand}
+	\item The tree can be used to equally distribute memory and/or workload among nodes or processors in a computing system. 
+\end{enumerate} 
+
+Our main objective in this work is to improve the runtime of astrophysical simulations, or more specifically PKDGrav. At the same time we want to minimize penalties in regards to $N$, the total number of particles, such that we can leverage a high $N$ to increase the precision of the simulation. Furthermore we want to adapt and optimize the algorithms with regards to the target data as introduced in \ref{section:target-data} and target computing systems (\ref{section:target-systems}).
 
 \subsection{Memory and Workload Balancing}\label{sec:balancing}
-During the simulation certain particles require more time steps, thus more computational effort, than others. We denote the workload per particle as the weighting function $w(p_i)$ where $p_i \in {p_1, p_2, ..., p_N}$.
+We have now formulated our main objectives for improving ORB, which are to improve the runtime but at the same time keeping $N$ as large as possible. In this section we will explain how the two cannot be maximized at the same time, as there will we averse effects when disregarding interactions. 
 
-Non equal weighting functions for different particles are due to higher accelerations and greater proximity to strong gravitational influences. This in turn requires a higher integrations accuracy to mitigate errors. When we try to balance the workload, this implies drawbacks in terms of memory balance. 
+As described in section \ref{section:force-integration} if we want to mitigate the error across all particles, we need to introduce more discrete time steps for certain particles than for others. This clearly translate to an increased workload for a particle $p_i$, to which we will refer to it as the weighting function $w(p_i)$. Thus we have an unbalanced weight among particles. In an optimally parallelized system the workload should be very similar among computing units, thus it would make sense to distribute the particles as such. This in turn implies that the particles are distributed unequal with regards to memory.  
 
-Let us consider a simple example to illustrate the point. Given the set of particles $A = {p_1, p_2, .., p_{2N/3}}$ and respectively $B = {p_{2N/3 + 1}, p_2, .., p_{N}}$. Let us now consider the that $\forall p \in A : w(p) = 1$ and $\forall p \in B : w(p) = 2$. If we assign all particles from set $A$ to process with rank 0 and the particles from B to rank 1. It is clear that $\sum_{p\in A}^{} w(p) = \sum_{p\in B}^{} w(p)$. Thus the two processors are balanced in terms of computing costs, but clearly they are not balanced in terms of memory size. In fact process with rank 0 has $2N/3$ elements and rank 1 has $N/3$ elements. Thus there will be processes there are memory slots which are not taken advantage of, which means we have a reduced total number of particles. As cosmological simulations profit from an increased number of particles, this also means that the quality of the simulation suffers when prioritizing workload balancing.
+Let us consider a simple example to illustrate the point. Given the set of particles $A = {p_1, p_2, .., p_{2N/3}}$ and respectively $B = {p_{2N/3 + 1}, p_2, .., p_{N}}$. Let us now consider the that $\forall p \in A : w(p) = 1$ and $\forall p \in B : w(p) = 2$. If we assign all particles from set $A$ to process with rank 0 and the particles from B to rank 1. It is clear that $\sum_{p\in A}^{} w(p) = \sum_{p\in B}^{} w(p)$. Thus the two processors are balanced in terms of computing costs, but clearly they are not balanced in terms of memory size. In fact process with rank 0 has $2N/3$ elements and rank 1 has $N/3$ elements. Thus there will be processes with free memory capacity which are not taken advantage of. This in turn means that we need to reduce the total number of particles $N$. 
+
+To which degree we decide to favour memory over workload balancing is difficult to answer. But as for now we will parametrize the workload using the weighting function, which allows us to optimize and decide at a later stage.
 
 
 \subsection{ORB for power of twos}
 
+To simplify the visual explanation of the ORB algorithm, we will assume $\forall i \in \{0,..,N\} : w(p_i) = 1$.
+Let us consider the cases where $d$ is a power of two. For the sake clarity we introduce recursive variants for variables $d$ and $N$ as $d_j$ and $N_j$ where $j$ is the index of the corresponding node. This translate to the number of particles conatined in the domain of $node_j$ Since the root node has index $1$ we anchor the recursive definition with $d_1 = d$ and $N_1 = N$. We then recursively define $d_j$ as:
 
-Let us first make the assumption that $d$ is a power of two. In this case we can search for a cut such that 50\% of the particles are on the left side and likewise on the right side of the cut. The dimension of the cut is always the axis where the size of the domain is the largest. This ensures that we do not get thin shapes. \TODO{Insert smartness about FMM} This in turn is very beneficial for the FMM as it has a higher precision on more squarish shapes. After such a cut has been found, we can create two new subdomains and recursively apply the algorithm on both of them until we have reached the desired number of subdomains $d$. 
- 
+\begin{center}
+	\begin{equation}
+		d_{j \times 2 } = d_{j \times 2 + 1} = \frac{d_{j}}{2}
+	\end{equation}
+\end{center}
+
+And $N_i$ as:
+
+\begin{center}
+	\begin{equation}
+		N_{j \times 2} = N_{j \times 2 + 1} = \left \lceil \frac{ d_{j \times 2} }{d_{j}} \times N_j \right \rceil
+	\end{equation}
+\end{center}
+
+The ORB algorithm for power of two $d$`s is initiated by considering the spatial domain which encompasses all particle coordinates. In each iteration we use a binary search algorithm, which we will introduce in later stages, to determine a cut. We search for this cut in only axis, where this axis is determined by finding the axis where the domain size is the largest. In 3 dimensional space, this cut represents a plane, where all other axes are non fixed. An ideal cut plane has exactly 50\% of the particles on its left and right side. We then recursively repeat this procedure with all the particles on the left side of the cut, and again with the particles on the right side of the cut. We repeat this process until the number we have segmented our initial domain into $d$ smallest subdomains, where no two subdomains intersect each other and the entire domain is union of all smallest subdomains.
+
+The reason to choose the cut axis in this way, is that it reduces thin and non square 
+We define tWhen $d$ is a power of two, we construct a binary tree wit exactly $d$ leaf nodes and a height of $log(d)$.
+
+
 \vspace{5mm}
 
 \def\x{8}
@@ -182,7 +220,7 @@ Let us first make the assumption that $d$ is a power of two. In this case we can
 	
 \end{tikzpicture}
 \end{center}
-\caption{Building a tree of depth 3 using the ORB algorithm }
+\caption{Building a tree of depth 3 using the ORB algorithm)}
 \label{fig:balorb}
 \end{figure}
 
@@ -201,23 +239,34 @@ When each cell keeps track of its child cells, we have built a tree datastructur
 
 \subsection{ORB in the general case}
 
-Let us now consider the general case where $d$ can be any integer number for a node with index $i$. In this case we define the desired number of particles on the left side of the cut as follows:
+Let us now consider the general case where $d$ can be any integer number. We start the recursive algorithm with the goal of finding $d$ number of domains. 
+We define $d_i$ as:
 
 \begin{center}
 	\begin{equation}
-		l_{i} = \left \lceil \frac{ \lceil\frac{d_{i}}{2} \rceil }{d_{i}} \times N \right \rceil 
+		d_{i \times 2 } = \left \lceil\frac{d_{i}}{2} \right \rceil 
 	\end{equation}
 \end{center}
 
- Consequently the number of particles on the right side of the cut are: 
- 
- \begin{center}
- 	\begin{equation}
- 		r_{i} = N - l_{i}
- 	\end{equation}
- \end{center}
- 
- The variable $d_{i}$ is defined in a recursive manner. We have $d_{i} = l_{\lfloor i/2 \rfloor}$ if $cell_i$ is a left child of its parent, otherwise we have $d_{i} = r_{\lfloor i/2 \rfloor}$.
+\begin{center}
+	\begin{equation}
+		d_{i \times 2  + 1} = d_i - d_{i \times 2 }
+	\end{equation}
+\end{center}
+
+And $N_i$ as:
+
+\begin{center}
+	\begin{equation}
+		N_{i \times 2} = \left \lceil \frac{ d_{i \times 2} }{d_{i}} \times N_i \right \rceil 
+	\end{equation}
+\end{center}
+
+\begin{center}
+	\begin{equation}
+		N_{i \times 2 + 1} = N_i - N_{i \times 2}
+	\end{equation}
+\end{center}
 
 \def\spya{0.5}
 \def\spyb{0.5}
@@ -268,7 +317,7 @@ Let us now consider the general case where $d$ can be any integer number for a n
 	\caption{Tree datastructure of depth 3}
 \end{figure}
 
-
+Since $d_{i \times 2 + 1} - d_{i \times 2 }$ must always be $\leq 1$, it must hold that the tree is a balanced binary tree. Therefore we can conclude that the height of the tree is equal to $\lceil log(d) \rceil$ and the total number of nodes (not only leaf nodes) is $log(d) \times d$.
 \subsection{Binary Search}
 
 
