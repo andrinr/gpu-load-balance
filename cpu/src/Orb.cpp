@@ -120,7 +120,7 @@ float Orb::findCut(Cell &cell, int axis, int begin, int end) {
         if (l_count > half) {
             right = cut;
         } else {
-            left = cut;
+            left = cut; 
         }
     }
 
@@ -244,15 +244,15 @@ void Orb::worker() {
             MPI_Bcast(&cut, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
             int l_count = count(axis, begin, end, cut);
-            std::cout << "w reahed 1 " << l_count <<  std::endl;
+            std::cout << "w reached 1 " << l_count <<  std::endl;
 
             MPI_Reduce(&l_count, NULL, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
-            std::cout << "w reahed 2" << std::endl;
+            std::cout << "w reached 2" << std::endl;
 
             MPI_Bcast(&searchingCut, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-            std::cout << "w reahed 3" << std::endl;
+            std::cout << "w reached 3" << std::endl;
         }
 
         int mid = reshuffleArray(axis, begin, end, cut);

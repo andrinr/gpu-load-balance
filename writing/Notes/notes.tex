@@ -27,6 +27,7 @@
 
 % Dependencies
 \usepackage{mymacros}
+\usepackage{parallelP}
 
 
 % Title
@@ -72,12 +73,13 @@ The target data consists of $N$ particles where each particle has several data p
 
 \begin{itemize}
 	\item We define a particle as $p_i$  where $i \in \{0,...,N\}$. 
-	\item We define the size of the spatial domain with $\vec{b}$ where we have $\vec{b} \in \mathbb{R}^3$. 
-	\item We define the coordinates of a particle as $\vec{x_i}$ for which holds $\{\vec{x} | -\frac{\vec{b}}{2} < \vec{x} < \frac{\vec{b}}{2} \}$.
-	
+	\item We define the space of binary numbers with a precision of $p$ as $\mathbb{B}_p = \{0,1\}^{p}$
+	\item We define the size of the spatial domain with $\vec{b}$ where we have $\vec{b} \in \mathbb{B}_p^3$. 
+	\item We define the coordinates of a particle $p_i$ as $\vec{x_i}$ for which holds $\{\vec{x} | -\frac{\vec{b}}{2} < \vec{x} < \frac{\vec{b}}{2}, \vec{x} \in \mathbb{B}_p^3 \}$.
+
 \end{itemize}
 
-\begin{figure}
+\begin{figure}[H]
 	\begin{center}
 		\begin{tikzpicture}
 			\randistr{10}{5}{100}
@@ -164,10 +166,12 @@ And $N_i$ as:
 	\end{equation}
 \end{center}
 
-The ORB algorithm for power of two $d$`s is initiated by considering the spatial domain which encompasses all particle coordinates. In each iteration we use a binary search algorithm, which we will introduce in later stages, to determine a cut. We search for this cut in only axis, where this axis is determined by finding the axis where the domain size is the largest. In 3 dimensional space, this cut represents a plane, where all other axes are non fixed. An ideal cut plane has exactly 50\% of the particles on its left and right side. We then recursively repeat this procedure with all the particles on the left side of the cut, and again with the particles on the right side of the cut. We repeat this process until the number we have segmented our initial domain into $d$ smallest subdomains, where no two subdomains intersect each other and the entire domain is union of all smallest subdomains.
+The ORB algorithm for power of two $d$`s is initiated by considering the spatial domain which encompasses all particle coordinates. In each iteration we use a binary search algorithm, which we will introduce in later stages, to determine a cut $c$ position. This cut position is defined along a specified axis, which is determined by the dimension where the domain is largest. In three dimensional space we can then represent this cut as a plane and make simple checks weather a particle is right or left of this plane. 
 
-The reason to choose the cut axis in this way, is that it reduces thin and non square 
-We define tWhen $d$ is a power of two, we construct a binary tree wit exactly $d$ leaf nodes and a height of $log(d)$.
+In this case an ideal cut plane has exactly 50\% of the particles on its left and an equal number on the right side. We can then split the domain in two subdomain, where the left subdomain is limited by our original domain boundaries and the cut plane on the right side. The same can be done for the right subdomain, where the cut plane determines he left side boundaries. We repeat this process until we have segmented our initial domain into $d$ leaf nodes, where no boundaries of two nodes intersect each other, and the union of all boundaries of all leaf cells are equal to the entire domain.
+
+The reason to choose the cut axis using the mentioned method, is that it reduces thin and non square shapes and converges to squares. 
+In this non general case, where $d$ is a power of two, we are able to construct a binary tree wit exactly $d$ leaf nodes and a height of $log(d)$.
 
 
 \vspace{5mm}
@@ -220,27 +224,28 @@ We define tWhen $d$ is a power of two, we construct a binary tree wit exactly $d
 	
 \end{tikzpicture}
 \end{center}
-\caption{Building a tree of depth 3 using the ORB algorithm)}
+\caption{Building a tree of depth 3 using the ORB algorithm on a very small sample dataset}
 \label{fig:balorb}
 \end{figure}
 
 \vspace{5mm}
 
-When each cell keeps track of its child cells, we have built a tree datastructure. For instance for our simple domain composition of depth 3 from Figure \ref{fig:balorb} we end up with structure as depicted in Figure \ref{fig:baltree} In this tree each cell represents a node, the root node is the cell which encompasses the entire space and particles and finally its leaves can be assigned to a processor / node. Note that the tree is not balanced, but each node has either two children or is a leaf. 
+The recursive signature of ORB allows us to easily store each subdomain information and its corresponding particles in a binary tree. The advantage of not only storing the smallest subdomains, is that we can access a desired region of the entire domain in $log(d)$ runtime. The rationale is the same as with any binary tree datastructure.
+
 
 \begin{figure}[H]
 \Tree[.cell_{1} [.cell_{2} [.cell_{4} ]
 [.cell_{5} ]]
 [.cell_{3} [.cell_{6} ]
 [.cell_{7} ]]]
-\caption{Tree datastructure of depth 3}
+\caption{Tree datastructure of depth 3 corresponding to Figure \ref{fig:balorb}}
 \label{fig:baltree}
 \end{figure}
 
 \subsection{ORB in the general case}
 
-Let us now consider the general case where $d$ can be any integer number. We start the recursive algorithm with the goal of finding $d$ number of domains. 
-We define $d_i$ as:
+Let us now consider the general case where $d$ can be any integer number. 
+In this case we define $d_i$ as:
 
 \begin{center}
 	\begin{equation}
@@ -267,6 +272,8 @@ And $N_i$ as:
 		N_{i \times 2 + 1} = N_i - N_{i \times 2}
 	\end{equation}
 \end{center}
+
+We repeat the just described recursive method, but instead of aiming for a cut position which generates a 50 : 50 split, we search for a $d_{i \times 2 }$ : $d_{i \times 2 + 1}$ split. This method will remove the constraint of a perfectly balanced tree, but it allows us to perfectly balance the memory load among the $d$ domains. If we were to use the algorithm from the last section, we would end up with smallest subdomains, which encompass a larger number of particles than others. 
 
 \def\spya{0.5}
 \def\spyb{0.5}
@@ -318,44 +325,66 @@ And $N_i$ as:
 \end{figure}
 
 Since $d_{i \times 2 + 1} - d_{i \times 2 }$ must always be $\leq 1$, it must hold that the tree is a balanced binary tree. Therefore we can conclude that the height of the tree is equal to $\lceil log(d) \rceil$ and the total number of nodes (not only leaf nodes) is $log(d) \times d$.
+
+\begin{algorithm}[H]
+	\caption{The ORB main routine}\label{euclid}
+	\begin{algorithmic}[1]
+		\Procedure{orb}{$\vec{lower}, \vec{upper} ,x, d$}
+		\State $\vec{size} = \vec{upper} - \vec{lower}$
+		\State $axis = maxIndex(\vec{size}_0, \vec{size}_1, \vec{size}_2)$ \Comment{Get index of max value}
+		\newline
+		
+		\State $cut = cut(x, \vec{lower}_{axis}, \vec{upper}_{axis}, axis, )$
+		\State $mid = reshuffle(split, axis, x)$
+		\newline
+		
+		\TODO{Finish this}
+		\State \Call {orb}{cornerA, cornerB}
+		\EndProcedure
+	\end{algorithmic}
+\end{algorithm}
+
+
 \subsection{Binary Search}
 
 
 %Finding the median of a large particle array is an essential step for ORB. We will thus explore different algorithms alongside their advantages and disadvantages for our specific use case.
 %Note that there exists approximation algorithms for example the median of medians algorithms. But the correctness guarantee of the median lying between 30\% and 70\% is not good enough in our case. If we were to implement such an approximation algorithms we would run into similar issues as described in \ref{sec:balancing}. But in this case the unequal memory balancing do not have the advantage of equal workload balancing, which in turn will worsen the performance and the maximum number of workable particles. Thus we will only consider approximation algorithms, if their approximation to the ideal values are very exact and can be determined.
 
-In order to find the right position for a cut, we make use of the binary search algorithm. Due to time constraints we will not investigate the use of approximate algorithms and leave this open to further work. 
+ The binary search algorithm takes an array of particles, an axis, a left and right boundary as well as a percentage $r$ of particles which should be on the left side to the determined cut. Its goal is to return a position, such that the particles on the left side of the cut are equal to the percentage input parameter multiplied by all particles.
+ 
+ Due to time constraints we will not investigate the use of approximate algorithms and leave this open to further work.
 
 \subsubsection{Basic Binary Search}
 
-The first step is to make an estimation for a cut. In our case we simply assume it to be In principle the binary cut counts the number of particles on the left side of the of an initial cut.  in case the particles are less than half of all the particles, it clear that the cut was too far to the left, and the new right boundary of the domain is the cut. In case the particles are more than half, we set the the left boundary as the cut. This is repeated until we either reach an exact split, a cut-off value or reach the precision limit of the data.
+The first step is to make an estimation for a cut. In our case we simply assume it to be the exact middle of the domain boundaries. In principle the binary cut counts the number of particles on the left side of the of an initial cut. In case the particles are less than half of all particles, it clear that the cut was too far to the left, and the new right boundary of the domain is the cut. In case the particles are more than half, we set the the left boundary as the cut. This is repeated until we find a precise cut position.
+
+
 
 
 \begin{algorithm}[H]
-	\caption{Find cut}\label{algo:cut}
+	\caption{Basic Binary search}\label{algo:cut}
 	\begin{algorithmic}[1]
-		\Procedure{cut}{$left, right, axis ,particles$}
+		\Procedure{cut}{$x, N_j, left, right, axis, percentage$}
 		\State $nLeft = 0$
-		\State $split = (right - left) / 2 + left $ \Comment{Initial guess}
-		\While{$abs(nLeft - particles.length/2) > 0 $}
-		\State $split = (right - left) / 2 + left $
-		\State $nLeft\gets sum(particles[:,axis] < split)$
-		\If{$nLeft <= particles.len / 2$}
-		\State $left = split$
+		\newline
+		\While{$abs(nLeft - N_j * percentage) > 0 $}
+		\State $cut = (right + left ) / 2 $
+		\State $nLeft\gets sum(x_{:,axis} < split)$
+		\newline
+		\If{$nLeft <= N_j * percentage$}
+		\State $left = cut$
 		\Else 
-		\State $right = split$
+		\State $right = cut$
 		\EndIf
+		\newline
 		\EndWhile\label{euclidendwhile}
-		\State \Return $split$
+		\State \Return $cut$
 		\EndProcedure
 	\end{algorithmic}
 \end{algorithm}
 
-We analyse the runtime of the cut algorithm as follows: Inside the loop we need to count the number of particles on the left side of the cut. Since the particles are not ordered, we need to sweep over all particles which leaves us with a runtime of $O(N)$. Furthermore we need to estimate the number of times the while loop is repeated. We denote the precision of the cut as $p$. This means the cut operation is stored with $p$ bits. 
-Let us consider the case where we search for the split on an integer domain of the size $2^{32}$ which equates a 32 bit precision integer number. With each iteration we cut in half the integer domain. Thus after the first iteration the domain size is $2^{31}$. It is therefore where easy to verify that a maximum of 32 repetitions can be performed before our domain reaches a size of $2^0$. In this case the cut cannot be improved as it has already reached the maximum precision. We conclude a worst case performance of $O(N \times 32)$. 
-
-The average case is harder to estimate and it also depends on the number of particles. Let us assume a uniform random distribution of particles. In this case the average distance between two particles is $\frac{2^{p}}{N}$. \TODO{Extend}
-
+We analyse the runtime of the cut algorithm as follows: Inside the loop we count the number of particles on the left side of the cut and since the array is unordered, we need to sweep over elements once which results in a runtime of $O(N)$. Next we estimate the maximum number of iterations our loop needs to repeated. With each iteration we cut in half the domain size.  \TODO{ Thus after the first iteration the domain size is $2^{31}$. It is therefore where easy to verify that a maximum of 32 repetitions can be performed before our domain reaches a size of $2^0$. In this case the cut cannot be improved as it has already reached the maximum precision. We conclude a worst case performance of $O(N \times 32)$. }
 
 \subsubsection{Improved Binary Search}
 
@@ -364,22 +393,26 @@ In this version we will replace the while loop by a for loop, furthermore we wil
 \begin{algorithm}[H]
 	\caption{Deterministic find cut with early stopping}\label{algo:cut}
 	\begin{algorithmic}[1]
-		\Procedure{cut}{$left, right, axis ,particles$}
+		\Procedure{cut}{$x, N_j, left, right, axis, percentage$}
 		\State $nLeft = 0$
-		\State $split = (right - left) / 2 + left $ \Comment{Initial guess}
-		\For{j in {0,..,p}}
-		\If{$abs(nLeft - particles.length/2) < \alpha $}
-		\State break
+		\newline
+		\For{$k \in {0,..,p}$}
+		\State $cut = (right + left ) / 2 $
+		\State $nLeft\gets sum(x_{:,axis} < split)$
+		\newline
+		\If{$abs(nLeft - N_j * percentage) < \alpha $}
+		\State Break
 		\EndIf
-		\State $split = (right - left) / 2 + left $
-		\State $nLeft\gets sum(particles[:,axis] < split)$
-		\If{$nLeft <= particles.len / 2$}
-		\State $left = split$
+		\newline
+
+		\If{$nLeft <= N_j * percentage$}
+		\State $left = cut$
 		\Else 
-		\State $right = split$
+		\State $right = cut$
 		\EndIf
+		\newline
 		\EndFor
-		\State \Return $split$
+		\State \Return $cut$
 		\EndProcedure
 	\end{algorithmic}
 \end{algorithm}
@@ -435,17 +468,17 @@ The underlying distribution is a normal distribution. \TODO{Add reference to sec
 \begin{algorithm}[H]
 	\caption{Reshuffle algorithm}\label{euclid}
 	\begin{algorithmic}[1]
-		\Procedure{reshuffle}{$cut, axis ,particles$}
+		\Procedure{reshuffle}{$x, N_j, cut, axis$}
 		\State $i = 0$
 		
-		\For{j in {0,..,particles.len() - 1}}
-		\If{$particles[js,axis] < split$}
+		\For{$k \in {0,..N_j - 1}$}
+		\If{$\vec{x}_{k, axis} < split$}
 		\State $i = i + 1$
-		\State $particles.swap(i,j)$
+		\State $x_{i}, x_{k} = x_{k}, x_{i}$
 		\EndIf
 		\EndFor
 		
-		\State $particles.swap(i,particles.len() - 1)$
+		\State $ x_{i}, x_{N_j-1} = x_{N_j-1}, x_{i}$
 		\State \Return $i$
 		\EndProcedure
 	\end{algorithmic}
@@ -453,47 +486,138 @@ The underlying distribution is a normal distribution. \TODO{Add reference to sec
 
 The reshuffle algorithm has a clearly observable runtime of $O(N)$ since we iterate over all particles once. Since we need to touch each element at least once to reshuffle the entire array there is no better algorithm than this.
 
-\subsection{ORB Main routine}
-
-\begin{algorithm}[H]
-	\caption{The ORB main routine}\label{euclid}
-	\begin{algorithmic}[1]
-		\Procedure{orb}{$cornerA, cornerB ,particles, np$}
-		\State $size = cornerB - cornerA$
-		\State $axis = maxIndex(size.x, size.y, size.z)$ \Comment{Get index of max size}
-		
-		\State $left = cornerA[axis]$
-		\State $right = cornerB[axis]$
-		\newline
-		\State $cut = cut(left, right, axis, particles)$
-		\State $mid = reshuffle(split, axis, particles)$
-		\newline
-		
-		\TODO{Finish this}
-		\State \Call {orb}{cornerA, cornerB}
-		\EndProcedure
-	\end{algorithmic}
-\end{algorithm}
-
 
 \vspace{5mm}
 
 \newpage
-\section{Theoretical analysis of ORB speedup by GPU acceleration}
+\section{Theoretical Analysis of ORB runtime}
 
-In order to have a broad idea what speedup we can expect by implementing a GPU version, we first need to understand which parts of the code are suited to be done on the GPU. The GPU profits from a highly parallelized architecture, this means that it performs exceptionally when vectorization can be applied to large set of values. But the GPU has another strength over the CPU, which may be lesser known. The memory bandwidth between the GPU and its memory is much greater than the memory bandwidth between the CPU and GPU. Since the time used for calculations is a lot smaller due the algorithm only requiring few and simple operations and is negligible in comparison to memory loading times, we omit speed-ups which are introduced by parallelizing calculations and instead focus on the memory access times. Thus for the section of theoretical analysis we assume that the waiting function is always $w(p) = 0$.
+The exact runtimes of the ORB can only be estimated when considering specific hardware components. In this section we will establish formulas for different possible variants, which can be used to leverage GPU acceleration. We will compare these with the multiprocessor CPU variant and finally draw a conclusion, which of the variants are worth implementing. 
 
-To analyse the runtime for the CPU we are using Equation \ref{eq:cpu}. For the analysis we make following assumptions:
+In order to have a clear terminology and understanding of a computing system, we will first describe the computing model of most modern high performance systems.
+
+A computing system consists of several nodes, where each node has one or more CPU`s and some additionally have one or more GPU`s. Both the CPU and the GPU have their own memory which are connected by a data link. The bandwidth of this link is called Memory Bandwidth. We name the capacity of the CPU Memory Bandwidth $B_{CPU}$ and the GPU Memory Bandwidth $B_{GPU}$. Furthermore we have a separate data link between the CPU and the GPU memory which is in some cases called PCI express, NVLink (for modern NVidia GPU`s) among others. We will referete to th ba $PCI$.
+
+\Q{Why does summit use NVLink for CPU -> GPU comm?}
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+			
+			\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = west,
+			fill = white,
+			align=center,
+			minimum width = 2cm, 
+			minimum height = 2cm] (cpu1) at (0cm,1.5cm) {CPU};
+			
+			\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = west,
+			fill = white,
+			align=center,
+			minimum width = 2cm, 
+			minimum height = 2cm] (cpu2) at (0cm,-1.5cm) {CPU};
+			
+			\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = west,
+			fill = white,
+			align=center,
+			minimum width = 2cm, 
+			minimum height = 2cm] (cpum1) at (-3cm,1.5cm) {CPU \\ Memory};
+			
+			\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = west,
+			fill = white,
+			align=center,
+			minimum width = 2cm, 
+			minimum height = 2cm] (cpum2) at (-3cm,-1.5cm) {CPU \\ Memory};
+			
+			\draw[dashed] (cpum1) to (cpu1);
+			\draw[dashed] (cpum2) to (cpu2);
+			\draw[dashed] (cpu1) to (cpu2);
+			
+			
+			\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = west,
+			fill = white,
+			align=center,
+			minimum width = 2cm, 
+			minimum height = 2cm] (gpu1) at (3cm,2.5cm) {GPU1};
+			
+			\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = west,
+			fill = white,
+			align=center,
+			minimum width = 2cm, 
+			minimum height = 2cm] (gpu2) at (3cm,0cm) {GPU2};
+			
+			\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = west,
+			fill = white,
+			align=center,
+			minimum width = 2cm, 
+			minimum height = 2cm] (gpu3) at (3cm,-2.5cm) {GPU3};
+			
+				\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = west,
+			fill = white,
+			align=center,
+			minimum width = 2cm, 
+			minimum height = 2cm] (gpum1) at (6cm,2.5cm) {GPU1 \\ Memory};
+			
+			\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = west,
+			fill = white,
+			align=center,
+			minimum width = 2cm, 
+			minimum height = 2cm] (gpum2) at (6cm,0cm) {GPU2 \\ Memory};
+			
+			\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = west,
+			fill = white,
+			align=center,
+			minimum width = 2cm, 
+			minimum height = 2cm] (gpum3) at (6cm,-2.5cm) {GPU3 \\ Memory};
+			
+			
+			\draw[dashed] (cpu1) to (gpu1);
+			\draw[dashed] (cpu2) to (gpu2);
+			\draw[dashed] (cpu1) to (cpu2);
+			
+		\end{tikzpicture}
+	\end{center}
+\end{figure}
+Furthermore we make the following assumption about the data:
 
 \begin{itemize}
 	\item
-	One particle consists of an X, Y and Z coordinate, each stored as a $p$ = 32 bit = 8bytes precision number. Thus the combined  XYZ coordinates require $4\times3 = 12$ bytes of storage.
+	$p = 32$ thus a single particle requires $3 \times 32bits = 96bits$ which is equivalent to $12Bytes$
 	
 	\item 
-	All particles are assumed to be stored in the CPU memory initially.
+	All particles are stored on the CPU memory initially.
 	
 	\item
-	We perform the analysis on one billion particles. This translates to $10^9 \times  12 bytes = 12 GB$. We refere to the size of the data as $s$.
+	We analyze one billipon particles, which translates to $10^9 \times  12 Bytes = 12 Gigabytes$. We refere to the size of the data as $s$.
 	
 \end{itemize}
 

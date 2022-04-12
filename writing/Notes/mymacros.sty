@@ -43,57 +43,7 @@
 	\bitbox{16}{#4} % print box with caption
 }
 
-%%% Parallel Processing Diagrams %%%
 
-% text, x start, x end, y pos
-\newcommand{\communication}[4]{
-	\node[rectangle,
-	draw = black,
-	text = black,
-	anchor = west,
-	fill = white,
-	align=center,
-	minimum width = #3 cm - #2 cm, 
-	minimum height = 0.5cm] (r) at (#2 cm - 0.5 cm,#4) {#1};
-}
-
-% text, x pos, y pos
-\newcommand{\process}[3]{
-	\node[rectangle,
-	draw = black,
-	text = black,
-	anchor = west,
-	fill = white,
-	align=center,
-	rotate=-90,
-	minimum width = 2 cm, 
-	minimum height = 0.5cm] (r) at (#2,#3) {#1};
-}
-
-% x size, y size, number of worker threads
-\newcommand{\timeline}[3] {
-	\draw [dashed](-2cm ,#2 cm) -- (#1 cm,#2 cm);
-	\node[xshift=-0.3cm] at (- 2cm, #2 cm) {$t_0$};
-	
-	\draw [dashed](- 2cm ,0cm) -- (#1 cm,0cm);
-	\node[xshift=-0.3cm] at (-2cm, 0 cm) {$t_n$};
-	 
-	\foreach \i in {0,...,#3}
-	{
-		\draw [line width=0.3mm, -stealth](#1 cm / #3 cm * \i cm,#2 cm) -- (#1 cm / #3 cm * \i cm,0 cm);
-		\node[yshift=0.5cm] at (#1 cm / #3 cm * \i cm,#2 cm) {p\i};
-	}
-}
-
-\newcommand{\parallelloop}[5]{
-	\draw [line width=0.5mm](#1 cm, #2 cm) -- (#3 cm, #2 cm);
-	\draw [line width=0.5mm](#3 cm, #2 cm) -- (#3 cm, #4 cm);
-	\draw [line width=0.5mm](#3 cm, #4 cm) -- (#1 cm, #4 cm);
-	\draw [line width=0.5mm, -stealth](#1 cm, #4 cm) -- (#1 cm, #2 cm);
-	
-	\node[xshift=0.3cm,  rotate=-90] at (#3 cm , #2 cm - 2cm) {#5};
-	
-}
 
 %%% OTHER %%
 \newcommand{\TODO}[1]{
@@ -103,7 +53,7 @@
 }
 
 \newcommand{\Q}[1]{
-	\color{green}
-	\textbf{TODO:} #1
+	\color{blue}
+	\textbf{QUESTION:} #1
 	\color{black}
 }
