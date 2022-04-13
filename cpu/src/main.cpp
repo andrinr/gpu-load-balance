@@ -5,6 +5,11 @@
 #include <blitz/array.h>   
 #include <chrono>
 using namespace std::chrono;
+
+float r01() {
+    return (float)(rand())/(float)(RAND_MAX);
+}
+
 int main(int argc, char** argv) {
     int rank, np;
     MPI_Init(&argc,&argv);
@@ -22,7 +27,7 @@ int main(int argc, char** argv) {
     srand(rank);
     for (int i = 0; i < p.rows(); i++) {
         for (int d = 0; d < DIMENSIONS; d++) {
-            p(i,d) = (float)rand()/(float)(RAND_MAX) - 0.5;
+            p(i,d) = (r01()-0.5)*(r01()-0.5);
         }
         p(i,3) = 0.;
     }
@@ -45,7 +50,7 @@ int main(int argc, char** argv) {
 
     std::fstream file( "../data/splitted" + std::to_string(rank) + ".dat", std::fstream::out);
    
-    for (int i = 0; i < N; i++){
+    for (int i = 0; i < N; i += 16){
         file << p(i,0) << "\t" << p(i,1) << "\t" << p(i,2) << "\t" << p(i,3) << std::endl;
     }
 
