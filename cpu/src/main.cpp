@@ -2,7 +2,8 @@
 #include "Orb.h"
 #include "constants.h"
 #include <blitz/array.h>   
-
+#include <chrono>
+using namespace std::chrono;
 int main(int argc, char** argv) {
     int rank, np;
     MPI_Init(&argc,&argv);
@@ -32,7 +33,12 @@ int main(int argc, char** argv) {
 
     printf("Build ORB... \n");
 
+
+    auto start = high_resolution_clock::now();
     orb.build(p);
+    auto stop = high_resolution_clock::now();
+    auto duration = duration_cast<microseconds>(stop - start);
+    std::cout << "duration: " << duration.count() / 1000 << " ms" << std::endl;
 
     printf("Done.\n");       
 

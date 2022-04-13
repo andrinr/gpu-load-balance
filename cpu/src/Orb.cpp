@@ -81,41 +81,33 @@ float Orb::findCut(Cell &cell, int axis, int begin, int end) {
     
     MPI_Reduce(&l_rows, &g_rows, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
-    std::cout << g_rows << std::endl;
     int half = (end - begin) / 2;
 
     int searchingCut = 1;
 
     float cut;
     int g_count;
-    for (int i = 0; i < PRECISION; i++) {
+    int i = 0;
+    while(true) {
 
-        cut = (right + left) / 2.0;
-
-        std::cout << "op reached 3" << std::endl;
-
-        MPI_Bcast(&cut, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
-
-        std::cout << "op reached 4" << std::endl;
-
-        int l_count = count(axis, begin, end, cut);
-
-        std::cout << l_count << std::endl;
-        g_count = 0;
-        MPI_Reduce(&l_count, &g_count, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-
-        std::cout << "op reached 5" << std::endl;
-
-
-        std::cout << "op " << cut << " count " << g_count << std::endl;
-
-        if (abs(g_count - half) < 1000) {
+        if (abs(g_count - half) < 1000 || i++ == PRECISION) {
             searchingCut = 0;
-            MPI_Bcast(&searchingCut, 1, MPI_INT, 0, MPI_COMM_WORLD);
-            break;
         }
 
         MPI_Bcast(&searchingCut, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+        if (searchingCut == 0) {
+            break;
+        }
+
+        cut = (right + left) / 2.0;
+
+        MPI_Bcast(&cut, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
+
+        int l_count = count(axis, begin, end, cut);
+
+        g_count = 0;
+        MPI_Reduce(&l_count, &g_count, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
         if (l_count > half) {
             right = cut;
@@ -148,7 +140,17 @@ void Orb::operative() {
 
     int buildingTree = 1;
 
-    while (!stack.empty()) {
+    while (true) {
+        if (stack.empty()) {
+            buildingTree = 0;
+        }
+
+        MPI_Bcast(&buildingTree, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+        if (buildingTree == 0) {
+            break;
+        }
+
         int id = stack.top();
         stack.pop();
 
@@ -157,14 +159,9 @@ void Orb::operative() {
         int begin = cellBegin[id];
         int end = cellEnd[id];
 
-        if (end - begin <= (float) (*particles).rows() / DOMAIN_COUNT) {
-            continue;
-        }
-
         cell.leftChildId = cells.size();
 
-        MPI_Bcast(&buildingTree, 1, MPI_INT, 0, MPI_COMM_WORLD);
-        MPI_Bcast(&cells[id], 1, MPI_CELL, 0, MPI_COMM_WORLD);
+        MPI_Bcast(&cell, 1, MPI_CELL, 0, MPI_COMM_WORLD);
 
         float maxValue = 0;
         int axis = 0;
@@ -177,11 +174,7 @@ void Orb::operative() {
             }
         }
 
-        std::cout << "op reached" << std::endl;
-
         MPI_Bcast(&axis, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
-        std::cout << "op reached 2" << std::endl;
 
         float cut = findCut(cell, axis, begin, end);
         std::cout << "Operative: Found cut at " << cut << " on axis " << axis << std::endl;
@@ -193,7 +186,10 @@ void Orb::operative() {
         cellEnd.push_back(mid);
 
         leftChild.upper[axis] = cut;
-        stack.push(cells.size());
+
+        if (mid - begin > (*particles).rows() / DOMAIN_COUNT) {
+            stack.push(cells.size());
+        }
         cells.push_back(leftChild);
 
         Cell rightChild (cells.size(), -1, cell.lower, cell.upper);
@@ -202,12 +198,13 @@ void Orb::operative() {
         cellEnd.push_back(end);
 
         rightChild.lower[axis] = cut;
-        stack.push(cells.size());
+
+        if (end - mid > (*particles).rows() / DOMAIN_COUNT) {
+            stack.push(cells.size());
+        }
+
         cells.push_back(rightChild);
     }
-
-    buildingTree = 0;
-    MPI_Bcast(&buildingTree, 1, MPI_INT, 0, MPI_COMM_WORLD);
 }
 
 void Orb::worker() {
@@ -222,10 +219,16 @@ void Orb::worker() {
         -1, -1, lower, upper
     );
 
-    MPI_Bcast(&buildingTree, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(&cell, 1, MPI_CELL, 0, MPI_COMM_WORLD);
+    while(true) {
 
-    while(buildingTree == 1) {
+        MPI_Bcast(&buildingTree, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+        if (buildingTree == 0) {
+            break;
+        }
+
+        MPI_Bcast(&cell, 1, MPI_CELL, 0, MPI_COMM_WORLD);
+
         float cut;
         int begin = cellBegin[cell.id];
         int end = cellEnd[cell.id];
@@ -234,25 +237,22 @@ void Orb::worker() {
 
         MPI_Bcast(&axis, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-        std::cout << "worker " << axis << std::endl;
-
         int l_rows = end - begin;
         MPI_Reduce(&l_rows, NULL, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
-        while(searchingCut == 1) {
+        while(true) {
+
+            MPI_Bcast(&searchingCut, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+            if (searchingCut == 0) {
+                break;
+            }
 
             MPI_Bcast(&cut, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
             int l_count = count(axis, begin, end, cut);
-            std::cout << "w reached 1 " << l_count <<  std::endl;
 
             MPI_Reduce(&l_count, NULL, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-
-            std::cout << "w reached 2" << std::endl;
-
-            MPI_Bcast(&searchingCut, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
-            std::cout << "w reached 3" << std::endl;
         }
 
         int mid = reshuffleArray(axis, begin, end, cut);
@@ -260,11 +260,5 @@ void Orb::worker() {
         cellEnd.push_back(mid);
         cellBegin.push_back(mid);
         cellEnd.push_back(end);
-     
-        MPI_Bcast(&buildingTree, 1, MPI_INT, 0, MPI_COMM_WORLD);
-        if (buildingTree == 0){
-            break;
-        }
-        MPI_Bcast(&cell, 1, MPI_CELL, 0, MPI_COMM_WORLD);
     }
 }
