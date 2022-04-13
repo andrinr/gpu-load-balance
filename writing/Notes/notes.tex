@@ -73,9 +73,9 @@ The target data consists of $N$ particles where each particle has several data p
 
 \begin{itemize}
 	\item We define a particle as $p_i$  where $i \in \{0,...,N\}$. 
-	\item We define the space of binary numbers with a precision of $p$ as $\mathbb{B}_p = \{0,1\}^{p}$
-	\item We define the size of the spatial domain with $\vec{b}$ where we have $\vec{b} \in \mathbb{B}_p^3$. 
-	\item We define the coordinates of a particle $p_i$ as $\vec{x_i}$ for which holds $\{\vec{x} | -\frac{\vec{b}}{2} < \vec{x} < \frac{\vec{b}}{2}, \vec{x} \in \mathbb{B}_p^3 \}$.
+	\item We define the space of binary numbers with a precision of $p$ as $\mathbb{B}_p$ where we have $a \in \mathbb{B}_p \Leftrightarrow a \in \{0,1\}^{p}$
+	\item We define the corner coordinates of the boundary box with $\vec{lower}, \vec{upper}$ where we have $\vec{b} \in \mathbb{B}_p^3$. 
+	\item We define the coordinates of a particle $p_i$ as $\vec{x_i}$ for which holds $\{\vec{x} | \vec{lower} \leq \vec{x} \leq \vec{upper}, \vec{x} \in \mathbb{B}_p^3 \}$.
 
 \end{itemize}
 
@@ -329,7 +329,7 @@ Since $d_{i \times 2 + 1} - d_{i \times 2 }$ must always be $\leq 1$, it must ho
 \begin{algorithm}[H]
 	\caption{The ORB main routine}\label{euclid}
 	\begin{algorithmic}[1]
-		\Procedure{orb}{$\vec{lower}, \vec{upper} ,x, d$}
+		\Procedure{orb}{$\vec{lower}, \vec{upper} ,x, d_i$}
 		\State $\vec{size} = \vec{upper} - \vec{lower}$
 		\State $axis = maxIndex(\vec{size}_0, \vec{size}_1, \vec{size}_2)$ \Comment{Get index of max value}
 		\newline
@@ -338,8 +338,13 @@ Since $d_{i \times 2 + 1} - d_{i \times 2 }$ must always be $\leq 1$, it must ho
 		\State $mid = reshuffle(split, axis, x)$
 		\newline
 		
-		\TODO{Finish this}
-		\State \Call {orb}{cornerA, cornerB}
+		\State $\vec{upperChild} = \vec{upper}$
+		\State $upperChild_{axis} = cut$
+		\State $\vec{lowerChild} = \vec{lower}$
+		\State $lowerChild_{axis} = cut$
+		\State $d_{i \times 2 } = \left \lceil\frac{d_{i}}{2} \right \rceil$
+
+		\State \Call {orb}{$\vec{lower}, \vec{upperChild}, $}
 		\EndProcedure
 	\end{algorithmic}
 \end{algorithm}
@@ -492,9 +497,9 @@ The reshuffle algorithm has a clearly observable runtime of $O(N)$ since we iter
 \newpage
 \section{Theoretical Analysis of ORB runtime}
 
-The exact runtimes of the ORB can only be estimated when considering specific hardware components. In this section we will establish formulas for different possible variants, which can be used to leverage GPU acceleration. We will compare these with the multiprocessor CPU variant and finally draw a conclusion, which of the variants are worth implementing. 
+The nature of the ORB algorithm and its application with very large data-sizes, requires that we consider hardware for concrete implementation details. Since we do not have the time to empirically measure all viable option, we try to create a theoretical model. The algorithm is generally very heavy in memory access, but its operations are extremely simple. Therefore we need to consider not only benefits from increased parallelism in GPU hardware, but also possible speed-ups reached by generally higher bandwidths for GPU memory than CPU memory. On the other hand we need to mitigate the very low bandwidths between the GPU and CPU, which cannot be avoided altogether, as the data needs to be sent from the CPU to GPU before we can process it on the graphics processor.
 
-In order to have a clear terminology and understanding of a computing system, we will first describe the computing model of most modern high performance systems.
+In order to have a clear terminology and understanding of a computing system, we will briefly describe a general computer model which can be applied to most modern high performance systems.
 
 A computing system consists of several nodes, where each node has one or more CPU`s and some additionally have one or more GPU`s. Both the CPU and the GPU have their own memory which are connected by a data link. The bandwidth of this link is called Memory Bandwidth. We name the capacity of the CPU Memory Bandwidth $B_{CPU}$ and the GPU Memory Bandwidth $B_{GPU}$. Furthermore we have a separate data link between the CPU and the GPU memory which is in some cases called PCI express, NVLink (for modern NVidia GPU`s) among others. We will referete to th ba $PCI$.
 
@@ -607,19 +612,9 @@ A computing system consists of several nodes, where each node has one or more CP
 		\end{tikzpicture}
 	\end{center}
 \end{figure}
-Furthermore we make the following assumption about the data:
 
-\begin{itemize}
-	\item
-	$p = 32$ thus a single particle requires $3 \times 32bits = 96bits$ which is equivalent to $12Bytes$
-	
-	\item 
-	All particles are stored on the CPU memory initially.
-	
-	\item
-	We analyze one billipon particles, which translates to $10^9 \times  12 Bytes = 12 Gigabytes$. We refere to the size of the data as $s$.
-	
-\end{itemize}
+We now sketch out various implementation ideas, derive for each a formula to estimate its runtime and finally insert datapoints from our target computing systems.
+We assume that the data is stored in the CPU memory initially and we define the size of the data as $s$.
 
 \TODO{Find tflops}
 
