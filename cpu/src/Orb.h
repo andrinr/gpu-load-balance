@@ -24,8 +24,9 @@ private:
     int np;
     
     void swap(int a, int b);
+    void assign(int begin, int end, int id);
     int reshuffleArray(int axis, int begin, int end, float split);
-    int count(int axis, int start, int end, float cut);
+    int count(int axis, int start, int end, float cut, int stride);
     float findCut(Cell &cell, int axis, int begin, int end);
     void operative();
     void worker();

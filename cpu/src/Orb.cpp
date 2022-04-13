@@ -38,6 +38,12 @@ void Orb::build(blitz::Array<float, 2> &p) {
     }
 }
 
+void Orb::assign(int begin, int end, int id) {
+    for (int j = begin; j < end; j++) {
+        (*particles)(j, 3) = id;
+    }
+}
+
 int Orb::reshuffleArray(int axis, int begin, int end, float cut) {
     int i = begin;
 
@@ -54,17 +60,17 @@ int Orb::reshuffleArray(int axis, int begin, int end, float cut) {
 }
 
 void Orb::swap(int a, int b) {
-    for (int d = 0; d < DIMENSIONS; d++) {
+    for (int d = 0; d < DIMENSIONS + 1; d++) {
         float tmp = (*particles)(a, d);
         (*particles)(a, d) = (*particles)(b, d);
         (*particles)(b, d) = tmp;
     }
 }
 
-int Orb::count(int axis, int begin, int end, float split) {
+int Orb::count(int axis, int begin, int end, float split, int stride) {
     int nLeft = 0;
 
-    for (int j = begin; j < end; j++) {
+    for (int j = begin; j < end; j += stride) {
         nLeft += (*particles)(j, axis) < split;
     }
 
@@ -81,8 +87,6 @@ float Orb::findCut(Cell &cell, int axis, int begin, int end) {
     
     MPI_Reduce(&l_rows, &g_rows, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
-    int half = (end - begin) / 2;
-
     int searchingCut = 1;
 
     float cut;
@@ -90,9 +94,11 @@ float Orb::findCut(Cell &cell, int axis, int begin, int end) {
     int i = 0;
     while(true) {
 
-        if (abs(g_count - half) < 1000 || i++ == PRECISION) {
+        if (abs(g_count - g_rows / 2) < 16 || i++ == PRECISION) {
             searchingCut = 0;
         }
+
+        std::cout << i << " " << abs(g_count - g_rows / 2) << std::endl;
 
         MPI_Bcast(&searchingCut, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
@@ -104,12 +110,12 @@ float Orb::findCut(Cell &cell, int axis, int begin, int end) {
 
         MPI_Bcast(&cut, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
-        int l_count = count(axis, begin, end, cut);
+        int l_count = count(axis, begin, end, cut, 1);
 
         g_count = 0;
         MPI_Reduce(&l_count, &g_count, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
-        if (l_count > half) {
+        if (g_count > g_rows / 2) {
             right = cut;
         } else {
             left = cut; 
@@ -177,13 +183,13 @@ void Orb::operative() {
         MPI_Bcast(&axis, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
         float cut = findCut(cell, axis, begin, end);
-        std::cout << "Operative: Found cut at " << cut << " on axis " << axis << std::endl;
         int mid = reshuffleArray(axis, begin, end, cut);
 
         Cell leftChild (cells.size(), -1, cell.lower, cell.upper);
         
         cellBegin.push_back(begin);
         cellEnd.push_back(mid);
+        assign(begin, mid, cells.size());
 
         leftChild.upper[axis] = cut;
 
@@ -196,6 +202,7 @@ void Orb::operative() {
 
         cellBegin.push_back(mid);
         cellEnd.push_back(end);
+        assign(mid, end, cells.size());
 
         rightChild.lower[axis] = cut;
 
@@ -250,7 +257,7 @@ void Orb::worker() {
 
             MPI_Bcast(&cut, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
-            int l_count = count(axis, begin, end, cut);
+            int l_count = count(axis, begin, end, cut, 1);
 
             MPI_Reduce(&l_count, NULL, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
         }
@@ -258,7 +265,9 @@ void Orb::worker() {
         int mid = reshuffleArray(axis, begin, end, cut);
         cellBegin.push_back(begin);
         cellEnd.push_back(mid);
+        assign(begin, mid, cell.leftChildId);
         cellBegin.push_back(mid);
         cellEnd.push_back(end);
+        assign(mid, end, cell.leftChildId + 1);
     }
 }
