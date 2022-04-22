@@ -21,4 +21,3 @@ Or run gdb on only one process:
 
 ## Run
 ``mpirun -np <x> build/final_program``
-

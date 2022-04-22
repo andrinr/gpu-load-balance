@@ -115,6 +115,7 @@ float Orb::findCut(Cell &cell, int axis, int begin, int end) {
         g_count = 0;
         MPI_Reduce(&l_count, &g_count, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
+        float offset = (g_count - g_rows / 2.0) / g_rows * (cell.upper[axis] - cell.lower[axis]);
         if (g_count > g_rows / 2) {
             right = cut;
         } else {
