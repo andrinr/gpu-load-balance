@@ -518,7 +518,7 @@ A computing system consists of several nodes, where each node has one or more CP
 			fill = white,
 			align=center,
 			minimum width = 2cm, 
-			minimum height = 2cm] (cpu1) at (0cm,1.5cm) {CPU};
+			minimum height = 1.5cm] (cpu1) at (0cm,1.5cm) {CPU1};
 			
 			\node[rectangle,
 			draw = black,
@@ -527,7 +527,7 @@ A computing system consists of several nodes, where each node has one or more CP
 			fill = white,
 			align=center,
 			minimum width = 2cm, 
-			minimum height = 2cm] (cpu2) at (0cm,-1.5cm) {CPU};
+			minimum height = 1.5cm] (cpu2) at (0cm,-1.5cm) {CPU2};
 			
 			\node[rectangle,
 			draw = black,
@@ -536,7 +536,7 @@ A computing system consists of several nodes, where each node has one or more CP
 			fill = white,
 			align=center,
 			minimum width = 2cm, 
-			minimum height = 2cm] (cpum1) at (-3cm,1.5cm) {CPU \\ Memory};
+			minimum height = 1.5cm] (cpum1) at (-3cm,1.5cm) {CPU1 \\ Memory};
 			
 			\node[rectangle,
 			draw = black,
@@ -545,11 +545,7 @@ A computing system consists of several nodes, where each node has one or more CP
 			fill = white,
 			align=center,
 			minimum width = 2cm, 
-			minimum height = 2cm] (cpum2) at (-3cm,-1.5cm) {CPU \\ Memory};
-			
-			\draw[dashed] (cpum1) to (cpu1);
-			\draw[dashed] (cpum2) to (cpu2);
-			\draw[dashed] (cpu1) to (cpu2);
+			minimum height = 1.5cm] (cpum2) at (-3cm,-1.5cm) {CPU2 \\ Memory};
 			
 			
 			\node[rectangle,
@@ -559,7 +555,7 @@ A computing system consists of several nodes, where each node has one or more CP
 			fill = white,
 			align=center,
 			minimum width = 2cm, 
-			minimum height = 2cm] (gpu1) at (3cm,2.5cm) {GPU1};
+			minimum height = 1.5cm] (gpu1) at (4cm,4cm) {GPU1};
 			
 			\node[rectangle,
 			draw = black,
@@ -568,7 +564,7 @@ A computing system consists of several nodes, where each node has one or more CP
 			fill = white,
 			align=center,
 			minimum width = 2cm, 
-			minimum height = 2cm] (gpu2) at (3cm,0cm) {GPU2};
+			minimum height = 1.5cm] (gpu2) at (4cm,1cm) {GPU2};
 			
 			\node[rectangle,
 			draw = black,
@@ -577,7 +573,25 @@ A computing system consists of several nodes, where each node has one or more CP
 			fill = white,
 			align=center,
 			minimum width = 2cm, 
-			minimum height = 2cm] (gpu3) at (3cm,-2.5cm) {GPU3};
+			minimum height = 1.5cm] (gpu3) at (4cm,-1cm) {GPU3};
+			
+					\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = west,
+			fill = white,
+			align=center,
+			minimum width = 2cm, 
+			minimum height = 1.5cm] (gpu4) at (4cm,-4cm) {GPU4};
+			
+							\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = west,
+			fill = white,
+			align=center,
+			minimum width = 2cm, 
+			minimum height = 1.5cm] (gpum1) at (7cm,4cm) {GPU1 \\ Memory};
 			
 				\node[rectangle,
 			draw = black,
@@ -586,7 +600,7 @@ A computing system consists of several nodes, where each node has one or more CP
 			fill = white,
 			align=center,
 			minimum width = 2cm, 
-			minimum height = 2cm] (gpum1) at (6cm,2.5cm) {GPU1 \\ Memory};
+			minimum height = 1.5cm] (gpum2) at (7cm,1cm) {GPU2 \\ Memory};
 			
 			\node[rectangle,
 			draw = black,
@@ -595,7 +609,7 @@ A computing system consists of several nodes, where each node has one or more CP
 			fill = white,
 			align=center,
 			minimum width = 2cm, 
-			minimum height = 2cm] (gpum2) at (6cm,0cm) {GPU2 \\ Memory};
+			minimum height = 1.5cm] (gpum3) at (7cm,-1cm) {GPU3 \\ Memory};
 			
 			\node[rectangle,
 			draw = black,
@@ -604,12 +618,53 @@ A computing system consists of several nodes, where each node has one or more CP
 			fill = white,
 			align=center,
 			minimum width = 2cm, 
-			minimum height = 2cm] (gpum3) at (6cm,-2.5cm) {GPU3 \\ Memory};
+			minimum height = 1.5cm] (gpum4) at (7cm,-4cm) {GPU4 \\ Memory};
+		
+			
+			\draw[red, very thick, stealth-stealth] (cpum1) to (cpu1);
+			\draw[red, very thick, stealth-stealth] (cpum2) to (cpu2);
+			\draw[red, double, very thick, stealth-stealth] (cpu1) to (cpu2);
 			
 			
-			\draw[dashed] (cpu1) to (gpu1);
-			\draw[dashed] (cpu2) to (gpu2);
-			\draw[dashed] (cpu1) to (cpu2);
+			\draw[orange, dashed, very thick, stealth-stealth] (cpu1) to (gpu1);
+			\draw[orange, dashed, very thick, stealth-stealth] (cpu1) to (gpu2);
+			\draw[orange, dashed, very thick, stealth-stealth] (cpu2) to (gpu3);
+			\draw[orange, dashed, very thick, stealth-stealth] (cpu2) to (gpu4);
+			
+			\draw[cyan, very thick, stealth-stealth] (gpum1) to (gpu1);
+			\draw[cyan, very thick, stealth-stealth] (gpum2) to (gpu2);
+			\draw[cyan, very thick, stealth-stealth] (gpum3) to (gpu3);
+			\draw[cyan, very thick, stealth-stealth] (gpum4) to (gpu4);
+			
+			\draw[cyan, double, very thick, stealth-stealth] (gpu1) to (gpu2);
+			\draw[cyan, double, very thick, stealth-stealth] (gpu3) to (gpu4);
+			
+			
+			\node(al) at (-2cm, -3.5cm) {};
+			\node (ar) at (-3cm, -3.5cm) {};
+			\node[align=left] () at (0.5cm, -3.5cm) {CPU Mem Bandwidth, $B_{C}$};
+			\draw[red, very thick, stealth-stealth] (al) to (ar);
+			
+			\node(al) at (-2cm, -4cm) {};
+			\node (ar) at (-3cm, -4cm) {};
+			\node[align=left] () at (0.5cm, -4cm) {GPU Mem Bandwidth, $B_{G}$};
+			\draw[cyan, very thick, stealth-stealth] (al) to (ar);
+			
+			\node (bl) at (-2cm, -4.5cm) {};
+			\node (br) at (-3cm, -4.5cm) {};
+			\node[align=left] () at (0.5cm, -4.5cm) { CPU-CPU Interconnect, $I_{CC}$};
+			\draw[red, double, very thick, stealth-stealth] (bl) to (br);
+			
+			\node (cl) at (-2cm, -5cm) {};
+			\node (cr) at (-3cm, -5cm) {};
+			\node[align=left] () at (0.5cm, -5cm) { GPU-CPU Interconnect, $I_{GC}$};
+			\draw[orange, dashed, very thick, stealth-stealth] (cl) to (cr);
+			
+			\node (dl) at (-2cm, -5.5cm) {};
+			\node (dr) at (-3cm, -5.5cm) {};
+			\node[align=left] () at (0.5cm, -5.5cm) { GPU-GPU Interconnect, $I_{GG}$};
+			\draw[cyan, double, very thick, stealth-stealth] (dl) to (dr);
+			
 			
 		\end{tikzpicture}
 	\end{center}
@@ -637,7 +692,7 @@ Let us assume a CPU with a clock speed of $cps$ per second.
 
 \begin{center}
 	\begin{equation}
-			p \times \frac{ s }{B_{CPU}} = t
+			p \times \frac{ s }{B_{C}} = t
 			\label{eq:cpu}
 	\end{equation}
 \end{center}
@@ -645,11 +700,11 @@ Let us assume a CPU with a clock speed of $cps$ per second.
 \vspace{5mm}
 
 
-The Equation \ref{eq:gpu} for the GPU is similar, the only difference being that we use the GPU memory bandwidth $B_{GPU}$ instead of the CPU bandwidth. Furthermore we have to consider the time it takes to send the data from the CPU to the GPU. This adds the terms size divided by CPU to GPU memory bandwidth denoted as $I$. Finally we also need to load the data from the CPU memory to the CPU before we are able to send it. 
+The Equation \ref{eq:gpu} for the GPU is similar, the only difference being that we use the GPU memory bandwidth $B_{GPU}$ instead of the CPU bandwidth. Furthermore we have to consider the time it takes to send the data from the CPU to the GPU. This adds the terms size divided by CPU to GPU memory bandwidth denoted as $I_{GC}$. Finally we also need to load the data from the CPU memory to the CPU before we are able to send it. 
 
 \begin{center}
 	\begin{equation}
-		p \times \frac{s}{B_{GPU}} + \frac{s}{I}  + \frac{s}{B_{CPU}}= t
+		p \times \frac{s}{B_{G}} + \frac{s}{I_{GC}}  + \frac{s}{B_{C}}= t
 		\label{eq:gpu}
 	\end{equation}
 \end{center}
@@ -665,14 +720,14 @@ Let us now consider an alternative way of computing binary cuts. We will build p
 \TODO{its log(d)}
 \begin{center}
 	\begin{equation}
-		log(d) \times p \times \frac{s}{B_{CPU}} = t
+		log(d) \times p \times \frac{s}{B_{C}} = t
 		\label{eq:cputree}
 	\end{equation}
 \end{center}
 
 \begin{center}
 	\begin{equation}
-		log(d) \times p \times \frac{s}{B_{GPU}} + 2 \times \frac{s}{I} = t
+		log(d) \times p \times \frac{s}{B_{G}} + 2 \times \frac{s}{I_{GC}} = t
 		\label{eq:gputree}
 	\end{equation}
 \end{center}
@@ -680,11 +735,11 @@ Let us now consider an alternative way of computing binary cuts. We will build p
 
 \subsubsection{Batch loading}
 
-Finally we can also try to mitigate the overheads introduced by CPU to GPU communication by sending small batches, such that the GPU can already start processing the data, before the data transfer was completed. Lets denote the number of batches by $b$. For the sake of simplicity we only make a single cut and thus can reuse Equation \ref{eq:cpu} for the CPU version. For the GPU we now omit the term for memory access from the GPU. Because we can already start processing data in parallel when the first batch arrived and $B_{GPU} > I$ holds for every modern hardware. Thus the only overhead we still get is $\frac{s \div b}{B_{GPU}}$ for the very last batch, but as we can just increase b in relation to N, this becomes negligible. Note that this only counts for the very first iteration, thus the only difference we have is the constant of 31 and not 32. 
+Finally we can also try to mitigate the overheads introduced by CPU to GPU communication by sending small batches, such that the GPU can already start processing the data, before the data transfer was completed. Lets denote the number of batches by $b$. For the sake of simplicity we only make a single cut and thus can reuse Equation \ref{eq:cpu} for the CPU version. For the GPU we now omit the term for memory access from the GPU. Because we can already start processing data in parallel when the first batch arrived and $B_{G} > I_{GC}$ holds for every modern hardware. Thus the only overhead we still get is $\frac{s \div b}{B_{G}}$ for the very last batch, but as we can just increase b in relation to N, this becomes negligible. Note that this only counts for the very first iteration, thus the only difference we have is the constant of 31 and not 32. 
 
 \begin{center}
 	\begin{equation}
-		(d-1) \times p \times \frac{s}{B_{GPU}} + 2 \times \frac{s}{I} = t
+		(d-1) \times p \times \frac{s}{B_{G}} + 2 \times \frac{s}{I_{GC}} = t
 		\label{eq:gpubatch}
 	\end{equation}
 \end{center}
