@@ -120,15 +120,18 @@ Non equal weighting functions for different particles are due to higher accelera
 In this section we will introduce the ORB algorithm along with subroutines. We will use the concept of binary trees and in order to have clear understanding of steps of the algorithm, we will use the following terminologies: 
 
 \begin{itemize}
-	\item The left child of a node with index $i$ has the index $2\times i$. 
+	\begin{comment}
+		\item The left child of a node with index $i$ has the index $2\times i$. 
 	\item The right child of a node with index $i$ has the index $i*2 + 1$. 
 	\item The parent of a node with index $i$ has the index $\lfloor \frac{i}{2} \rfloor$. 
 	\item The root node has the index $i$.
+	\end{comment}
+
 	\item The domain of a node is the area it compasses. 
 \end{itemize}
 
 
-In principle the ORB Algorithm is used to partition a multi dimensional domain into subdomains based on spatial proximity. It does so by splitting a $k$ dimensional domain containing $N$ particles into $d$ subdomains using a recursive procedure. During the recursive process, we store all intermediate domains a binary tree. We can leverage the resulting binary in two ways:
+In principle the ORB Algorithm is used to partition a multi dimensional domain into subdomains based on spatial proximity. It does so by splitting a $k$ dimensional domain containing $N$ particles into $d$  subdomains each of $k$ dimensions. This is most efficiently achieved using a recursive algorithm. During the recursive process, we store all intermediate domains a binary tree. We can leverage the resulting binary in two ways:
 
 \begin{enumerate}
 	\item For simulation code and more specifically for the Fast Multipole Method the tree can be leveraged to greatly accelerate the simulation time. \TODO{expand}
@@ -140,7 +143,7 @@ Our main objective in this work is to improve the runtime of astrophysical simul
 \subsection{Memory and Workload Balancing}\label{sec:balancing}
 We have now formulated our main objectives for improving ORB, which are to improve the runtime but at the same time keeping $N$ as large as possible. In this section we will explain how the two cannot be maximized at the same time, as there will we averse effects when disregarding interactions. 
 
-As described in section \ref{section:force-integration} if we want to mitigate the error across all particles, we need to introduce more discrete time steps for certain particles than for others. This clearly translate to an increased workload for a particle $p_i$, to which we will refer to it as the weighting function $w(p_i)$. Thus we have an unbalanced weight among particles. In an optimally parallelized system the workload should be very similar among computing units, thus it would make sense to distribute the particles as such. This in turn implies that the particles are distributed unequal with regards to memory.  
+As described in section \ref{section:force-integration} if we want to mitigate the error across all particles, we need to introduce more discrete time steps for certain particles than for others. The need for non constant simulations steps across the simulation, is the vastly variant forces which are exercised on different particles. It is possible that certain particles follow a straight path with an almost constant velocity, whereas others are influences by strong gravitational poles. We denote the increased workload for a particle $p_i$ as the weighting function $w(p_i)$. In an optimally parallelized system the workload should be very similar among computing units, thus it would make sense to distribute the particles as such. This in turn implies that the particles are distributed unequal with regards to memory.  
 
 Let us consider a simple example to illustrate the point. Given the set of particles $A = {p_1, p_2, .., p_{2N/3}}$ and respectively $B = {p_{2N/3 + 1}, p_2, .., p_{N}}$. Let us now consider the that $\forall p \in A : w(p) = 1$ and $\forall p \in B : w(p) = 2$. If we assign all particles from set $A$ to process with rank 0 and the particles from B to rank 1. It is clear that $\sum_{p\in A}^{} w(p) = \sum_{p\in B}^{} w(p)$. Thus the two processors are balanced in terms of computing costs, but clearly they are not balanced in terms of memory size. In fact process with rank 0 has $2N/3$ elements and rank 1 has $N/3$ elements. Thus there will be processes with free memory capacity which are not taken advantage of. This in turn means that we need to reduce the total number of particles $N$. 
 
@@ -149,12 +152,12 @@ To which degree we decide to favour memory over workload balancing is difficult 
 
 \subsection{ORB for power of twos}
 
-To simplify the visual explanation of the ORB algorithm, we will assume $\forall i \in \{0,..,N\} : w(p_i) = 1$.
-Let us consider the cases where $d$ is a power of two. For the sake clarity we introduce recursive variants for variables $d$ and $N$ as $d_j$ and $N_j$ where $j$ is the index of the corresponding node. This translate to the number of particles conatined in the domain of $node_j$ Since the root node has index $1$ we anchor the recursive definition with $d_1 = d$ and $N_1 = N$. We then recursively define $d_j$ as:
+To simplify the visual explanation of the ORB algorithm, we assume $\forall i \in \{0,..,N\} : w(p_i) = 1$.
+Let us consider the cases where $d$ is a power of two. It is then very easy to define the number desired cells for the left and the right side. Note that this is a recursive defintion, where $d$ is the desired number of cells for the current node.
 
 \begin{center}
 	\begin{equation}
-		d_{j \times 2 } = d_{j \times 2 + 1} = \frac{d_{j}}{2}
+		d_{left} = d_{right} = \frac{d}{2}
 	\end{equation}
 \end{center}
 
@@ -162,7 +165,7 @@ And $N_i$ as:
 
 \begin{center}
 	\begin{equation}
-		N_{j \times 2} = N_{j \times 2 + 1} = \left \lceil \frac{ d_{j \times 2} }{d_{j}} \times N_j \right \rceil
+		N_{left} = N_{right} = \left \lceil \frac{ d_{j \times 2} }{d_{j}} \times N \right \rceil
 	\end{equation}
 \end{center}
 
@@ -249,13 +252,13 @@ In this case we define $d_i$ as:
 
 \begin{center}
 	\begin{equation}
-		d_{i \times 2 } = \left \lceil\frac{d_{i}}{2} \right \rceil 
+		d_{left} = \left \lceil\frac{d}{2} \right \rceil 
 	\end{equation}
 \end{center}
 
 \begin{center}
 	\begin{equation}
-		d_{i \times 2  + 1} = d_i - d_{i \times 2 }
+		d_{right} = d - d_{left}
 	\end{equation}
 \end{center}
 
@@ -263,13 +266,13 @@ And $N_i$ as:
 
 \begin{center}
 	\begin{equation}
-		N_{i \times 2} = \left \lceil \frac{ d_{i \times 2} }{d_{i}} \times N_i \right \rceil 
+		N_{left} = \left \lceil \frac{ d_{left} }{d} \times N \right \rceil 
 	\end{equation}
 \end{center}
 
 \begin{center}
 	\begin{equation}
-		N_{i \times 2 + 1} = N_i - N_{i \times 2}
+		N_{riht} = N - N_{left}
 	\end{equation}
 \end{center}
 
@@ -343,8 +346,7 @@ Since $d_{i \times 2 + 1} - d_{i \times 2 }$ must always be $\leq 1$, it must ho
 		\State $\vec{lowerChild} = \vec{lower}$
 		\State $lowerChild_{axis} = cut$
 		\State $d_{i \times 2 } = \left \lceil\frac{d_{i}}{2} \right \rceil$
-
-		\State \Call {orb}{$\vec{lower}, \vec{upperChild}, x, _$}
+		\State \Call{orb}{$\vec{lower}, \vec{upperChild}, x, $}
 		\EndProcedure
 	\end{algorithmic}
 \end{algorithm}
