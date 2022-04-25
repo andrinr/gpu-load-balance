@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <filesystem>
 #include "Orb.h"
 #include "constants.h"
 #include <blitz/array.h>   
@@ -53,15 +54,23 @@ int main(int argc, char** argv) {
     auto duration = duration_cast<microseconds>(stop - start);
     std::cout << "Process " << rank << " duration: " << duration.count() / 1000 << " ms" << std::endl;
 
-    int l_count = duration.count();
-    int g_count;
+    int l_duration = duration.count() / 1000.0;
+    int g_duration;
 
-    MPI_Reduce(&l_count, &g_count, 1, MPI_INT, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&l_duration, &g_duration, 1, MPI_INT, MPI_MAX, 0, MPI_COMM_WORLD);
     printf("Done.\n");       
 
     if (rank == 0){
-        std::fstream file( "/out/measurements.csv", std::fstream::in | std::fstream::out | std::fstream::app);
-        file << g_count << "\t" << count << "\t" << np << std::endl;
+        std::filesystem::path cwd = std::filesystem::current_path() / "out/measurements.csv";
+        std::ofstream file(cwd.string(), std::fstream::app);
+
+        std::cout << g_duration << cwd.string() << std::endl;
+
+        std::cout << "file is: " << file.is_open() << std::endl;
+
+        file << g_duration << "\t" << count << "\t" << np << std::endl;
+        
+        file.close();
     }
 
     MPI_Finalize();     

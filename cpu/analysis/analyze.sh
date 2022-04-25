@@ -1,11 +1,10 @@
-rm out/measurements.csv
-touch out/measurements.csv
+rm ../out/measurements.csv
+touch ../out/measurements.csv
 
+echo $0
 
 for j in $(seq 1 $1); do 
-    for c in 500, 1000, 1500, 2000; do 
-        echo $j
-        echo $c 
+    for c in 2000, 4000, 8000, 16000; do 
         mpirun -np $j build/final_program $c 1024
     done
 done
