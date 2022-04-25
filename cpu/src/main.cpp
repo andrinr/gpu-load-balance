@@ -20,13 +20,7 @@ int main(int argc, char** argv) {
     errno = 0; // not 'int errno', because the '#include' already defined it
     long arg1 = strtol(argv[1], &p1, 10);
     long arg2 = strtol(argv[2], &p2, 10);
-    if (*p1 != '\0' || *p2 != '\0' || errno != 0) {
-        return 1; // In main(), returning non-zero means failure
-    }
 
-    if (arg1 < INT_MIN || arg1 > INT_MAX || arg2 < INT_MIN || arg2 > INT_MAX) {
-        return 1;
-    }
     int count = arg1 * 1000;
     int nCells = arg2;
 
@@ -59,18 +53,26 @@ int main(int argc, char** argv) {
     auto duration = duration_cast<microseconds>(stop - start);
     std::cout << "Process " << rank << " duration: " << duration.count() / 1000 << " ms" << std::endl;
 
+    int l_count = duration.count();
+    int g_count;
+
+    MPI_Reduce(&l_count, &g_count, 1, MPI_INT, MPI_MAX, 0, MPI_COMM_WORLD);
     printf("Done.\n");       
 
-    
+    if (rank == 0){
+        std::fstream file( "/out/measurements.csv", std::fstream::in | std::fstream::out | std::fstream::app);
+        file << g_count << "\t" << count << "\t" << np << std::endl;
+    }
+
     MPI_Finalize();     
 
-    std::fstream file( "../data/splitted" + std::to_string(rank) + ".dat", std::fstream::out);
+    /*std::fstream file( "out/splitted" + std::to_string(rank) + ".dat", std::fstream::out);
    
     for (int i = 0; i < N; i += 64){
         file << p(i,0) << "\t" << p(i,1) << "\t" << p(i,2) << "\t" << p(i,3) << std::endl;
     }
 
-    file.close();                           
+    file.close();*/                         
 
     return 0;
 }
