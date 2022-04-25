@@ -671,7 +671,7 @@ A computing system consists of several nodes, where each node has one or more CP
 \end{figure}
 
 We now sketch out various implementation ideas, derive for each a formula to estimate its runtime and finally insert datapoints from our target computing systems.
-We assume that the data is stored in the CPU memory initially and we define the size of the data as $s$.
+We assume that the data is stored in the CPU memory initially and we define the size of the data as $s$. 
 
 \TODO{Find tflops}
 
@@ -692,7 +692,7 @@ Let us assume a CPU with a clock speed of $cps$ per second.
 
 \begin{center}
 	\begin{equation}
-			p \times \frac{ s }{B_{C}} = t
+			log(d) \times \left ( p \times \frac{ s }{B_{C}} \right ) = t
 			\label{eq:cpu}
 	\end{equation}
 \end{center}
@@ -704,7 +704,7 @@ The Equation \ref{eq:gpu} for the GPU is similar, the only difference being that
 
 \begin{center}
 	\begin{equation}
-		p \times \frac{s}{B_{G}} + \frac{s}{I_{GC}}  + \frac{s}{B_{C}}= t
+			log(d) \times \left ( p \times \frac{s}{B_{G}} + \frac{s}{I_{GC}}  + \frac{s}{B_{C}} \right ) = t
 		\label{eq:gpu}
 	\end{equation}
 \end{center}
@@ -716,18 +716,9 @@ The Equation \ref{eq:gpu} for the GPU is similar, the only difference being that
 
 Let us now consider an alternative way of computing binary cuts. We will build part of the tree on the GPU itself. This will allow us to reduce the very costly overheads imposed by transferring data from the CPU to the GPU. The maximum number of cuts we can perform is $p \times 3$. After p cuts we have $2^{p \times 3}$ leaf cells, and have reached the precision. Note that in this case we also need to send back the information about the built tree from the GPU to the CPU. 
 
-\TODO{Too strong of a simplification}
-\TODO{its log(d)}
 \begin{center}
 	\begin{equation}
-		log(d) \times p \times \frac{s}{B_{C}} = t
-		\label{eq:cputree}
-	\end{equation}
-\end{center}
-
-\begin{center}
-	\begin{equation}
-		log(d) \times p \times \frac{s}{B_{G}} + 2 \times \frac{s}{I_{GC}} = t
+		log(d) \times \left ( p \times \frac{s}{B_{G}} \right ) + \frac{s}{I_{GC}} + \frac{s}{B_{C}} = t
 		\label{eq:gputree}
 	\end{equation}
 \end{center}
@@ -766,14 +757,18 @@ We will compare the performance with the datapoints of Piz Daint, Summit and Alp
 		\begin{tabular}{ c c c c }
 			& Piz Daint \cite{piz_daint} & Summit & Alps (Eiger) \\ 
 			\hline
-			Number of Nodes & 5704 & 4608 & 1024\\
-			CPU Mem. Cap. & 64 GB & 256 GB $\times$ 2  \\   
-			CPU Model & Intel E5-2690 v3 & IBM POWER9 $\times$ 2 & AMD EPYC 7742 \\
-			CPU Mem. Bandw.  & 68 GB/s & 170 GB/s & 204.8 GB/s x 2	\\
-			GPU Model & NVIDIA P100 & NVIDIA V100s  $\times$ 6 & None \\
+			\# Nodes & 5704 & 4608 & 1024\\
+			\# CPUs & 1 & 2 & 2\\
+			CPU Model & Intel E5-2690 v3 & IBM POWER9 & AMD EPYC 7742 \\
+			CPU Mem. & 64 GB & 256 GB & ?? \\   
+			$B_C$  & 68 GB/s & 170 GB/s & 204.8 GB/s x 2	\\
+			$I_{CC}$ & - & 64 GB/s & ?? \\
+			\# GPUs & 1 & 6 & 0 \\
+			GPU Model & NVIDIA P100 & NVIDIA V100s & - \\
 			GPU Mem. Cap. & 16 GB & 16 GB $\times$ 6 & -\\
-			GPU Mem. Bandw. & 732 GB/s & 900 GB/s & -\\
-			Interconnect Bandw. & 32 GB/s & 50 GB/s & -\\
+			$B_G$ & 732 GB/s & 900 GB/s $\times$ 6 & -\\
+			$I_{GC}$ & 32 GB/s & 50 GB/s $\times$ 6 & -\\
+			$I_{GG}$ & - & 50 GB/s & -\\
 		\end{tabular}
 	\end{center}
 \caption{Datapoints of Supercomputers}
@@ -781,6 +776,10 @@ We will compare the performance with the datapoints of Piz Daint, Summit and Alp
 \end{figure}
 
 We can now plug-in the values we obtained from different supercomputers in our equations.  We will assume a precision $p = 32$ bits which is sensible in the case of astrophysical simulations. \TODO{Add reference}.
+
+\def\s{12}
+\def\d{8096}
+\def\p{32}
 
 \normalfont
 \subsection{Piz Daint} 
@@ -790,57 +789,48 @@ Let us plugin the values from Figure \ref{fig:datapoints} into the corresponding
 \subsubsection{Naive implementation}
 The naive implementation yields the following speeds for the naive CPU  implementation:
 
-\pgfmathparse{32 * 12 / 68}
+\pgfmathsetmacro\cpuPiz{ln(\d) / ln(2) * (\p * \s / 68)}
 
 \begin{center}
 	\begin{equation}
-		32 \times \frac{ 12 GB }{68 GB/s} = \pgfmathresult s
+		log(\d) \times \left ( \p \times \frac{ \s GB }{68 GB/s} \right )  = \cpuPiz s
 	\end{equation}
 \end{center}
 
 
 And the corresponding GPU implementation:
-\pgfmathparse{ 32 * 12 / 68}
+\pgfmathsetmacro\gpuPizN{ ln(\d) / ln(2) * (\p * \s / 732 + \s / 32 + \s / 68)}
 \begin{center}
 	\begin{equation}
-		32 \times \frac{12 GB}{732 GB/s} + \frac{12 GB}{32 GB/s}  + \frac{12 GB}{68 GB/s} = 1.08s
+		log(\d) \times \left ( 32 \times \frac{12 GB}{732 GB/s} + \frac{12 GB}{32 GB/s}  + \frac{12 GB}{68 GB/s} \right )=  \gpuPizN s
 	\end{equation}
 \end{center}
 
-
-%\begin{tikzpicture}
-%	\begin{axis}[xmin = -1, xmax = 13, ymin=-1, ymax=6]
-%		\addplot[domain = 0:12,blue] {(32 * x / 68) / (32 * x / 732 + x /32 + x/68) };
-%	\end{axis}
-%\end{tikzpicture}
-
 This yields in a speed-up of:
+\pgfmathsetmacro\speedup{\cpuPiz / \gpuPizN}
 \begin{center}
 	\begin{equation}
-		\frac{5.65s}{1.08} = 5.25
+		\frac{\cpuPiz}{\gpuPizN} = \speedup \times
 	\end{equation}
 \end{center}
 
 
 \subsubsection{GPU Tree Building}
 
-\begin{center}
-	\begin{equation}
-		32 \times 32 \times \frac{ 12 GB }{68 GB/s} = 180s
-	\end{equation}
-\end{center}
-
+And the corresponding GPU implementation:
+\pgfmathsetmacro\gpuPizT{ ln(\d)/ln(2) * (\p * \s / 732)  + \s / 32 + \s / 68}
 And the corresponding GPU implementation:
 \begin{center}
 	\begin{equation}
-		32 \times 32 \times \frac{12 GB}{732 GB/s} + 2 \times \frac{12 GB}{32 GB/s}  + \frac{12 GB}{68 GB/s} = 17.71s
+		log(\d) \times \left ( \p \times \frac{\s GB}{732 GB/s} \right ) + \times \frac{\s GB}{32 GB/s}  + \frac{\s GB}{68 GB/s} = \gpuPizT s
 	\end{equation}
 \end{center}
 
 This yields in a speed-up of:
+\pgfmathsetmacro\speedup{\cpuPiz / \gpuPizT}
 \begin{center}
 	\begin{equation}
-		\frac{180s}{17.71} = 10.2
+		\frac{\cpuPiz}{\gpuPizT} = \speedup \times
 	\end{equation}
 \end{center}
 
@@ -854,46 +844,51 @@ Let us plugin the values from Figure \ref{fig:datapoints} into the corresponding
 \subsubsection{Naive implementation}
 The naive implementation yields the following speeds for the naive CPU  implementation:
 
+\pgfmathsetmacro\cpuSummit{ln(\d) / ln(2) * (\p * \s / (170 * 2)}
 \begin{center}
 	\begin{equation}
-		32 \times \frac{ 12 GB }{170 GB/s \times 2} = 2.56s
+		log(\d) \times \left ( \p \times \frac{ \s GB }{170 GB/s \times 2} \right ) = \cpuSummit s
 	\end{equation}
 \end{center}
 
 And the corresponding GPU implementation:
+\pgfmathsetmacro\gpuSummitN{ln(\d) / ln(2) * (
+		(\p * \s / (900 * 6) + 
+		\s / (50 * 6) + \s /(170 * 2)
+	)}
 \begin{center}
 	\begin{equation}
-		32 \times \frac{12 GB}{900 GB/s \times 6} + \frac{12 GB}{50 GB/s \ times 6}  + \frac{12 GB}{170 GB/s \ times 2} = 0.74s
+		log(\d) \times \left ( \p \times \frac{\s GB}{900 GB/s \times 6} + \frac{\s GB}{50 GB/s \times 6}  + \frac{\s GB}{170 GB/s \ \times 2} \right )= \gpuSummitN s
 	\end{equation}
 \end{center}
 
 This yields in a speed-up of:
+\pgfmathsetmacro\speedup{\cpuSummit / \gpuSummitN}
 \begin{center}
 	\begin{equation}
-		\frac{2.56s}{0.74s} = 3.06
+		\frac{\cpuSummit s}{\gpuSummitN s} = \speedup \times 
 	\end{equation}
 \end{center}
 
 
 \subsubsection{GPU Tree Building}
 
-\begin{center}
-	\begin{equation}
-		32 \times 32 \times \frac{ 12 GB }{170 GB/s} = 70.28s
-	\end{equation}
-\end{center}
-
 And the corresponding GPU implementation:
+\pgfmathsetmacro\gpuSummitT{ln(\d) / ln(2) * 
+		(\p * \s / (900 * 6))
+	 +  \s / (50 * 6) + \s /(170 * 2)}
+ 
 \begin{center}
 	\begin{equation}
-		32 \times 32 \times \frac{12 GB}{900 GB/s} + 2 \times \frac{12 GB}{50 GB/s}  + \frac{12 GB}{170 GB/s} = 14.2s
+		log(\d) \times \left ( \p \times \frac{\s GB}{900 GB/s \times 6} \right ) + \frac{\s GB}{50 GB/s \times 2}  + \frac{\s GB}{170 GB/s \times 2} = \gpuSummitT s
 	\end{equation}
 \end{center}
 
 This yields in a speed-up of:
+\pgfmathsetmacro\speedup{\cpuSummit / \gpuSummitT}
 \begin{center}
 	\begin{equation}
-		\frac{70.28s}{14.2s} = 4.95
+		\frac{\cpuSummit s}{\gpuSummitT s} = \speedup \times
 	\end{equation}
 \end{center}
 
@@ -903,15 +898,71 @@ This yields in a speed-up of:
 
 \subsection{Eiger}
 
+\pgfmathsetmacro\cpuEiger{ln(\d) / ln(2) * (\p * \s / (204.8 * 2)}
+
 \begin{center}
 	\begin{equation}
-		32 \times 32 \times \frac{ 12 GB }{204.8 GB/s} = 60s
+		\log(\d) \times \p \times \frac{ \s GB }{204.8 GB/s \times 2} = \cpuEiger s
 	\end{equation}
 \end{center}
 
 \subsection{Conclusion}
 
 We conclude that the GPU version with GPU Tree building enabled yields the best speedup and also performs a lot better than the CPU version. Also we can observe that the speedup is bounded by $\frac{B_{GPU}}{B_{CPU}}$/ \TODO{Add reasoning}
+
+\begin{figure}
+	\begin{center}
+		\begin{tikzpicture}
+			
+			\begin{axis} [ybar,height=10cm,width=13cm, 
+				bar width=0.8cm,
+				enlargelimits=0.2,
+				symbolic x coords={Piz, Summit, Eiger},
+				legend columns=1,
+				legend entries={CPU, GPU Naive, GPU Tree},
+				ylabel={Runtime (s) },
+				x tick label style={rotate=45,anchor=east}, 
+				xtick=data]
+				\addplot coordinates {
+					(Piz,\cpuPiz ) 
+					(Summit,\cpuSummit) 
+					(Eiger,\cpuEiger) 
+				};
+			
+				\addplot coordinates {
+					(Piz,\gpuPizN ) 
+					(Summit,\gpuSummitN ) 
+				};
+			
+				\addplot coordinates {
+					(Piz,\gpuPizT ) 
+					(Summit,\gpuSummitT  ) 
+				};
+			\end{axis}
+			
+		\end{tikzpicture}
+	\end{center}
+
+\caption{Execution times of different strategies}
+\label{fig:exectimes}
+\end{figure}
+
+\begin{figure}
+	\begin{center}
+		\begin{tikzpicture}
+			\begin{axis}[xmin = -1, xmax = 13, ymin=-1, ymax=6]
+				\addplot[domain = 0:12,blue] {ln(\d) / ln(2) * 
+					(\p * x / (900 * 6))
+					+  x / (50 * 6) + x /(170 * 2)};
+				\addplot[domain = 0:12,blue] {ln(\d * 16) / ln(2) * 
+					(\p * x / (900 * 6))
+					+  x / (50 * 6) + x /(170 * 2)};
+			\end{axis}
+		\end{tikzpicture}
+	\end{center}
+\caption{??}
+\label{fig:exectimes}
+\end{figure}
 
 \newpage
 \section{Implementation}
