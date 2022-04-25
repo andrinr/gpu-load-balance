@@ -16,12 +16,12 @@ public:
     MPI_Datatype MPI_CUT;
     MPI_Datatype MPI_CELL;
 
-    Orb(int rank, int np);
-    void build(blitz::Array<float, 2> &particles);
+    Orb(int rank, int np, blitz::Array<float, 2> &p, int d);
 
 private:
     int rank;
     int np;
+    int domainCount;
     
     void swap(int a, int b);
     void assign(int begin, int end, int id);

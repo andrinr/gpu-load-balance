@@ -7,15 +7,18 @@
 struct Cell {
     int id;
     int leftChildId;
+    int nCells;
     float lower[3], upper[3];
     Cell(
         int id_,
         int leftChildId_,
+        int nCells_,
         float lower_[3], 
         float upper_[3]
     ) {
         id = id_;
         leftChildId = leftChildId_;
+        nCells = nCells_;
         lower[0] = lower_[0];
         lower[1] = lower_[1];
         lower[2] = lower_[2];

@@ -20,15 +20,15 @@ MPI_Datatype createCell() {
     return MPI_CELL;
 }
 
-Orb::Orb(int r, int n) {
+Orb::Orb(int r, int n, blitz::Array<float, 2> &p, int d) {
     rank = r;
     np = n;
 
     MPI_CELL = createCell();
-}
 
-void Orb::build(blitz::Array<float, 2> &p) {
     particles = &p;
+
+    domainCount = d;
 
     if (rank == 0) {
         operative();
@@ -98,7 +98,7 @@ float Orb::findCut(Cell &cell, int axis, int begin, int end) {
             searchingCut = 0;
         }
 
-        std::cout << i << " " << abs(g_count - g_rows / 2) << " " << cut << std::endl;
+        //std::cout << i << " " << abs(g_count - g_rows / 2) << " " << cut << std::endl;
 
         MPI_Bcast(&searchingCut, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
@@ -134,7 +134,7 @@ void Orb::operative() {
     float lower[DIMENSIONS] = {lowerInit, lowerInit, lowerInit};
     float upper[DIMENSIONS] = {upperInit, upperInit, upperInit};
 
-    Cell cell(0, -1, lower, upper);
+    Cell cell(0, -1, domainCount, lower, upper);
 
     std::vector<Cell> cells;
     cells.push_back(cell);
@@ -151,13 +151,13 @@ void Orb::operative() {
         if (stack.empty()) {
             buildingTree = 0;
         }
-
+        
         MPI_Bcast(&buildingTree, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
         if (buildingTree == 0) {
             break;
         }
-
+        
         int id = stack.top();
         stack.pop();
 
@@ -185,8 +185,9 @@ void Orb::operative() {
 
         float cut = findCut(cell, axis, begin, end);
         int mid = reshuffleArray(axis, begin, end, cut);
-
-        Cell leftChild (cells.size(), -1, cell.lower, cell.upper);
+        int nCellsLeft = ceil(cell.nCells / 2.0);
+        int nCellsRight = cell.nCells - nCellsLeft;
+        Cell leftChild (cells.size(), -1, nCellsLeft, cell.lower, cell.upper);
         
         cellBegin.push_back(begin);
         cellEnd.push_back(mid);
@@ -194,12 +195,12 @@ void Orb::operative() {
 
         leftChild.upper[axis] = cut;
 
-        if (mid - begin > (*particles).rows() / DOMAIN_COUNT) {
+        if (nCellsLeft > 1) {
             stack.push(cells.size());
         }
         cells.push_back(leftChild);
 
-        Cell rightChild (cells.size(), -1, cell.lower, cell.upper);
+        Cell rightChild (cells.size(), -1, nCellsRight, cell.lower, cell.upper);
 
         cellBegin.push_back(mid);
         cellEnd.push_back(end);
@@ -207,7 +208,7 @@ void Orb::operative() {
 
         rightChild.lower[axis] = cut;
 
-        if (end - mid > (*particles).rows() / DOMAIN_COUNT) {
+        if (nCellsRight > 1) {
             stack.push(cells.size());
         }
 
@@ -224,7 +225,7 @@ void Orb::worker() {
     float lower[DIMENSIONS] = {0., 0., 0.};
     float upper[DIMENSIONS] = {0., 0., 0.};
     Cell cell(
-        -1, -1, lower, upper
+        -1, -1, -1, lower, upper
     );
 
     while(true) {
