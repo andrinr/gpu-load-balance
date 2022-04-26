@@ -693,7 +693,6 @@ Let us assume a CPU with a clock speed of $cps$ per second.
 \begin{center}
 	\begin{equation}
 			log(d) \times \left ( p \times \frac{ s }{B_{C}} \right ) = t
-			\label{eq:cpu}
 	\end{equation}
 \end{center}
 
@@ -763,6 +762,8 @@ We will compare the performance with the datapoints of Piz Daint, Summit and Alp
 			CPU Mem. & 64 GB & 256 GB & ?? \\   
 			$B_C$  & 68 GB/s & 170 GB/s & 204.8 GB/s x 2	\\
 			$I_{CC}$ & - & 64 GB/s & ?? \\
+			CPU Frequency & 3.5 GHZ & 4 GHZ & ??\\
+			\# Cores & 12 & 22 & ?? \\
 			\# GPUs & 1 & 6 & 0 \\
 			GPU Model & NVIDIA P100 & NVIDIA V100s & - \\
 			GPU Mem. Cap. & 16 GB & 16 GB $\times$ 6 & -\\
@@ -919,7 +920,7 @@ We conclude that the GPU version with GPU Tree building enabled yields the best 
 				enlargelimits=0.2,
 				symbolic x coords={Piz, Summit, Eiger},
 				legend columns=1,
-				legend entries={CPU, GPU Naive, GPU Tree},
+				legend entries={CPU, Hybrid Naive, Hybrid Tree},
 				ylabel={Runtime (s) },
 				x tick label style={rotate=45,anchor=east}, 
 				xtick=data]
@@ -948,31 +949,29 @@ We conclude that the GPU version with GPU Tree building enabled yields the best 
 \end{figure}
 
 
-\begin{figure}[H]
-	\begin{center}
-		\begin{tikzpicture}
-			\begin{axis}[
-				height=10cm,width=13cm, 
-				title={Measured Performance},
-				xlabel={Particle Count},
-				ylabel={Execution Time (ms)},
-				]
-				
-			\foreach \i in {1,...,7}{
-				\addplot +[
-				] 
-				table [
-					col sep=comma,
-					x=N, 
-					y=time] 
-				{../../cpu/out/measurements\i.csv};
-				]
-			}	
-			\legend{1, 2, 3, 4, 5, 6, 7}
-			\end{axis}
-		\end{tikzpicture}
-	\end{center}
+\begin{center}
+	\begin{equation}
+		max\{ log(d) \times \left ( p \times \frac{ s }{B_{C}} \right ) = t
+		\label{eq:cpu}, GHZ_{C} / Cores_{C} * N \}
+	\end{equation}
+\end{center}
+
+\begin{figure}
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[xmin = -1, xmax = 13, ymin=-1, ymax=40]
+\addplot[domain = 0:12,blue] {
+	ln(\d) / ln(2) * \p * 
+		max(x / (900 * 6), x/(4*22))
+	+  x / (50 * 6) + x /(170 * 2) 
+};
+\end{axis}
+\end{tikzpicture}
+\end{center}
+\caption{??}
+\label{fig:exectimes}
 \end{figure}
+
 
 
 \begin{comment}
@@ -1152,6 +1151,35 @@ Another strategy we can use, as soon as we have created two domains, rank 0 can 
 It is very difficult to parallelize the reshuffling part of the particle array. This is that it is very difficult to do in place. If we cannot perform it in place, we will probably have to use twice the memory capacity, which is will increase the maximum possible $N$ by a factor of two, which is not ideal.
 
 \TODO{Extend section}
+
+\subsubsection{Performance}
+
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+			\begin{axis}[
+				height=10cm,width=13cm, 
+				title={Measured Performance},
+				xlabel={Particle Count},
+				ylabel={Execution Time (ms)},
+				]
+				
+				\foreach \i in {1,...,8}{
+					\addplot +[
+					] 
+					table [
+					col sep=comma,
+					x=N, 
+					y=time] 
+					{../../cpu/out/measurements\i.csv};
+					]
+				}	
+				\legend{1, 2, 3, 4, 5, 6, 7, 8}
+			\end{axis}
+		\end{tikzpicture}
+	\end{center}
+\end{figure}
 
 \subsection{Parallel Version Using CUDA }
 

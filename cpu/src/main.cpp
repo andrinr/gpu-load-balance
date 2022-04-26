@@ -41,7 +41,7 @@ int main(int argc, char** argv) {
     srand(rank);
     for (int i = 0; i < p.rows(); i++) {
         for (int d = 0; d < DIMENSIONS; d++) {
-            p(i,d) = (r01()-0.5)*(r01()-0.5);
+            p(i,d) = (r01()-0.5);
         }
         p(i,3) = 0.;
     }
