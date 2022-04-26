@@ -951,27 +951,24 @@ We conclude that the GPU version with GPU Tree building enabled yields the best 
 \begin{figure}[H]
 	\begin{center}
 		\begin{tikzpicture}
-
-		
 			\begin{axis}[
 				height=10cm,width=13cm, 
 				title={Measured Performance},
 				xlabel={Particle Count},
 				ylabel={Execution Time (ms)},
 				]
-			\addplot +[
-				scatter,
-				np filter/.code={
-					\ifnum\coordindex<3\def\pgfmathresult{}\fi
-					\ifnum\coordindex>1\def\pgfmathresult{}\fi
-				}
-			] 
-			table [
-				col sep=comma,
-				x=N, 
-				y=time, 
-				meta=np] 
-			{../../cpu/out/measurements.csv};
+				
+			\foreach \i in {1,...,7}{
+				\addplot +[
+				] 
+				table [
+					col sep=comma,
+					x=N, 
+					y=time] 
+				{../../cpu/out/measurements\i.csv};
+				]
+			}	
+			\legend{1, 2, 3, 4, 5, 6, 7}
 			\end{axis}
 		\end{tikzpicture}
 	\end{center}

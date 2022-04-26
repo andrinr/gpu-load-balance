@@ -61,9 +61,9 @@ int main(int argc, char** argv) {
     printf("Done.\n");       
 
     if (rank == 0){
-        std::filesystem::path cwd = std::filesystem::current_path() / "out/measurements.csv";
+        std::filesystem::path cwd = std::filesystem::current_path() / ("out/measurements" + std::to_string(np) + ".csv");
         std::ofstream file(cwd.string(), std::fstream::app);
-        
+
         file << g_duration << "," << count << "," << np << std::endl;
         
         file.close();
