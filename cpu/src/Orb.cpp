@@ -157,7 +157,7 @@ void Orb::operative() {
         if (buildingTree == 0) {
             break;
         }
-        
+
         int id = stack.top();
         stack.pop();
 

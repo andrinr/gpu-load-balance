@@ -63,12 +63,8 @@ int main(int argc, char** argv) {
     if (rank == 0){
         std::filesystem::path cwd = std::filesystem::current_path() / "out/measurements.csv";
         std::ofstream file(cwd.string(), std::fstream::app);
-
-        std::cout << g_duration << cwd.string() << std::endl;
-
-        std::cout << "file is: " << file.is_open() << std::endl;
-
-        file << g_duration << "\t" << count << "\t" << np << std::endl;
+        
+        file << g_duration << "," << count << "," << np << std::endl;
         
         file.close();
     }
