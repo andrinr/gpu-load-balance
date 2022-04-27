@@ -93,11 +93,9 @@ float Orb::findCut(Cell &cell, int axis, int begin, int end) {
     int g_count;
     int i = 0;
     while(true) {
-
         if (abs(g_count - g_rows / 2) < 16 || i++ == PRECISION) {
             searchingCut = 0;
         }
-
         //std::cout << i << " " << abs(g_count - g_rows / 2) << " " << cut << std::endl;
 
         MPI_Bcast(&searchingCut, 1, MPI_INT, 0, MPI_COMM_WORLD);

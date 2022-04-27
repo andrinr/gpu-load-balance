@@ -18,7 +18,6 @@ int main(int argc, char** argv) {
     }
     char* p1;
     char* p2;
-    errno = 0; // not 'int errno', because the '#include' already defined it
     long arg1 = strtol(argv[1], &p1, 10);
     long arg2 = strtol(argv[2], &p2, 10);
 
@@ -41,7 +40,7 @@ int main(int argc, char** argv) {
     srand(rank);
     for (int i = 0; i < p.rows(); i++) {
         for (int d = 0; d < DIMENSIONS; d++) {
-            p(i,d) = (r01()-0.5);
+            p(i,d) = (r01()-0.5)*(r01()-0.5);
         }
         p(i,3) = 0.;
     }
@@ -60,8 +59,9 @@ int main(int argc, char** argv) {
     MPI_Reduce(&l_duration, &g_duration, 1, MPI_INT, MPI_MAX, 0, MPI_COMM_WORLD);
     printf("Done.\n");       
 
-    if (rank == 0){
-        std::filesystem::path cwd = std::filesystem::current_path() / ("out/measurements" + std::to_string(np) + ".csv");
+    if (rank == 0 && argc == 4) {
+
+        std::filesystem::path cwd = std::filesystem::current_path() / (argv[3]);
         std::ofstream file(cwd.string(), std::fstream::app);
 
         file << g_duration << "," << count << "," << np << std::endl;
