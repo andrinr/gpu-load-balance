@@ -501,11 +501,63 @@ The reshuffle algorithm has a clearly observable runtime of $O(N)$ since we iter
 
 The nature of the ORB algorithm and its application with very large data-sizes, requires that we consider hardware for concrete implementation details. Since we do not have the time to empirically measure all viable option, we try to create a theoretical model. The algorithm is generally very heavy in memory access, but its operations are extremely simple. Therefore we need to consider not only benefits from increased parallelism in GPU hardware, but also possible speed-ups reached by generally higher bandwidths for GPU memory than CPU memory. On the other hand we need to mitigate the very low bandwidths between the GPU and CPU, which cannot be avoided altogether, as the data needs to be sent from the CPU to GPU before we can process it on the graphics processor.
 
+
+\subsection{Roofline performance model}
+
+\def\N{1}
+\def\Bytes{12}
+\def\s{12}
+\def\d{8096}
+\def\p{32}
+
+\begin{center}
+	\begin{equation}
+		max\{ log(d) \times \left ( p \times \frac{ s }{B_{C}} \right ) = t
+		\label{eq:cpu}, GHZ_{C} / Cores_{C} * N \}
+	\end{equation}
+\end{center}
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+			\begin{axis}[
+				height=10cm,width=13cm, 
+				title={Operations per second for different GHZ and number of processors},
+				xlabel={\# Processors},
+				ylabel={Billion particles per second},
+				xmin = -1, xmax = 23, ymin=-1, ymax=100,
+				legend style={at={(0.03,0.8)},anchor=west}]
+				\addplot+[domain = 1:22] {
+					4.5 * \x * 0.9 + 4.5 * 0.1
+				};	
+				\addlegendentryexpanded{4.5 GHZ};
+				
+				\addplot+[domain = 1:22] {
+					4 * \x * 0.9 + 4 * 0.1
+				};	
+				\addlegendentryexpanded{4 GHZ};
+				
+				\addplot+[domain = 1:22] {
+					3.5 * \x * 0.9 + 3.5 * 0.1
+				};	
+				\addlegendentryexpanded{3.5 GHZ};
+				
+				\addplot+[mark=none] coordinates {(0,16) (22,16)};
+				\addlegendentry{$B_{C}$}
+
+			
+			\end{axis}
+		\end{tikzpicture}
+	\end{center}
+	\caption{??}
+	\label{fig:exectimes}
+\end{figure}
+
+\subsection{General Memory Model}
+
 In order to have a clear terminology and understanding of a computing system, we will briefly describe a general computer model which can be applied to most modern high performance systems.
 
-A computing system consists of several nodes, where each node has one or more CPU`s and some additionally have one or more GPU`s. Both the CPU and the GPU have their own memory which are connected by a data link. The bandwidth of this link is called Memory Bandwidth. We name the capacity of the CPU Memory Bandwidth $B_{CPU}$ and the GPU Memory Bandwidth $B_{GPU}$. Furthermore we have a separate data link between the CPU and the GPU memory which is in some cases called PCI express, NVLink (for modern NVidia GPU`s) among others. We will referete to th ba $PCI$.
-
-\Q{Why does summit use NVLink for CPU -> GPU comm?}
+A computing system consists of several nodes, where each node has one or more CPU`s and some additionally have one or more GPU`s. Both the CPU and the GPU have their own memory which are connected by a data link. The bandwidth of this link is called Memory Bandwidth. We name the capacity of the CPU Memory Bandwidth $B_{CPU}$ and the GPU Memory Bandwidth $B_{GPU}$. Furthermore we have a separate data link between the CPU and the GPU memory which is in some cases called PCI express, NVLink (for modern NVidia GPU`s) among others. We will refer to it as $I_{GC}$. In systems with multiple CPU there is a link between the individiual CPU which we denote as $I_{CC}$. Finally we denote the link between GPUs as $I_{GG}$.
 
 \begin{figure}[H]
 	\begin{center}
@@ -621,54 +673,57 @@ A computing system consists of several nodes, where each node has one or more CP
 			minimum height = 1.5cm] (gpum4) at (7cm,-4cm) {GPU4 \\ Memory};
 		
 			
-			\draw[red, very thick, stealth-stealth] (cpum1) to (cpu1);
-			\draw[red, very thick, stealth-stealth] (cpum2) to (cpu2);
-			\draw[red, double, very thick, stealth-stealth] (cpu1) to (cpu2);
+			\draw[red,  thick, stealth-stealth] (cpum1) to (cpu1);
+			\draw[red,  thick, stealth-stealth] (cpum2) to (cpu2);
+			\draw[red, double,  thick, stealth-stealth] (cpu1) to (cpu2);
 			
 			
-			\draw[orange, dashed, very thick, stealth-stealth] (cpu1) to (gpu1);
-			\draw[orange, dashed, very thick, stealth-stealth] (cpu1) to (gpu2);
-			\draw[orange, dashed, very thick, stealth-stealth] (cpu2) to (gpu3);
-			\draw[orange, dashed, very thick, stealth-stealth] (cpu2) to (gpu4);
+			\draw[orange, dashed,  thick, stealth-stealth] (cpu1) to (gpu1);
+			\draw[orange, dashed,  thick, stealth-stealth] (cpu1) to (gpu2);
+			\draw[orange, dashed,  thick, stealth-stealth] (cpu2) to (gpu3);
+			\draw[orange, dashed,  thick, stealth-stealth] (cpu2) to (gpu4);
 			
-			\draw[cyan, very thick, stealth-stealth] (gpum1) to (gpu1);
-			\draw[cyan, very thick, stealth-stealth] (gpum2) to (gpu2);
-			\draw[cyan, very thick, stealth-stealth] (gpum3) to (gpu3);
-			\draw[cyan, very thick, stealth-stealth] (gpum4) to (gpu4);
+			\draw[cyan,  thick, stealth-stealth] (gpum1) to (gpu1);
+			\draw[cyan,  thick, stealth-stealth] (gpum2) to (gpu2);
+			\draw[cyan,  thick, stealth-stealth] (gpum3) to (gpu3);
+			\draw[cyan,  thick, stealth-stealth] (gpum4) to (gpu4);
 			
-			\draw[cyan, double, very thick, stealth-stealth] (gpu1) to (gpu2);
-			\draw[cyan, double, very thick, stealth-stealth] (gpu3) to (gpu4);
+			\draw[cyan, double,  thick, stealth-stealth] (gpu1) to (gpu2);
+			\draw[cyan, double,  thick, stealth-stealth] (gpu3) to (gpu4);
 			
 			
 			\node(al) at (-2cm, -3.5cm) {};
 			\node (ar) at (-3cm, -3.5cm) {};
 			\node[align=left] () at (0.5cm, -3.5cm) {CPU Mem Bandwidth, $B_{C}$};
-			\draw[red, very thick, stealth-stealth] (al) to (ar);
+			\draw[red,  thick, stealth-stealth] (al) to (ar);
 			
 			\node(al) at (-2cm, -4cm) {};
 			\node (ar) at (-3cm, -4cm) {};
 			\node[align=left] () at (0.5cm, -4cm) {GPU Mem Bandwidth, $B_{G}$};
-			\draw[cyan, very thick, stealth-stealth] (al) to (ar);
+			\draw[cyan,  thick, stealth-stealth] (al) to (ar);
 			
 			\node (bl) at (-2cm, -4.5cm) {};
 			\node (br) at (-3cm, -4.5cm) {};
 			\node[align=left] () at (0.5cm, -4.5cm) { CPU-CPU Interconnect, $I_{CC}$};
-			\draw[red, double, very thick, stealth-stealth] (bl) to (br);
+			\draw[red, double,  thick, stealth-stealth] (bl) to (br);
 			
 			\node (cl) at (-2cm, -5cm) {};
 			\node (cr) at (-3cm, -5cm) {};
 			\node[align=left] () at (0.5cm, -5cm) { GPU-CPU Interconnect, $I_{GC}$};
-			\draw[orange, dashed, very thick, stealth-stealth] (cl) to (cr);
+			\draw[orange, dashed,  thick, stealth-stealth] (cl) to (cr);
 			
 			\node (dl) at (-2cm, -5.5cm) {};
 			\node (dr) at (-3cm, -5.5cm) {};
 			\node[align=left] () at (0.5cm, -5.5cm) { GPU-GPU Interconnect, $I_{GG}$};
-			\draw[cyan, double, very thick, stealth-stealth] (dl) to (dr);
+			\draw[cyan, double,  thick, stealth-stealth] (dl) to (dr);
 			
 			
 		\end{tikzpicture}
 	\end{center}
 \end{figure}
+
+In order to estimate the runtime of the algorithms we denote the number of particles as $N$. Furthermore we assume a precision $p$ of 32. We only look at $x$ for the runtime analysis, where it follows that the total storage of all particles is $32 \times 3 \times N bits = 4 \times 3 \times N Bytes = 12 \times N Bytes$. 
+
 
 We now sketch out various implementation ideas, derive for each a formula to estimate its runtime and finally insert datapoints from our target computing systems.
 We assume that the data is stored in the CPU memory initially and we define the size of the data as $s$. 
@@ -778,9 +833,6 @@ We will compare the performance with the datapoints of Piz Daint, Summit and Alp
 
 We can now plug-in the values we obtained from different supercomputers in our equations.  We will assume a precision $p = 32$ bits which is sensible in the case of astrophysical simulations. \TODO{Add reference}.
 
-\def\s{12}
-\def\d{8096}
-\def\p{32}
 
 \normalfont
 \subsection{Piz Daint} 
@@ -948,29 +1000,6 @@ We conclude that the GPU version with GPU Tree building enabled yields the best 
 \label{fig:exectimes}
 \end{figure}
 
-
-\begin{center}
-	\begin{equation}
-		max\{ log(d) \times \left ( p \times \frac{ s }{B_{C}} \right ) = t
-		\label{eq:cpu}, GHZ_{C} / Cores_{C} * N \}
-	\end{equation}
-\end{center}
-
-\begin{figure}
-\begin{center}
-\begin{tikzpicture}
-\begin{axis}[xmin = -1, xmax = 13, ymin=-1, ymax=40]
-\addplot[domain = 0:12,blue] {
-	ln(\d) / ln(2) * \p * 
-		max(x / (900 * 6), x/(4*22))
-	+  x / (50 * 6) + x /(170 * 2) 
-};
-\end{axis}
-\end{tikzpicture}
-\end{center}
-\caption{??}
-\label{fig:exectimes}
-\end{figure}
 
 
 
@@ -1155,27 +1184,50 @@ It is very difficult to parallelize the reshuffling part of the particle array. 
 \subsubsection{Performance}
 
 
+\begin{center}
+	\begin{equation}
+		log(d) \times \left ( p \times \frac{ s }{B_{C}} \right ) = t
+	\end{equation}
+\end{center}
+
 \begin{figure}[H]
 	\begin{center}
 		\begin{tikzpicture}
 			\begin{axis}[
 				height=10cm,width=13cm, 
-				title={Measured Performance},
+				title={Measured Performance with $d = 1024$},
 				xlabel={Particle Count},
 				ylabel={Execution Time (ms)},
 				]
 				
-				\foreach \i in {1,...,8}{
-					\addplot +[
-					] 
-					table [
-					col sep=comma,
-					x=N, 
-					y=time] 
-					{../../cpu/out/measurements\i.csv};
-					]
+				\foreach \i in {0,...,3}{
+					\pgfmathsetmacro\suffix{int(pow(2,\i))};
+					
+					\addplot +[] 
+					table [col sep=comma, x=N, y=time] 
+					{../../cpu/out/measurements\suffix.csv};
+					
+					\addlegendentryexpanded{\# $\suffix$};
+					
 				}	
-				\legend{1, 2, 3, 4, 5, 6, 7, 8}
+				\addplot+[domain = 5000000:30000000] {
+					ln(1024) / ln(2) * 32 * 2* \x / ((2.5 * 8) * 10^9) * 1000 + 
+					ln(1024) / ln(2) * 5 * \x / ((2.5) * 10^9) * 1000
+				};	
+				\addlegendentryexpanded{Model \# 8};
+				
+				\addplot+[domain = 5000000:30000000] {
+					ln(1024) / ln(2) * 32 * 2* \x / ((2.5 * 4) * 10^9) * 1000 + 
+					ln(1024) / ln(2) * 5 * \x / ((2.5) * 10^9) * 1000
+				};	
+				\addlegendentryexpanded{Model \# 4};
+				
+				\addplot+[domain = 5000000:30000000] {
+					ln(1024) / ln(2) * 32 * 2* \x / ((2.5 * 1) * 10^9) * 1000 + 
+					ln(1024) / ln(2) * 5 * \x / ((2.5) * 10^9) * 1000
+				};	
+				\addlegendentryexpanded{Model \# 1};
+				
 			\end{axis}
 		\end{tikzpicture}
 	\end{center}

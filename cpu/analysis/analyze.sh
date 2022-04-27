@@ -1,11 +1,11 @@
 
-for j in $(seq 1 $1); do 
-    rm out/measurements$j.csv
-    touch out/measurements$j.csv
+for j in $(seq 0 $1); do 
+    rm out/measurements$((2**$j)).csv
+    touch out/measurements$((2**$j)).csv
 
-    echo "time, N, np" >> out/measurements$j.csv
+    echo "time, N, np" >> out/measurements$((2**$j)).csv
 
     for c in 4000, 8000, 16000, 32000; do 
-        mpirun -np $j build/final_program $c 1024
+        mpirun -np $((2**$j)) build/final_program $c 1024
     done
 done
