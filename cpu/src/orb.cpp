@@ -137,6 +137,8 @@ void Orb::operative() {
     std::vector<Cell> cells;
     cells.push_back(cell);
     
+    // Maybe put this in constructor
+    // Use heap for cells
     cellBegin.push_back(0);
     cellEnd.push_back((*particles).rows());
 
@@ -225,6 +227,7 @@ void Orb::worker() {
     Cell cell(
         -1, -1, -1, lower, upper
     );
+    // Dont use this strategy, broadcast 
 
     while(true) {
 
@@ -244,6 +247,7 @@ void Orb::worker() {
 
         MPI_Bcast(&axis, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
+        // Different name here
         int l_rows = end - begin;
         MPI_Reduce(&l_rows, NULL, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
