@@ -3,9 +3,9 @@
 
 class Services {
 public:
-    void operate();
+    static void operate(Orb& orb);
 
-    void work();
+    static void work(Orb& orb);
 
 };
 

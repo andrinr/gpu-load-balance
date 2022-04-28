@@ -17,6 +17,7 @@ public:
     MPI_Datatype MPI_CELL;
 
     Orb(int rank, int np, blitz::Array<float, 2> &p, int d);
+    int count(int axis, int start, int end, float cut, int stride);
 
 private:
     int rank;
@@ -26,7 +27,6 @@ private:
     void swap(int a, int b);
     void assign(int begin, int end, int id);
     int reshuffleArray(int axis, int begin, int end, float split);
-    int count(int axis, int start, int end, float cut, int stride);
     float findCut(Cell &cell, int axis, int begin, int end);
     void operative();
     void worker();

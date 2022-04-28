@@ -4,15 +4,13 @@
 
 class Comm {
 public:
-    virtual void init();
+    void Comm();
 
-    virtual void static broadcast(int& nCells, Cell* cells);
+    virtual void static dispatchWork(int& n, Cell* cells);
 
-    virtual void static updateCut(int nCells, int* axis, float* pos);
+    virtual void static concludeWork(int&n, int* count);
 
-    virtual void static reduceCut(int* count);
-
-    virtual void static destroy();
+    virtual void destroy();
 
 };
 

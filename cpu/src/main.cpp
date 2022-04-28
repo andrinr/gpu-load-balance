@@ -2,9 +2,13 @@
 #include <fstream>
 #include <filesystem>
 #include "Orb.h"
+#include "IO.h"
 #include "constants.h"
+#include "services.h"
 #include <blitz/array.h>   
 #include <chrono>
+#include "mpi-comm.h"
+
 using namespace std::chrono;
 
 float r01() {
@@ -22,62 +26,52 @@ int main(int argc, char** argv) {
     long arg2 = strtol(argv[2], &p2, 10);
 
     int count = arg1 * 1000;
-    int nCells = arg2;
-
-    int rank, np;
-    MPI_Init(&argc,&argv);
-
-    MPI_Comm_size(MPI_COMM_WORLD, &np);
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    int nLeafCells = arg2;
 
     int N = floor(count / np);
-    std::cout << "Process " << rank << " processing " << N / 1000 << "K particles." << std::endl;
+    blitz::Array<float, 2> particles = IO::generateData(N);
 
-    // Init positions
-    blitz::Array<float, 2> p(N, DIMENSIONS + 1);
-    p = 0;
-    
-    srand(rank);
-    for (int i = 0; i < p.rows(); i++) {
-        for (int d = 0; d < DIMENSIONS; d++) {
-            p(i,d) = (r01()-0.5)*(r01()-0.5);
-        }
-        p(i,3) = 0.;
+    MPI_Comm mpiComm;
+
+    std::cout << "Process " << mpiComm.rank << " processing " << N / 1000 << "K particles." << std::endl;
+
+
+    Cell cells[nLeafCells + 1];
+
+    if (mpiComm.rank == 0) {
+        const float lowerInit = -0.5;
+        const float upperInit = 0.5;
+
+        float lower[DIMENSIONS] = {lowerInit, lowerInit, lowerInit};
+        float upper[DIMENSIONS] = {upperInit, upperInit, upperInit};
+
+        Cell cell(0, -1, domainCount, lower, upper);
+        cells[1] = cell;
+
+        Services::operate();
+    }
+    else {
+        Services::work();
     }
 
-    std::cout << "Process " << rank << " building tree..." << std::endl;
+    std::cout << "Process " << mpiComm.rank << " building tree..." << std::endl;
 
     auto start = high_resolution_clock::now();
     Orb orb(rank, np, p, nCells);
     auto stop = high_resolution_clock::now();
     auto duration = duration_cast<microseconds>(stop - start);
-    std::cout << "Process " << rank << " duration: " << duration.count() / 1000 << " ms" << std::endl;
+
+    std::cout << "Process " << mpiComm.rank << " duration: " << duration.count() / 1000 << " ms" << std::endl;
 
     int l_duration = duration.count() / 1000.0;
     int g_duration;
 
     MPI_Reduce(&l_duration, &g_duration, 1, MPI_INT, MPI_MAX, 0, MPI_COMM_WORLD);
-    printf("Done.\n");       
 
-    if (rank == 0 && argc == 4) {
 
-        std::filesystem::path cwd = std::filesystem::current_path() / (argv[3]);
-        std::ofstream file(cwd.string(), std::fstream::app);
+    std::cout << "Process " << mpiComm.rank << " done. "  << std::endl;
 
-        file << g_duration << "," << count << "," << np << std::endl;
-        
-        file.close();
-    }
 
-    MPI_Finalize();     
-
-    /*std::fstream file( "out/splitted" + std::to_string(rank) + ".dat", std::fstream::out);
-   
-    for (int i = 0; i < N; i += 64){
-        file << p(i,0) << "\t" << p(i,1) << "\t" << p(i,2) << "\t" << p(i,3) << std::endl;
-    }
-
-    file.close();*/                         
 
     return 0;
 }
