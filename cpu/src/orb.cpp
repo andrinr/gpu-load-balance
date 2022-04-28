@@ -2,40 +2,9 @@
 #include <stack>
 #include <Orb.h>
 
-MPI_Datatype createCell() {
-    MPI_Datatype MPI_CELL;
-    const int nitems=4;
-    int  blocklengths[nitems] = {1, 1, DIMENSIONS, DIMENSIONS};
-    MPI_Datatype types[nitems] = {MPI_INT, MPI_INT, MPI_FLOAT, MPI_FLOAT};
-    MPI_Aint offsets[nitems];
-
-    offsets[0] = offsetof(Cell, id);
-    offsets[1] = offsetof(Cell, leftChildId);
-    offsets[2] = offsetof(Cell, lower);
-    offsets[3] = offsetof(Cell, upper);
-
-    MPI_Type_create_struct(nitems, blocklengths, offsets, types, &MPI_CELL);
-    MPI_Type_commit(&MPI_CELL);
-
-    return MPI_CELL;
-}
-
-Orb::Orb(int r, int n, blitz::Array<float, 2> &p, int d) {
-    rank = r;
-    np = n;
-
-    MPI_CELL = createCell();
-
-    particles = &p;
-
-    domainCount = d;
-
-    if (rank == 0) {
-        operative();
-    }
-    else {
-        worker();   
-    }
+Orb::Orb() {
+    cellBegin.push_back(0);
+    cellEnd.push_back((*particles).rows());
 }
 
 void Orb::assign(int begin, int end, int id) {
