@@ -13,9 +13,11 @@ float r01() {
 
 int main(int argc, char** argv) {
 
+    //JDP: check argc (must be 3)
     if (strlen(argv[1]) == 0) {
         return 1; // empty string
     }
+    //JDP: use NULL nullptr instead of &p1 and &p2
     char* p1;
     char* p2;
     long arg1 = strtol(argv[1], &p1, 10);
@@ -30,11 +32,19 @@ int main(int argc, char** argv) {
     MPI_Comm_size(MPI_COMM_WORLD, &np);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
+    //JDP: int N = (count+np-1) / np;
+    //JDP: if (N * rank >= count) N = 0;
+    //JDP: else if (N * (rank+1) >= count) N = count - rank*N;
     int N = floor(count / np);
     std::cout << "Process " << rank << " processing " << N / 1000 << "K particles." << std::endl;
 
     // Init positions
-    blitz::Array<float, 2> p(N, DIMENSIONS + 1);
+    blitz::GeneralArrayStorage<2> storage;
+    storage.ordering() = 0,1;
+    storage.base() = 0, 0;
+    storage.ascendingFlag() = true, true;
+
+    blitz::Array<float, 2> p(N, DIMENSIONS + 1,storage);
     p = 0;
     
     srand(rank);

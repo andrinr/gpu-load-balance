@@ -9,7 +9,6 @@
 
 class Orb {
 public:
-    blitz::Array<float, 2>* particles;
     std::vector<int> cellBegin;
     std::vector<int> cellEnd;
 
@@ -19,6 +18,7 @@ public:
     Orb(int rank, int np, blitz::Array<float, 2> &p, int d);
 
 private:
+    blitz::Array<float, 2> particles; //JDP
     int rank;
     int np;
     int domainCount;

@@ -1,5 +1,6 @@
 #include <iostream>
 #include <stack>
+#include <memory>
 #include <Orb.h>
 
 MPI_Datatype createCell() {
@@ -20,16 +21,9 @@ MPI_Datatype createCell() {
     return MPI_CELL;
 }
 
-Orb::Orb(int r, int n, blitz::Array<float, 2> &p, int d) {
-    rank = r;
-    np = n;
-
+Orb::Orb(int r, int n, blitz::Array<float, 2> &p, int d)
+    : particles(p), rank(r), np(n), domainCount(d) { //JDP
     MPI_CELL = createCell();
-
-    particles = &p;
-
-    domainCount = d;
-
     if (rank == 0) {
         operative();
     }
@@ -40,7 +34,7 @@ Orb::Orb(int r, int n, blitz::Array<float, 2> &p, int d) {
 
 void Orb::assign(int begin, int end, int id) {
     for (int j = begin; j < end; j++) {
-        (*particles)(j, 3) = id;
+        particles(j, 3) = id;
     }
 }
 
@@ -48,7 +42,7 @@ int Orb::reshuffleArray(int axis, int begin, int end, float cut) {
     int i = begin;
 
     for (int j = begin; j < end; j++) {
-        if ((*particles)(j, axis) < cut) {
+        if (particles(j, axis) < cut) {
             swap(i, j);
             i = i + 1;
         }
@@ -61,19 +55,19 @@ int Orb::reshuffleArray(int axis, int begin, int end, float cut) {
 
 void Orb::swap(int a, int b) {
     for (int d = 0; d < DIMENSIONS + 1; d++) {
-        float tmp = (*particles)(a, d);
-        (*particles)(a, d) = (*particles)(b, d);
-        (*particles)(b, d) = tmp;
+        float tmp = particles(a, d);
+        particles(a, d) = particles(b, d);
+        particles(b, d) = tmp;
     }
 }
 
 int Orb::count(int axis, int begin, int end, float split, int stride) {
     int nLeft = 0;
-
-    for (int j = begin; j < end; j += stride) {
-        nLeft += (*particles)(j, axis) < split;
-    }
-
+    assert(&particles(begin,axis)+1 == &particles(begin+1,axis)); // Column major check
+    float *slice = &particles(begin,axis);
+    auto p0 = slice;
+    auto p3 = slice + (end-begin);
+    for(auto p=p0; p<p3; ++p) nLeft += *p < split;
     return nLeft;
 }
 
@@ -138,7 +132,7 @@ void Orb::operative() {
     cells.push_back(cell);
     
     cellBegin.push_back(0);
-    cellEnd.push_back((*particles).rows());
+    cellEnd.push_back(particles.rows());
 
     std::stack<int> stack;
     stack.push(0);
@@ -218,7 +212,7 @@ void Orb::worker() {
     int buildingTree = 1;
 
     cellBegin.push_back(0);
-    cellEnd.push_back((*particles).rows());
+    cellEnd.push_back(particles.rows());
 
     float lower[DIMENSIONS] = {0., 0., 0.};
     float upper[DIMENSIONS] = {0., 0., 0.};
