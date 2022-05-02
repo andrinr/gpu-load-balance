@@ -2,14 +2,19 @@
 #include <stack>
 #include <Orb.h>
 
-Orb::Orb() {
-    cellBegin.push_back(0);
-    cellEnd.push_back((*particles).rows());
+Orb::Orb(blitz::Array<float, 2> &p, startIndices) : particles(p) {
+
+    int N = particles.nrows();
+
+    cellBeginInd.reserve(N*2+1);
+
+    cellBeginInd.push_back(0);
+    cellEndInd.push_back(N);
 }
 
 void Orb::assign(int begin, int end, int id) {
     for (int j = begin; j < end; j++) {
-        (*particles)(j, 3) = id;
+        particles(j, 3) = id;
     }
 }
 
@@ -17,7 +22,7 @@ int Orb::reshuffleArray(int axis, int begin, int end, float cut) {
     int i = begin;
 
     for (int j = begin; j < end; j++) {
-        if ((*particles)(j, axis) < cut) {
+        if (particles(j, axis) < cut) {
             swap(i, j);
             i = i + 1;
         }
@@ -30,9 +35,9 @@ int Orb::reshuffleArray(int axis, int begin, int end, float cut) {
 
 void Orb::swap(int a, int b) {
     for (int d = 0; d < DIMENSIONS + 1; d++) {
-        float tmp = (*particles)(a, d);
-        (*particles)(a, d) = (*particles)(b, d);
-        (*particles)(b, d) = tmp;
+        float tmp = particles(a, d);
+        particles(a, d) = particles(b, d);
+        particles(b, d) = tmp;
     }
 }
 
@@ -40,7 +45,7 @@ int Orb::count(int axis, int begin, int end, float split, int stride) {
     int nLeft = 0;
 
     for (int j = begin; j < end; j += stride) {
-        nLeft += (*particles)(j, axis) < split;
+        nLeft += particles(j, axis) < split;
     }
 
     return nLeft;
@@ -109,7 +114,7 @@ void Orb::operative() {
     // Maybe put this in constructor
     // Use heap for cells
     cellBegin.push_back(0);
-    cellEnd.push_back((*particles).rows());
+    cellEnd.push_back(particles.rows());
 
     std::stack<int> stack;
     stack.push(0);
@@ -189,7 +194,7 @@ void Orb::worker() {
     int buildingTree = 1;
 
     cellBegin.push_back(0);
-    cellEnd.push_back((*particles).rows());
+    cellEnd.push_back(particles.rows());
 
     float lower[DIMENSIONS] = {0., 0., 0.};
     float upper[DIMENSIONS] = {0., 0., 0.};

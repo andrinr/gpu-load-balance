@@ -9,9 +9,11 @@
 
 class Orb {
 public:
-    blitz::Array<float, 2>* particles;
-    std::vector<int> cellBegin;
-    std::vector<int> cellEnd;
+    blitz::Array<float, 2> particles;
+    blitz::Array<int, 2> cellIndices;
+
+    std::vector<int> cellBeginInd;
+    std::vector<int> cellEndInd;
 
     MPI_Datatype MPI_CUT;
     MPI_Datatype MPI_CELL;

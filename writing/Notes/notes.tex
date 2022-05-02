@@ -554,6 +554,7 @@ In order to estimate the runtime of the algorithms we denote the number of parti
 	\end{equation}
 \end{center}
 
+\TODO{Consider having multiple CPUs}
 
 \begin{figure}[H]
 	\begin{center}
@@ -1230,26 +1231,6 @@ It is very difficult to parallelize the reshuffling part of the particle array. 
 					\addlegendentryexpanded{\# $\suffix$};
 					
 				}	
-			
-					\addplot+[domain = 5000000:30000000] {
-				ln(1024) / ln(2) * 32 * 2* \x / ((2.5 * 8) * 10^9) * 1000 + 
-				ln(1024) / ln(2) * 5 * \x / ((2.5) * 10^9) * 1000
-			};	
-			\addlegendentryexpanded{Model \# 8};
-			
-			\addplot+[domain = 5000000:30000000] {
-				ln(1024) / ln(2) * 32 * 2* \x / ((2.5 * 4) * 10^9) * 1000 + 
-				ln(1024) / ln(2) * 5 * \x / ((2.5) * 10^9) * 1000
-			};	
-			\addlegendentryexpanded{Model \# 4};
-			
-			\addplot+[domain = 5000000:30000000] {
-				ln(1024) / ln(2) * 32 * 2* \x / ((2.5 * 1) * 10^9) * 1000 + 
-				ln(1024) / ln(2) * 5 * \x / ((2.5) * 10^9) * 1000
-			};	
-			\addlegendentryexpanded{Model \# 1};
-
-				
 			\end{axis}
 		\end{tikzpicture}
 	\end{center}

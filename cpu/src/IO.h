@@ -1,9 +1,14 @@
 #ifndef IO_H
 #define IO_H
+#include <blitz/array.h>
+#include <iostream>
+#include <fstream>
+#include <filesystem>
 
 class IO {
 public:
     static blitz::Array<float, 2> generateData(int N) {
+
         // Init positions
         blitz::Array<float, 2> p(N, DIMENSIONS + 1);
         p = 0;

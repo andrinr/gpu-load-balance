@@ -1,6 +1,6 @@
 #ifndef MPI_COMM_H // include guard
 #define MPI_COMM_H
-#include <comm.h>
+#include "comm.h"
 #include <mpi.h>
 
 class MPI_Comm : Comm {

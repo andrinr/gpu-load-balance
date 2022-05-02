@@ -4,10 +4,10 @@
 #include "Orb.h"
 #include "IO.h"
 #include "constants.h"
-#include "services.h"
+#include "tasks.h"
 #include <blitz/array.h>   
 #include <chrono>
-#include "mpi-comm.h"
+#include "communication/mpi-comm.h"
 
 using namespace std::chrono;
 
@@ -17,6 +17,7 @@ float r01() {
 
 int main(int argc, char** argv) {
 
+    // read params
     if (strlen(argv[1]) == 0) {
         return 1; // empty string
     }
@@ -28,15 +29,27 @@ int main(int argc, char** argv) {
     int count = arg1 * 1000;
     int nLeafCells = arg2;
 
+    // Define row major order
+    // Improves performance due to local proximity in storage
+    blitz::GeneralArrayStorage<2> storage;
+    storage.ordering() = 0,1;
+    storage.base() = 0, 0;
+    storage.ascendingFlag() = true, true;
+
+    // Number of particles for current processor
     int N = floor(count / np);
     blitz::Array<float, 2> particles = IO::generateData(N);
 
+    // We add +1 due to heap storage order
+    int nCells = nLeafCells * 2 + 1;
+    blitz::Array<Cell, 1> cells(nCells);
+    blitz::Array<int, 2> cellToParticle(nCells);
+    cellToParticle(1, 0) = 0;
+    cellToParticle(1, 1) = N;
+
+    // Init comm
     MPI_Comm mpiComm;
-
     std::cout << "Process " << mpiComm.rank << " processing " << N / 1000 << "K particles." << std::endl;
-
-
-    Cell cells[nLeafCells + 1];
 
     if (mpiComm.rank == 0) {
         const float lowerInit = -0.5;
@@ -46,12 +59,12 @@ int main(int argc, char** argv) {
         float upper[DIMENSIONS] = {upperInit, upperInit, upperInit};
 
         Cell cell(0, -1, domainCount, lower, upper);
-        cells[1] = cell;
+        cells(1) = cell;
 
-        Services::operate();
+        Tasks::operate(&);
     }
     else {
-        Services::work();
+        Tasks::work();
     }
 
     std::cout << "Process " << mpiComm.rank << " building tree..." << std::endl;
@@ -71,7 +84,7 @@ int main(int argc, char** argv) {
 
     std::cout << "Process " << mpiComm.rank << " done. "  << std::endl;
 
-
+    mpiComm.destroy();
 
     return 0;
 }
