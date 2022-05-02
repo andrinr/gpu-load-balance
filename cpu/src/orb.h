@@ -10,21 +10,12 @@
 class Orb {
 public:
     blitz::Array<float, 2> particles;
-    blitz::Array<int, 2> cellIndices;
+    blitz::Array<int, 2> cellToParticle
 
-    std::vector<int> cellBeginInd;
-    std::vector<int> cellEndInd;
-
-    MPI_Datatype MPI_CUT;
-    MPI_Datatype MPI_CELL;
-
-    Orb(int rank, int np, blitz::Array<float, 2> &p, int d);
+    Orb(blitz::Array<float, 2> &p, blitz::Array<float*, 2> &cToP);
     int count(int axis, int start, int end, float cut, int stride);
 
 private:
-    int rank;
-    int np;
-    int domainCount;
     
     void swap(int a, int b);
     void assign(int begin, int end, int id);

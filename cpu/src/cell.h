@@ -3,29 +3,30 @@
 
 #include "constants.h"
 #include <blitz/array.h>   
+#include <cstdint>
 
-struct Cell {
-    int id;
-    int leftChildId;
+class Cell {
+public:
     int nCells;
-    int cutAxis;
-    float cutPos;
+    uint8_t cutAxis;
+    float left;
+    float right;
     float lower[3], upper[3];
 
+    cut(float position, int axis);
     Cell (
-        int id_,
-        int leftChildId_,
         int nCells_,
-        int cutAxis_,
-        float cutPos_,
+        uint8_t cutAxis_,
+        float left_,
+        float right_,
         float lower_[3], 
         float upper_[3]
-    ) : id(id_),
-        leftChildId(leftChildId_),
+    ) :
         nCells(nCells_),
         cutAxis(cutAxis_),
-        cutPos(cutPos_)
-        {
+        left(left_),
+        right(right_),
+    {
         lower[0] = lower_[0];
         lower[1] = lower_[1];
         lower[2] = lower_[2];

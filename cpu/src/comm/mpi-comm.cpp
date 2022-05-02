@@ -33,16 +33,33 @@ void MPI_Comm::MPI_Comm() {
     MPI_Type_commit(&MPI_CELL);
 }
 
-void MPI_COMM::dispatchWork(int &n, Cell* cells) {
-    MPI_Bcast(&nCells, 1, MPI_INT, 0, MPI_COMM_WORLD);
+void MPI_COMM::dispatchWork(int &n, blitz::Array<Cell, 1> cells) {
+    MPI_Bcast(&nCells.data(), 1, MPI_INT, 0, MPI_COMM_WORLD);
 
     if (nCells != -1) {
-        MPI_Bcast(cells, nCells, MPI_CELL, 0, MPI_COMM_WORLD);
+        MPI_Bcast(cells.data(), nCells, MPI_CELL, 0, MPI_COMM_WORLD);
     }
 }
 
+OutData MPI_Comm::dispatchService(
+        InData (*func)(OutData),
+        InData inData,
+        int nInData,
+        OutData outData,
+        int nOutData,
+        int source) {
+
+    MPI_Bcast(&nCells.data(), 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+    OutData result func(inData);
+
+
+
+}
+
 void MPI_Comm::concludeWork(int &n, int *count) {
-    MPI_Bcast(&count, n, MPI_INT, 0, MPI_COMM_WORLD);
+    //todo
+    MPI_Reduce(&count, n, MPI_INT, 0, MPI_COMM_WORLD);
 }
 
 void MPI_Comm::destroy() {

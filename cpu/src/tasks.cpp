@@ -1,43 +1,69 @@
 #include <tasks.h>
-#include <tasks.h>
-#include "communication/mpi-comm.h"
+#include "comm/comm.h"
+#include <math.h>
+#include <blitz/array.h>
+#include "services.h"
 
-void Tasks::operate(Orb& orb)
-    Cell cells;
-    cells.push_back(cell);
+void Tasks::operate(
+        Orb& orb,
+        Comm comm,
+        blitz::Array<Cell, 1> cells,
+        int nLeafCells
+    ){
+    // loop over levels of tree
+    for (int l = 1; l < ceil(log2(nLeafCells)); l++) {
+        int begin_prev = 2**(l-1);
+        int end_prev = 2**l;
+        int begin = end_prev;
+        int end = 2**(l+1);
 
-    std::stack<int> stack;
-    stack.push(0);
+        // Init cells
+        for (int i = begin; i < end; i++) {
+            float maxValue = 0;
+            int axis = -1;
 
-    int level = 1;
-
-    while (true) {
-        int startIndex = level++;
-
-        int id = stack.top();
-        stack.pop();
-
-        Cell cell = cells[id];
-
-        int begin = cellBegin[id];
-        int end = cellEnd[id];
-
-        cell.leftChildId = cells.size();
-
-        MPI_Bcast(&cell, 1, MPI_CELL, 0, MPI_COMM_WORLD);
-
-        float maxValue = 0;
-        int axis = 0;
-
-        for (int i = 0; i < DIMENSIONS; i++) {
-            float size = cell.upper[i] - cell.lower[i];
-            if (size > maxValue) {
-                maxValue = size;
-                axis = i;
+            for (int i = 0; i < DIMENSIONS; i++) {
+                float size = cells(i).upper[i] - cells(i).lower[i];
+                if (size > maxValue) {
+                    maxValue = size;
+                    axis = i;
+                }
             }
+
+            cells(i).cutAxis = axis;
+            cells(i).left = lower[axis];
+            cells(i).right = upper[axis];
         }
 
-        MPI_Bcast(&axis, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        // Loop
+        bool foundAll = false;
+        while(!foundAll) {
+            InCount inCount(
+                cells(blitz::Range(begin, end)),
+                orb,
+                begin,
+                end);
+
+            comm.dispatchService(Services::count, )
+            comm.dispatchWork(&begin, cells(blitz::Range(begin, end)));
+            work(&orb, &comm);
+            comm.concludeWork(&begin, )
+
+            for (int i = begin; i < min(nLeafCells, end); i++) {
+
+                if
+
+
+                cells(i).left = lower[axis];
+                cells(i).right = upper[axis];
+            }
+
+
+
+        }
+
+        int mid = reshuffleArray(axis, begin, end, cut);
+
 
         float cut = findCut(cell, axis, begin, end);
         int mid = reshuffleArray(axis, begin, end, cut);
@@ -74,7 +100,7 @@ void Tasks::operate(Orb& orb)
     
 }
 
-void Tasks::work(Orb& orb) {
+void Tasks::work(Orb& orb, MPI_Comm comm) {
     int n;
     Cell cells[nLeafCells * 2];
 

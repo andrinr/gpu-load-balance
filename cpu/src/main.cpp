@@ -3,6 +3,7 @@
 #include <filesystem>
 #include "Orb.h"
 #include "IO.h"
+#include "cell.h"
 #include "constants.h"
 #include "tasks.h"
 #include <blitz/array.h>   
@@ -29,28 +30,23 @@ int main(int argc, char** argv) {
     int count = arg1 * 1000;
     int nLeafCells = arg2;
 
-    // Define row major order
-    // Improves performance due to local proximity in storage
-    blitz::GeneralArrayStorage<2> storage;
-    storage.ordering() = 0,1;
-    storage.base() = 0, 0;
-    storage.ascendingFlag() = true, true;
-
     // Number of particles for current processor
     int N = floor(count / np);
     blitz::Array<float, 2> particles = IO::generateData(N);
 
     // We add +1 due to heap storage order
     int nCells = nLeafCells * 2 + 1;
+    // root cell is at index 1
     blitz::Array<Cell, 1> cells(nCells);
     blitz::Array<int, 2> cellToParticle(nCells);
-    cellToParticle(1, 0) = 0;
-    cellToParticle(1, 1) = N;
+    Orb orb(particles, cellToParticle);
 
     // Init comm
-    MPI_Comm mpiComm;
+    MPI_Commparticles,  mpiComm;
     std::cout << "Process " << mpiComm.rank << " processing " << N / 1000 << "K particles." << std::endl;
+    std::cout << "Process " << mpiComm.rank << " starting task..." << std::endl;
 
+    auto start = high_resolution_clock::now();
     if (mpiComm.rank == 0) {
         const float lowerInit = -0.5;
         const float upperInit = 0.5;
@@ -58,19 +54,15 @@ int main(int argc, char** argv) {
         float lower[DIMENSIONS] = {lowerInit, lowerInit, lowerInit};
         float upper[DIMENSIONS] = {upperInit, upperInit, upperInit};
 
-        Cell cell(0, -1, domainCount, lower, upper);
+        Cell cell(domainCount, lower, upper);
         cells(1) = cell;
 
-        Tasks::operate(&);
+        Tasks::operate(&orb, nLeafCells);
     }
     else {
-        Tasks::work();
+        Tasks::work(&orb);
     }
 
-    std::cout << "Process " << mpiComm.rank << " building tree..." << std::endl;
-
-    auto start = high_resolution_clock::now();
-    Orb orb(rank, np, p, nCells);
     auto stop = high_resolution_clock::now();
     auto duration = duration_cast<microseconds>(stop - start);
 

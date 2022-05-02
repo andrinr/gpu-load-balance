@@ -2,14 +2,13 @@
 #include <stack>
 #include <Orb.h>
 
-Orb::Orb(blitz::Array<float, 2> &p, startIndices) : particles(p) {
+Orb::Orb(blitz::Array<float, 2> &p, blitz::Array<float*, 2> &cToP)
+    : particles(p), cellToParticle(cToP) {
 
     int N = particles.nrows();
 
-    cellBeginInd.reserve(N*2+1);
-
-    cellBeginInd.push_back(0);
-    cellEndInd.push_back(N);
+    cellToParticle(1, 0) = particles(0, 0);
+    cellToParticle(1, 1) = particles(N-1, 0);
 }
 
 void Orb::assign(int begin, int end, int id) {
@@ -39,16 +38,6 @@ void Orb::swap(int a, int b) {
         particles(a, d) = particles(b, d);
         particles(b, d) = tmp;
     }
-}
-
-int Orb::count(int axis, int begin, int end, float split, int stride) {
-    int nLeft = 0;
-
-    for (int j = begin; j < end; j += stride) {
-        nLeft += particles(j, axis) < split;
-    }
-
-    return nLeft;
 }
 
 float Orb::findCut(Cell &cell, int axis, int begin, int end) {
