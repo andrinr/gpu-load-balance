@@ -5,13 +5,6 @@
 #include "orb.h"
 #include "comm/mpi-comm.h"
 
-struct InControl {
-    Orb& orb,
-    Comm comm,
-    blitz::Array<Cell, 1> cells,
-    int nLeafCells
-};
-
 class Services {
 public:
     Services(Orb& orb);

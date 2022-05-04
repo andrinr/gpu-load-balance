@@ -2,13 +2,15 @@
 #include <stack>
 #include "orb.h"
 
-Orb::Orb(blitz::Array<float, 2> &p, blitz::Array<float*, 2> &cToP, int n)
+Orb::Orb(blitz::Array<float, 2> &p,
+         blitz::Array<float*, 2> &cToP,
+         int nLeafCells)
     : particles(p), cellToParticle(cToP), nLeafCells(n) {
 
     int N = particles.nrows();
 
     cellToParticle(1, 0) = particles(0, 0);
-    cellToParticle(1, 1) = particles(N-1, 0);
+    cellToParticle(1, 1) = particles(N - 1, 0);
 }
 
 void Orb::assign(int begin, int end, int id) {

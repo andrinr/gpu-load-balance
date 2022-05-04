@@ -28,13 +28,13 @@ int main(int argc, char** argv) {
     int nLeafCells = arg2;
 
     // Init comm
-    MPI_Comm mpiComm;
-    std::cout << "Process " << mpiComm.rank << " processing " << N / 1000 << "K particles." << std::endl;
+    MPIComm mpiComm;
+    std::cout << "Process " << mpiComm.rank << " processing " << count / 1000 << "K particles." << std::endl;
     std::cout << "Process " << mpiComm.rank << " starting task..." << std::endl;
 
 
     // Number of particles for current processor
-    int N = floor(count / np);
+    int N = floor(count / mpiComm.np);
     blitz::Array<float, 2> particles = IO::generateData(N, mpiComm.rank);
 
     // We add +1 due to heap storage order
@@ -42,7 +42,7 @@ int main(int argc, char** argv) {
     // root cell is at index 1
     blitz::Array<Cell, 1> cells(nCells);
     blitz::Array<int, 2> cellToParticle(nCells);
-    Orb orb(particles, cellToParticle);
+    Orb orb(particles, cellToParticle, nLeafCells);
 
 
     auto start = high_resolution_clock::now();

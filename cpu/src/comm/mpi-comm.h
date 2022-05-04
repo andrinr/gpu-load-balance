@@ -3,9 +3,9 @@
 #include "comm.h"
 #include <mpi.h>
 
-class MPI_Comm : Comm {
+class MPIComm : public Comm {
 public:
-    MPI_Comm();
+    MPIComm();
     int rank;
     int np;
 

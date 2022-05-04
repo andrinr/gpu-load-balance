@@ -1,31 +1,21 @@
 #ifndef COMM_H // include guard
 #define COMM_H
 
-#include "../services.h"
-template <class T>;
-
-class Range {
-    int beginRank,
-    int endRank
-};
-
-template <class InData>;
-template <class OutData>;
-
+template <class T>
 class Comm {
 public:
-    void Comm();
+    Comm();
 
-    OutData static dispatchService(
-            OutData (*func)(InData),
-            InData* inData,
+    T static dispatchService(
+            T (*func)(T),
+            T* inData,
             int nInData,
-            OutData* outData,
+            T* outData,
             int nOutData,
             int source);
 
-    static signalDataSize(int size);
-    static signalServiceId(int flag);
+    static void signalDataSize(int size);
+    static void signalServiceId(int flag);
 
     void destroy();
 

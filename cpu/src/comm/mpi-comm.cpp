@@ -1,6 +1,6 @@
 #include "mpi-comm.h"
 
-void MPI_Comm::MPI_Comm() {
+void MPIComm::MPIComm() {
     MPI_Init(Null, Null);
 
     MPI_Comm_size(MPI_COMM_WORLD, &np);
@@ -33,7 +33,7 @@ void MPI_Comm::MPI_Comm() {
     MPI_Type_commit(&MPI_CELL);
 }
 
-void MPI_Comm::signalServiceId(int id) {
+void MPIComm::signalServiceId(int id) {
     MPI_Bcast(
             &id,
             1,
@@ -43,7 +43,7 @@ void MPI_Comm::signalServiceId(int id) {
     );
 }
 
-void MPI_Comm::signalDataSize(int size) {
+void MPIComm::signalDataSize(int size) {
     MPI_Bcast(
             &size,
             1,
@@ -53,7 +53,7 @@ void MPI_Comm::signalDataSize(int size) {
     );
 }
 
-OutData MPI_Comm::dispatchService(
+OutData MPIComm::dispatchService(
         InData (*func)(OutData),
         InData* inData,
         int nInData,
@@ -112,6 +112,6 @@ OutData MPI_Comm::dispatchService(
 }
 
 
-void MPI_Comm::destroy() {
+void MPIComm::destroy() {
     MPI_Finalize();
 }
