@@ -1,9 +1,9 @@
 #include <iostream>
 #include <stack>
-#include <Orb.h>
+#include "orb.h"
 
-Orb::Orb(blitz::Array<float, 2> &p, blitz::Array<float*, 2> &cToP)
-    : particles(p), cellToParticle(cToP) {
+Orb::Orb(blitz::Array<float, 2> &p, blitz::Array<float*, 2> &cToP, int n)
+    : particles(p), cellToParticle(cToP), nLeafCells(n) {
 
     int N = particles.nrows();
 
@@ -24,3 +24,4 @@ void Orb::swap(int a, int b) {
         particles(b, d) = tmp;
     }
 }
+

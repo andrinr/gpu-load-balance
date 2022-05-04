@@ -84,6 +84,7 @@ int* Services::buildTree(Cell* c, int n) {
             cells(i).right = upper[axis];
         }
 
+        comm.signalService(1);
         int* totals_ = comm.dispatchService(
                 Services::count,
                 cells(blitz::Range(begin, min(nLeafCells, end))).data(),
@@ -97,8 +98,9 @@ int* Services::buildTree(Cell* c, int n) {
 
         while(!foundAll) {
 
+            comm.signalService(1);
             int* counts_ = comm.dispatchService(
-                    Services::count,
+                    Services::countLeft,
                     cells(blitz::Range(begin, min(nLeafCells, end))).data(),
                     end - begin,
                     int,
@@ -109,18 +111,23 @@ int* Services::buildTree(Cell* c, int n) {
 
             for (int i = begin; i < min(nLeafCells, end); i++) {
 
-               if (counts(i) < totals(i) / 2.0) {
-                    foundAll = false;
+               if (abs(counts(i) - totals(i) / 2.0) < CUTOFF) {
+                   cells(i).axis = -1;
                }
-               else if (true){
+               else if (counts(i) - totals(i) / 2.0 > 0){
+                    cells(i).right = (cells(i).left + cells(i).right) / 2.0;
                     foundAll = false;
                }
                else {
-                   cells(i).axis = -1;
+                   cells(i).left = (cells(i).left + cells(i).right) / 2.0;
+                   foundAll = false;
                }
             }
         }
 
+        // Dispatch reshuffle service
+
+        comm.signalService(1);
         int* totals_ = comm.dispatchService(
                 Services::localReshuffle,
                 cells(blitz::Range(begin, min(nLeafCells, end))).data(),
@@ -129,16 +136,21 @@ int* Services::buildTree(Cell* c, int n) {
                 end - begin,
                 0);
 
-        int nCellsLeft = ceil(cell.nCells / 2.0);
-        int nCellsRight = cell.nCells - nCellsLeft;
-        Cell leftChild (cells.size(), -1, nCellsLeft, cell.lower, cell.upper);
-        leftChild.upper[axis] = cut;
+        // Split and store all cells on current heap level
+        for (int i = begin; i < min(nLeafCells, end); i++) {
+            Cell cellLeft;
+            Cell cellRight;
+            std::tie(cellLeft, cellRight) = cells(i).cut();
 
-        Cell rightChild (cells.size(), -1, nCellsRight, cell.lower, cell.upper);
-        rightChild.lower[axis] = cut;
+            cellRight.setCutAxis();
+            cellRight.setCutMargin();
+            cellLeft.setCutAxis();
+            cellLeft.setCutMargin();
 
+            cells(cells(i).getLeftChildId) = cellLeft;
+            cells(cells(i).getRightChildId) = cellRight;
+        }
     }
-
     return nullptr;
 }
 

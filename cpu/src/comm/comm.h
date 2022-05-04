@@ -24,6 +24,9 @@ public:
             int nOutData,
             int source);
 
+    static signalDataSize(int size);
+    static signalServiceId(int flag);
+
     void destroy();
 
 };

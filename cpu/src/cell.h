@@ -4,39 +4,30 @@
 #include "constants.h"
 #include <blitz/array.h>   
 #include <cstdint>
+#include "tuple"
 
 class Cell {
 public:
     int id;
     int nLeafCells;
     int8_t cutAxis;
-    float left;
-    float right;
+    float cutMarginLeft;
+    float cutMarginRight;
     float lower[3], upper[3];
 
-    cut(float position, int axis);
+    std::tuple<Cell, Cell> cut();
+    void setCutAxis();
+    void setCutMargin();
+    int getLeftChildId();
+    int getRightChildId();
+    int getParentId();
+
     Cell (
         int id_,
         int nLeafCells_,
-        uint8_t cutAxis_,
-        float left_,
-        float right_,
         float lower_[3], 
         float upper_[3]
-    ) :
-        id(id_),
-        nLeafCells(nLeafCells_),
-        cutAxis(cutAxis_),
-        left(left_),
-        right(right_),
-    {
-        lower[0] = lower_[0];
-        lower[1] = lower_[1];
-        lower[2] = lower_[2];
-        upper[0] = upper_[0];
-        upper[1] = upper_[1];
-        upper[2] = upper_[2];
-    }
+    );
 };
 
 #endif // CELL_H

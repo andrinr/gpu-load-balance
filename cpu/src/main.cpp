@@ -1,20 +1,17 @@
 #include <iostream>
 #include <fstream>
 #include <filesystem>
-#include "Orb.h"
+#include "orb.h"
 #include "IO.h"
 #include "cell.h"
 #include "constants.h"
-#include "tasks.h"
+#include "services.h"
 #include <blitz/array.h>   
 #include <chrono>
-#include "communication/mpi-comm.h"
+#include "comm/mpi-comm.h"
 
 using namespace std::chrono;
 
-float r01() {
-    return (float)(rand())/(float)(RAND_MAX);
-}
 
 int main(int argc, char** argv) {
 
@@ -30,9 +27,15 @@ int main(int argc, char** argv) {
     int count = arg1 * 1000;
     int nLeafCells = arg2;
 
+    // Init comm
+    MPI_Comm mpiComm;
+    std::cout << "Process " << mpiComm.rank << " processing " << N / 1000 << "K particles." << std::endl;
+    std::cout << "Process " << mpiComm.rank << " starting task..." << std::endl;
+
+
     // Number of particles for current processor
     int N = floor(count / np);
-    blitz::Array<float, 2> particles = IO::generateData(N);
+    blitz::Array<float, 2> particles = IO::generateData(N, mpiComm.rank);
 
     // We add +1 due to heap storage order
     int nCells = nLeafCells * 2 + 1;
@@ -41,10 +44,6 @@ int main(int argc, char** argv) {
     blitz::Array<int, 2> cellToParticle(nCells);
     Orb orb(particles, cellToParticle);
 
-    // Init comm
-    MPI_Commparticles,  mpiComm;
-    std::cout << "Process " << mpiComm.rank << " processing " << N / 1000 << "K particles." << std::endl;
-    std::cout << "Process " << mpiComm.rank << " starting task..." << std::endl;
 
     auto start = high_resolution_clock::now();
     if (mpiComm.rank == 0) {
@@ -57,24 +56,33 @@ int main(int argc, char** argv) {
         Cell cell(domainCount, lower, upper);
         cells(1) = cell;
 
-        Tasks::operate(&orb, nLeafCells);
+        mpiComm.dispatchService(Services::buildTree, cells, 1, nullptr, 0, 0);
     }
     else {
-        Tasks::work(&orb);
+        Cell* cells;
+        while(true) {
+            int id;
+            mpiComm.signalServiceId(&id);
+            if (id == -1) {
+                break;
+            };
+
+            int size;
+            mpiComm.signalDataSize(&size);
+            switch(id) {
+                case 0:
+                    mpiComm.dispatchService(Services::count, &cells, size, Null, size);
+                    break;
+                case 1:
+                    mpiComm.dispatchService(Services::localReshuffle, &cells, size, Null, size);
+                    break;
+                default:
+                    throw std::invalid_argument(
+                            "Main.main: Service ID unknown."
+
+            }
+        }
     }
-
-    auto stop = high_resolution_clock::now();
-    auto duration = duration_cast<microseconds>(stop - start);
-
-    std::cout << "Process " << mpiComm.rank << " duration: " << duration.count() / 1000 << " ms" << std::endl;
-
-    int l_duration = duration.count() / 1000.0;
-    int g_duration;
-
-    MPI_Reduce(&l_duration, &g_duration, 1, MPI_INT, MPI_MAX, 0, MPI_COMM_WORLD);
-
-
-    std::cout << "Process " << mpiComm.rank << " done. "  << std::endl;
 
     mpiComm.destroy();
 

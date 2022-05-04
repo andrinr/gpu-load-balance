@@ -33,6 +33,26 @@ void MPI_Comm::MPI_Comm() {
     MPI_Type_commit(&MPI_CELL);
 }
 
+void MPI_Comm::signalServiceId(int id) {
+    MPI_Bcast(
+            &id,
+            1,
+            MPI_INT,
+            0,
+            MPI_COMM_WORLD
+    );
+}
+
+void MPI_Comm::signalDataSize(int size) {
+    MPI_Bcast(
+            &size,
+            1,
+            MPI_INT,
+            0,
+            MPI_COMM_WORLD
+    );
+}
+
 OutData MPI_Comm::dispatchService(
         InData (*func)(OutData),
         InData* inData,
@@ -73,7 +93,7 @@ OutData MPI_Comm::dispatchService(
                 break;
             default:
                 throw std::invalid_argument(
-                        "Services.dispatchServices: ouput datatype not recognised")
+                        "Services.dispatchServices: output datatype not recognised")
         };
 
         // TODO: make this more flexible

@@ -3,6 +3,7 @@
 #include <blitz/array.h>
 #include "cell.h"
 #include "orb.h"
+#include "comm/mpi-comm.h"
 
 struct InControl {
     Orb& orb,
@@ -19,6 +20,7 @@ public:
     int* localReshuffle(Cell* cells, int n);
     int* buildTree(Cell* cell, int n);
     int* findCuts(Cell* cells, int n);
+
 private:
     Orb orb;
 };

@@ -3,5 +3,7 @@
 
 static const int DIMENSIONS = 3;
 static const int PRECISION = 32;
+static const int CUTOFF = 64;
+static const bool DEBUG = true;
 
 #endif //CONSTANTS_H
