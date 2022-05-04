@@ -16,21 +16,15 @@ class Comm {
 public:
     void Comm();
 
-    virtual OutData static dispatchService(
-            InData (*func)(OutData),
-            InData inData,
+    OutData static dispatchService(
+            OutData (*func)(InData),
+            InData* inData,
             int nInData,
-            OutData outData,
+            OutData* outData,
             int nOutData,
             int source);
 
-    virtual void static concludeService(EServices serviceID, int& n, T data, int target);
-
-    virtual void static dispatchWork(int& n, blitz::Array<Cell, 1> cells);
-
-    virtual void static concludeWork(int&n, int* count);
-
-    virtual void destroy();
+    void destroy();
 
 };
 

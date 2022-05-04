@@ -33,34 +33,64 @@ void MPI_Comm::MPI_Comm() {
     MPI_Type_commit(&MPI_CELL);
 }
 
-void MPI_COMM::dispatchWork(int &n, blitz::Array<Cell, 1> cells) {
-    MPI_Bcast(&nCells.data(), 1, MPI_INT, 0, MPI_COMM_WORLD);
-
-    if (nCells != -1) {
-        MPI_Bcast(cells.data(), nCells, MPI_CELL, 0, MPI_COMM_WORLD);
-    }
-}
-
 OutData MPI_Comm::dispatchService(
         InData (*func)(OutData),
-        InData inData,
+        InData* inData,
         int nInData,
-        OutData outData,
+        OutData* outData,
         int nOutData,
         int source) {
 
-    MPI_Bcast(&nCells.data(), 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Datatype inMpiDatatype;
 
-    OutData result func(inData);
+    if(nInData > 0) {
+        switch (typeid(inData)) {
+            case typeid(Cell):
+                inMpiDataType = MPI_CELL;
+                break;
+            default:
+                throw std::invalid_argument(
+                        "Services.dispatchServices: input datatype not recognised")
+        };
 
+        MPI_Bcast(
+                &inData,
+                nInData,
+                inMpiDatatype,
+                source,
+                MPI_COMM_WORLD
+                );
+    }
 
+    OutData* l_result func(inData);
+    OutData* g_result;
 
+    if (nOutData > 0) {
+        MPI_Datatype outMpiDatatype;
+        switch (typeid(outData)) {
+            case typeid(int):
+                outMpiDatatype = MPI_INT;
+                break;
+            default:
+                throw std::invalid_argument(
+                        "Services.dispatchServices: ouput datatype not recognised")
+        };
+
+        // TODO: make this more flexible
+        MPI_Reduce(
+                &l_result,
+                &g_result,
+                nOutData,
+                outMmpiDatatype,
+                MPI_SUM,
+                source,
+                MPI_COMM_WORLD
+                );
+    }
+
+    return g_result;
 }
 
-void MPI_Comm::concludeWork(int &n, int *count) {
-    //todo
-    MPI_Reduce(&count, n, MPI_INT, 0, MPI_COMM_WORLD);
-}
 
 void MPI_Comm::destroy() {
     MPI_Finalize();

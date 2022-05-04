@@ -7,22 +7,25 @@
 
 class Cell {
 public:
-    int nCells;
-    uint8_t cutAxis;
+    int id;
+    int nLeafCells;
+    int8_t cutAxis;
     float left;
     float right;
     float lower[3], upper[3];
 
     cut(float position, int axis);
     Cell (
-        int nCells_,
+        int id_,
+        int nLeafCells_,
         uint8_t cutAxis_,
         float left_,
         float right_,
         float lower_[3], 
         float upper_[3]
     ) :
-        nCells(nCells_),
+        id(id_),
+        nLeafCells(nLeafCells_),
         cutAxis(cutAxis_),
         left(left_),
         right(right_),

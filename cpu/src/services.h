@@ -2,12 +2,7 @@
 #define SERVICES_H
 #include <blitz/array.h>
 #include "cell.h"
-
-struct InCount {
-   blitz::Array<Cell, 1> cells, // slice of cells
-   int begin,
-   int end
-};
+#include "orb.h"
 
 struct InControl {
     Orb& orb,
@@ -16,14 +11,16 @@ struct InControl {
     int nLeafCells
 };
 
-struct InControl {
-
-};
-
 class Services {
-    static blitz::Array<int, 1> count(InCount& data);
-    static OutData control(InData data);
-
+public:
+    Services(Orb& orb);
+    int* count(Cell* cells, int n);
+    int* countLeft(Cell* cells, int n);
+    int* localReshuffle(Cell* cells, int n);
+    int* buildTree(Cell* cell, int n);
+    int* findCuts(Cell* cells, int n);
+private:
+    Orb orb;
 };
 
 #endif //SERVICES_H
