@@ -1,5 +1,5 @@
-
 #include "services.h"
+#include "comm/MPIMessaging.h"
 
 Services::Services(Orb& o) : orb(o) {
 

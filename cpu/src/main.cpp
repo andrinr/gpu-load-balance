@@ -1,17 +1,17 @@
 #include <iostream>
 #include <fstream>
 #include <filesystem>
-#include "orb.h"
-#include "IO.h"
-#include "cell.h"
-#include "constants.h"
-#include "services.h"
-#include <blitz/array.h>   
+#include <blitz/array.h>
 #include <chrono>
-#include "comm/mpi-comm.h"
+
+#include "comm/MPIMessaging.h"
+#include "constants.h"
+#include "cell.h"
+#include "IO.h"
+#include "orb.h"
+#include "services.h"
 
 using namespace std::chrono;
-
 
 int main(int argc, char** argv) {
 
@@ -28,53 +28,72 @@ int main(int argc, char** argv) {
     int nLeafCells = arg2;
 
     // Init comm
-    MPIComm mpiComm;
-    std::cout << "Process " << mpiComm.rank << " processing " << count / 1000 << "K particles." << std::endl;
-    std::cout << "Process " << mpiComm.rank << " starting task..." << std::endl;
+    MPIMessaging mpiMessaging;
+    std::cout << "Process " << mpiMessaging.rank << " processing " << count / 1000 << "K particles." << std::endl;
+    std::cout << "Process " << mpiMessaging.rank << " starting task..." << std::endl;
 
 
     // Number of particles for current processor
-    int N = floor(count / mpiComm.np);
-    blitz::Array<float, 2> particles = IO::generateData(N, mpiComm.rank);
+    int N = floor(count / mpiMessaging.np);
+    blitz::Array<float, 2> particles = IO::generateData(N, mpiMessaging.rank);
 
     // We add +1 due to heap storage order
     int nCells = nLeafCells * 2 + 1;
     // root cell is at index 1
     blitz::Array<Cell, 1> cells(nCells);
-    blitz::Array<int, 2> cellToParticle(nCells);
+    blitz::Array<float*, 2> cellToParticle(nCells);
     Orb orb(particles, cellToParticle, nLeafCells);
 
 
     auto start = high_resolution_clock::now();
-    if (mpiComm.rank == 0) {
+    if (mpiMessaging.rank == 0) {
         const float lowerInit = -0.5;
         const float upperInit = 0.5;
 
         float lower[DIMENSIONS] = {lowerInit, lowerInit, lowerInit};
         float upper[DIMENSIONS] = {upperInit, upperInit, upperInit};
 
-        Cell cell(domainCount, lower, upper);
+        Cell cell(1, nLeafCells, lower, upper);
         cells(1) = cell;
 
-        mpiComm.dispatchService(Services::buildTree, cells, 1, nullptr, 0, 0);
+        Messaging::dispatchService(
+                orb,
+                Services::buildTree,
+                cells.data(),
+                1,
+                nullptr,
+                0,
+                0);
     }
     else {
         Cell* cells;
         while(true) {
             int id;
-            mpiComm.signalServiceId(&id);
+            Messaging::signalServiceId(id);
             if (id == -1) {
                 break;
             };
 
             int size;
-            mpiComm.signalDataSize(&size);
+            Messaging::signalDataSize(size);
             switch(id) {
                 case 0:
-                    mpiComm.dispatchService(Services::count, &cells, size, Null, size);
+                    MPIMessaging::dispatchService(
+                            orb,
+                            &Services::count,
+                            cells.data(),
+                            size,
+                            Null,
+                            size);
                     break;
                 case 1:
-                    mpiComm.dispatchService(Services::localReshuffle, &cells, size, Null, size);
+                    MPIMessaging::dispatchService(
+                            orb,
+                            &Services::localReshuffle,
+                            cells.data(),
+                            size,
+                            Null,
+                            size);
                     break;
                 default:
                     throw std::invalid_argument(
@@ -84,7 +103,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    mpiComm.destroy();
+    mpiMessaging.destroy();
 
     return 0;
 }

@@ -2,7 +2,6 @@
 #define CELL_H
 
 #include "constants.h"
-#include <blitz/array.h>   
 #include <cstdint>
 #include "tuple"
 

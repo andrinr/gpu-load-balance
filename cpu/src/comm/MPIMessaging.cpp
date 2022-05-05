@@ -1,6 +1,6 @@
-#include "mpi-comm.h"
+#include "MPIMessaging.h"
 
-void MPIComm::MPIComm() {
+void MPIMessaging::MPIMessaging() {
     MPI_Init(Null, Null);
 
     MPI_Comm_size(MPI_COMM_WORLD, &np);
@@ -33,7 +33,7 @@ void MPIComm::MPIComm() {
     MPI_Type_commit(&MPI_CELL);
 }
 
-void MPIComm::signalServiceId(int id) {
+void MPIMessaging::signalServiceId(int id) {
     MPI_Bcast(
             &id,
             1,
@@ -43,7 +43,7 @@ void MPIComm::signalServiceId(int id) {
     );
 }
 
-void MPIComm::signalDataSize(int size) {
+void MPIMessaging::signalDataSize(int size) {
     MPI_Bcast(
             &size,
             1,
@@ -53,12 +53,13 @@ void MPIComm::signalDataSize(int size) {
     );
 }
 
-OutData MPIComm::dispatchService(
-        InData (*func)(OutData),
-        InData* inData,
-        int nInData,
-        OutData* outData,
-        int nOutData,
+int * MPIMessaging::dispatchService(
+        Orb &orb,
+        int *(*func)(Orb&, Cell *, int),
+        Cell *cells,
+        int nCells,
+        int *results,
+        int nResults,
         int source) {
 
     MPI_Datatype inMpiDatatype;
@@ -82,7 +83,7 @@ OutData MPIComm::dispatchService(
                 );
     }
 
-    OutData* l_result func(inData);
+    OutData* l_result func(&orb, inData);
     OutData* g_result;
 
     if (nOutData > 0) {
@@ -112,6 +113,6 @@ OutData MPIComm::dispatchService(
 }
 
 
-void MPIComm::destroy() {
+void MPIMessaging::destroy() {
     MPI_Finalize();
 }

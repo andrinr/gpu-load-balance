@@ -3,19 +3,14 @@
 #include <blitz/array.h>
 #include "cell.h"
 #include "orb.h"
-#include "comm/mpi-comm.h"
 
 class Services {
 public:
-    Services(Orb& orb);
-    int* count(Cell* cells, int n);
-    int* countLeft(Cell* cells, int n);
-    int* localReshuffle(Cell* cells, int n);
-    int* buildTree(Cell* cell, int n);
-    int* findCuts(Cell* cells, int n);
-
-private:
-    Orb orb;
+    static int* count(Orb& orb, Cell* cells, int n);
+    static int* countLeft(Orb& orb, Cell* cells, int n);
+    static int* localReshuffle(Orb& orb, Cell* cells, int n);
+    static int* buildTree(Orb& orb, Cell* cell, int n);
+    static int* findCuts(Orb& orb, Cell* cells, int n);
 };
 
 #endif //SERVICES_H
