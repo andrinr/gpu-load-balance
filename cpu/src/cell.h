@@ -21,6 +21,8 @@ public:
     int getRightChildId();
     int getParentId();
 
+    Cell();
+
     Cell (
         int id_,
         int nLeafCells_,

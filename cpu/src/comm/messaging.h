@@ -5,7 +5,7 @@
 
 class Messaging {
 public:
-    Messaging();
+    static void Init();
     static int* dispatchService(
             Orb& orb,
             int *(*func)(Orb&, Cell *, int),
@@ -18,7 +18,7 @@ public:
     static void signalDataSize(int size);
     static void signalServiceId(int flag);
 
-    void destroy();
+    static void destroy();
 
 };
 

@@ -39,14 +39,15 @@ int main(int argc, char** argv) {
 
     // We add +1 due to heap storage order
     int nCells = nLeafCells * 2 + 1;
-    // root cell is at index 1
-    blitz::Array<Cell, 1> cells(nCells);
     blitz::Array<float*, 2> cellToParticle(nCells);
     Orb orb(particles, cellToParticle, nLeafCells);
 
-
     auto start = high_resolution_clock::now();
     if (mpiMessaging.rank == 0) {
+
+        // root cell is at index 1
+        blitz::Array<Cell, 1> cells(nCells);
+
         const float lowerInit = -0.5;
         const float upperInit = 0.5;
 
@@ -66,7 +67,8 @@ int main(int argc, char** argv) {
                 0);
     }
     else {
-        Cell* cells;
+        Cell* empty_cells;
+        int* results;
         while(true) {
             int id;
             Messaging::signalServiceId(id);
@@ -74,30 +76,33 @@ int main(int argc, char** argv) {
                 break;
             };
 
-            int size;
-            Messaging::signalDataSize(size);
+            int nCells;
+            int nResults;
+            Messaging::signalDataSize(nCells);
             switch(id) {
                 case 0:
-                    MPIMessaging::dispatchService(
+                    Messaging::dispatchService(
                             orb,
                             &Services::count,
-                            cells.data(),
-                            size,
-                            Null,
-                            size);
+                            empty_cells,
+                            nCells,
+                            results,
+                            nResults,
+                            0);
                     break;
                 case 1:
-                    MPIMessaging::dispatchService(
+                    Messaging::dispatchService(
                             orb,
                             &Services::localReshuffle,
-                            cells.data(),
-                            size,
-                            Null,
-                            size);
+                            empty_cells,
+                            nCells,
+                            results,
+                            nResults,
+                            0);
                     break;
                 default:
                     throw std::invalid_argument(
-                            "Main.main: Service ID unknown."
+                            "Main.main: Service ID unknown.");
 
             }
         }

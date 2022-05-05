@@ -1,22 +1,25 @@
 #include "cell.h"
+#include <math.h>
+
+Cell::Cell() {
+
+};
 
 Cell::Cell(
         int id_,
         int nLeafCells_,
         float *lower_,
-        float *upper_) :
-        id(id_),
-        nLeafCells(nLeafCells_)
-{
+        float *upper_) : id(id_), nLeafCells(nLeafCells_) {
+
 #if DEBUG
     if (nLeafCells < 1) {
         throw std::invalid_argument("Cell.Cell: nLeafCells is less than one.");
     }
-#end // DEBUG
+#endif // DEBUG
 
-    cutAxis_ = -1;
-    left = 0.0;
-    right = 0.0;
+    cutAxis = -1;
+    cutMarginLeft = 0.0;
+    cutMarginRight = 0.0;
     lower[0] = lower_[0];
     lower[1] = lower_[1];
     lower[2] = lower_[2];
@@ -26,14 +29,16 @@ Cell::Cell(
 };
 
 std::tuple <Cell, Cell> Cell::cut() {
-    int nCellsLeft = cei(nLeafCells / 2.0);
+    int nCellsLeft = ceil(nLeafCells / 2.0);
     int nCellsRight = nLeafCells - nCellsLeft;
 
     Cell leftChild (getLeftChildId(), nCellsLeft, lower, upper);
-    leftChild.upper[axis] = (right - left) / 2.0;
+    leftChild.upper[cutAxis] = (cutMarginRight - cutMarginLeft) / 2.0;
 
     Cell rightChild (getRightChildId() * 2 + 1, nCellsRight, lower, upper);
-    rightChild.lower[axis] = (right - left) / 2.0;
+    rightChild.lower[cutAxis] = (cutMarginRight - cutMarginLeft) / 2.0;
+
+    return std::make_tuple(leftChild, rightChild);
 }
 
 
@@ -42,11 +47,12 @@ int Cell::getLeftChildId() {
 }
 
 int Cell::getRightChildId() {
-    return cell.id * 2 + 1;
+    return id * 2 + 1;
 }
 
 int Cell::getParentId() {
     //todo
+    return id;
 }
 
 void Cell::setCutAxis() {
@@ -67,12 +73,5 @@ void Cell::setCutAxis() {
         }
     }
 
-    cutAxis = d;
+    cutAxis = int(maxD);
 }
-
-void Cell::setCutAxis() {
-    cutMarginLeft = lower[cutAxis];
-    cutMarginRight = upper[cutAxis];
-}
-
-void Cell
