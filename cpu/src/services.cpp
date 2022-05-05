@@ -1,70 +1,61 @@
 #include "services.h"
 #include "comm/MPIMessaging.h"
+#include <math.h>
 
-Services::Services(Orb& o) : orb(o) {
-
-}
-
-int* Services::countLeft(Cell* c, int n) {
+int* Services::countLeft(Orb &orb, Cell* c, int n) {
     blitz::Array<Cell, 1> cells(c, blitz::shape(n));
-    int nLeft = 0;
 
-    int beginInd = orb.cellToParticle(data.cells(0).id, 0);
-    int endInd = orb.cellToParticle(data.cells(n-1).id, 1);
-    float *slice = orb.particles(beginInd, endInd);
+    int begin = orb.cellToParticle(cells(0).id, 0);
+    int end = orb.cellToParticle(cells(n-1).id, 1);
+    int size = end - begin;
 
-    blitz::Array<int, 1> counts(data.cells.nrows());
+    float* slice = &orb.particles(begin, end);
+
+    blitz::Array<int, 1> counts(cells.rows());
     int cellInd = 0;
-    for (int i = 0; i < data.end - data.begin; i += DIMENSIONS) {
-        if (cells(cellInd).axis == -1) {
-            i +=
+    for (int i = 0; i < size; i += DIMENSIONS) {
+        if (cells(cellInd).cutAxis == -1) {
+            i += 1;
         }
         float* p = slice + i;
 
         // todo: We need to ensure to cell is never empty (no particles) for this to work!!
-        cellInd += p > data.cToP(cellInd, 1);
+        cellInd += i > orb.cellToParticle(cells(cellInd).id, 1) - begin;
         Cell& cell = cells(cellInd);
 
-        counts(cellInd) += *p + cell.cutAxis < (cell.left + cell.right) / 2.0;
+        counts(cellInd) += *p + cell.cutAxis < (cell.cutMarginLeft + cell.cutMarginRight) / 2.0;
     }
 
     return counts.data();
 }
 
-int* Services::count(Cell* c, int n) {
+int* Services::count(Orb &orb, Cell* c, int n) {
     blitz::Array<Cell, 1> cells(c, blitz::shape(n));
-    int total = 0;
+    blitz::Array<int, 1> totals(cells.rows());
 
-    int beginInd = orb.cellToParticle(data.cells(0).id, 0);
-    int endInd = orb.cellToParticle(data.cells(0).id, 1);
-    float *slice = orb.particles(beginInd, endInd);
+    for (int i = 0; i < cells.rows(); ++i) {
+        int begin = orb.cellToParticle(cells(i).id, 0);
+        int end = orb.cellToParticle(cells(i).id, 1);
 
-    blitz::Array<int, 1> counts(data.cells.nrows());
-    int cellInd = 0;
-    for (int i = 0; i < data.end - data.begin; i += DIMENSIONS) {
-        float* p = slice + i;
-
-        // todo: We need to ensure to cell is never empty (no particles) for this to work!!
-        cellInd += p > data.cToP(cellInd, 1);
-        Cell& cell = data.cells(cellInd);
-
-        counts(cellInd) += *p + cell.cutAxis < (cell.left + cell.right) / 2.0;
+        totals(i) = begin - end;
     }
 
-    return counts.data();
+    return totals.data();
 }
 
-int* Services::buildTree(Cell* c, int n) {
+int* Services::buildTree(Orb& orb, Cell* c, int n) {
 
     // Blitz: 2.3.7
     blitz::Array<Cell, 1> cells(c, blitz::shape(n));
 
+    Cell cell = c[0];
+
     // loop over levels of tree
-    for (int l = 1; l < ceil(log2(cell->nLeafCells)); l++) {
-        int begin_prev = 2**(l-1);
-        int end_prev = 2**l;
+    for (int l = 1; l < ceil(log2(cell.nLeafCells)); l++) {
+        int begin_prev = pow(2, (l-1));
+        int end_prev = pow(2, l);
         int begin = end_prev;
-        int end = 2**(l+1);
+        int end = pow(2,l+1);
 
         // Init cells
         for (int i = begin; i < end; i++) {
@@ -80,8 +71,8 @@ int* Services::buildTree(Cell* c, int n) {
             }
 
             cells(i).cutAxis = axis;
-            cells(i).left = lower[axis];
-            cells(i).right = upper[axis];
+            cells(i).cutMarginLeft = lower[axis];
+            cells(i).cutMarginRight = upper[axis];
         }
 
         comm.signalService(1);
@@ -154,12 +145,7 @@ int* Services::buildTree(Cell* c, int n) {
     return nullptr;
 }
 
-int* Services::findCuts() {
-
-    return nullptr;
-}
-
-int* Services::localReshuffle(Cell* cells, int n) {
+int* Services::localReshuffle(Orb& orb, Cell* cells, int n) {
 
     blitz::Array<int, 1> mids(n);
     for (int cellPtrOffset = 0; cellPtrOffset < n; cellPtrOffset++){

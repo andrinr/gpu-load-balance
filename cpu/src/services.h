@@ -10,7 +10,6 @@ public:
     static int* countLeft(Orb& orb, Cell* cells, int n);
     static int* localReshuffle(Orb& orb, Cell* cells, int n);
     static int* buildTree(Orb& orb, Cell* cell, int n);
-    static int* findCuts(Orb& orb, Cell* cells, int n);
 };
 
 #endif //SERVICES_H

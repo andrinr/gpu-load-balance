@@ -3,7 +3,7 @@
 #include "orb.h"
 
 Orb::Orb(blitz::Array<float, 2> &p,
-         blitz::Array<float*, 2> &cToP,
+         blitz::Array<int, 2> &cToP,
          int nLeafCells)
     : particles(p), cellToParticle(cToP), nLeafCells(n) {
 

@@ -39,7 +39,9 @@ int main(int argc, char** argv) {
 
     // We add +1 due to heap storage order
     int nCells = nLeafCells * 2 + 1;
-    blitz::Array<float*, 2> cellToParticle(nCells);
+    blitz::Array<int, 2> cellToParticle(nCells);
+    cellToParticle(0,0) = 0;
+    cellToParticle(0,1) = N-1;
     Orb orb(particles, cellToParticle, nLeafCells);
 
     auto start = high_resolution_clock::now();
