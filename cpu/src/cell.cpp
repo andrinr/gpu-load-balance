@@ -31,7 +31,7 @@ Cell::Cell(
 std::tuple <Cell, Cell> Cell::cut() {
     int nCellsLeft = ceil(nLeafCells / 2.0);
     int nCellsRight = nLeafCells - nCellsLeft;
-
+    nLeftOfCut = 0;
     Cell leftChild (getLeftChildId(), nCellsLeft, lower, upper);
     leftChild.upper[cutAxis] = (cutMarginRight - cutMarginLeft) / 2.0;
 

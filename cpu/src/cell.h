@@ -9,6 +9,7 @@ class Cell {
 public:
     int id;
     int nLeafCells;
+    int nLeftOfCut;
     int8_t cutAxis;
     float cutMarginLeft;
     float cutMarginRight;
