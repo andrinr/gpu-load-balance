@@ -3,12 +3,13 @@
 #include "messaging.h"
 #include <mpi.h>
 
+
 class MPIMessaging : public Messaging {
 public:
     static void Init();
-    static int* dispatchService(
+    static std::tuple<bool, int*> dispatchService(
             Orb& orb,
-            int *(*func)(Orb&, Cell *, int),
+            ServiceIDs id,
             Cell* cells,
             int nCells,
             int* results,

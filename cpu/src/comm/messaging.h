@@ -2,13 +2,15 @@
 #define MESSAGING_H
 #include "../cell.h"
 #include "../orb.h"
+#include "../services.h"
+#include "tuple"
 
 class Messaging {
 public:
     static void Init();
-    static int* dispatchService(
+    static std::tuple<bool, int*> dispatchService(
             Orb& orb,
-            int *(*func)(Orb&, Cell *, int),
+            ServiceIDs id,
             Cell* cells,
             int nCells,
             int* results,

@@ -4,6 +4,14 @@
 #include "cell.h"
 #include "orb.h"
 
+enum ServiceIDs {
+    countLeftService,
+    countService,
+    buildTreeService,
+    localReshuffleService,
+    terminateService
+};
+
 class Services {
 public:
     static int* count(Orb& orb, Cell* cells, int n);

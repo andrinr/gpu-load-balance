@@ -61,7 +61,7 @@ int main(int argc, char** argv) {
 
         Messaging::dispatchService(
                 orb,
-                Services::buildTree,
+                buildTreeService,
                 cells.data(),
                 1,
                 nullptr,
@@ -71,42 +71,18 @@ int main(int argc, char** argv) {
     else {
         Cell* empty_cells;
         int* results;
-        while(true) {
-            int id;
-            Messaging::signalServiceId(id);
-            if (id == -1) {
-                break;
-            };
-
-            int nCells;
-            int nResults;
-            Messaging::signalDataSize(nCells);
-            switch(id) {
-                case 0:
-                    Messaging::dispatchService(
-                            orb,
-                            &Services::count,
-                            empty_cells,
-                            nCells,
-                            results,
-                            nResults,
-                            0);
-                    break;
-                case 1:
-                    Messaging::dispatchService(
-                            orb,
-                            &Services::localReshuffle,
-                            empty_cells,
-                            nCells,
-                            results,
-                            nResults,
-                            0);
-                    break;
-                default:
-                    throw std::invalid_argument(
-                            "Main.main: Service ID unknown.");
-
-            }
+        int nResults;
+        ServiceIDs id;
+        bool status;
+        while(status) {
+            std::tie(status, results) = MPIMessaging::dispatchService(
+                    orb,
+                    id,
+                    nullptr,
+                    nCells,
+                    nullptr,
+                    nResults,
+                    0);
         }
     }
 

@@ -1,6 +1,7 @@
 #include "services.h"
 #include "comm/MPIMessaging.h"
 #include <math.h>
+#include <algorithm>
 
 int* Services::countLeft(Orb &orb, Cell* c, int n) {
     blitz::Array<Cell, 1> cells(c, blitz::shape(n));
@@ -26,123 +27,23 @@ int* Services::countLeft(Orb &orb, Cell* c, int n) {
         counts(cellInd) += *p + cell.cutAxis < (cell.cutMarginLeft + cell.cutMarginRight) / 2.0;
     }
 
+    // todo: new boundaries will need to be set
+
     return counts.data();
 }
 
 int* Services::count(Orb &orb, Cell* c, int n) {
     blitz::Array<Cell, 1> cells(c, blitz::shape(n));
-    blitz::Array<int, 1> totals(cells.rows());
+    blitz::Array<int, 1> count(cells.rows());
 
     for (int i = 0; i < cells.rows(); ++i) {
         int begin = orb.cellToParticle(cells(i).id, 0);
         int end = orb.cellToParticle(cells(i).id, 1);
 
-        totals(i) = begin - end;
+        count(i) = begin - end;
     }
 
-    return totals.data();
-}
-
-int* Services::buildTree(Orb& orb, Cell* c, int n) {
-
-    // Blitz: 2.3.7
-    blitz::Array<Cell, 1> cells(c, blitz::shape(n));
-
-    Cell cell = c[0];
-
-    // loop over levels of tree
-    for (int l = 1; l < ceil(log2(cell.nLeafCells)); l++) {
-        int begin_prev = pow(2, (l-1));
-        int end_prev = pow(2, l);
-        int begin = end_prev;
-        int end = pow(2,l+1);
-
-        // Init cells
-        for (int i = begin; i < end; i++) {
-            float maxValue = 0;
-            int axis = -1;
-
-            for (int i = 0; i < DIMENSIONS; i++) {
-                float size = cells(i).upper[i] - cells(i).lower[i];
-                if (size > maxValue) {
-                    maxValue = size;
-                    axis = i;
-                }
-            }
-
-            cells(i).cutAxis = axis;
-            cells(i).cutMarginLeft = lower[axis];
-            cells(i).cutMarginRight = upper[axis];
-        }
-
-        comm.signalService(1);
-        int* totals_ = comm.dispatchService(
-                Services::count,
-                cells(blitz::Range(begin, min(nLeafCells, end))).data(),
-                end - begin,
-                int,
-                end - begin,
-                0);
-        blitz::Array<Cell, 1> total(totals_, blitz::shape(end - begin));
-        // Loop
-        bool foundAll = true;
-
-        while(!foundAll) {
-
-            comm.signalService(1);
-            int* counts_ = comm.dispatchService(
-                    Services::countLeft,
-                    cells(blitz::Range(begin, min(nLeafCells, end))).data(),
-                    end - begin,
-                    int,
-                    end - begin,
-                    0);
-
-            blitz::Array<Cell, 1> counts(counts_, blitz::shape(end - begin));
-
-            for (int i = begin; i < min(nLeafCells, end); i++) {
-
-               if (abs(counts(i) - totals(i) / 2.0) < CUTOFF) {
-                   cells(i).axis = -1;
-               }
-               else if (counts(i) - totals(i) / 2.0 > 0){
-                    cells(i).right = (cells(i).left + cells(i).right) / 2.0;
-                    foundAll = false;
-               }
-               else {
-                   cells(i).left = (cells(i).left + cells(i).right) / 2.0;
-                   foundAll = false;
-               }
-            }
-        }
-
-        // Dispatch reshuffle service
-
-        comm.signalService(1);
-        int* totals_ = comm.dispatchService(
-                Services::localReshuffle,
-                cells(blitz::Range(begin, min(nLeafCells, end))).data(),
-                end - begin,
-                int,
-                end - begin,
-                0);
-
-        // Split and store all cells on current heap level
-        for (int i = begin; i < min(nLeafCells, end); i++) {
-            Cell cellLeft;
-            Cell cellRight;
-            std::tie(cellLeft, cellRight) = cells(i).cut();
-
-            cellRight.setCutAxis();
-            cellRight.setCutMargin();
-            cellLeft.setCutAxis();
-            cellLeft.setCutMargin();
-
-            cells(cells(i).getLeftChildId) = cellLeft;
-            cells(cells(i).getRightChildId) = cellRight;
-        }
-    }
-    return nullptr;
+    return count.data();
 }
 
 int* Services::localReshuffle(Orb& orb, Cell* cells, int n) {
@@ -169,12 +70,90 @@ int* Services::localReshuffle(Orb& orb, Cell* cells, int n) {
     return mids.data();
 }
 
+int* Services::buildTree(Orb& orb, Cell* c, int n) {
 
+    // Blitz: 2.3.7
+    blitz::Array<Cell, 1> cells(c, blitz::shape(n));
 
-int Services::control(int data) {
+    Cell root = c[0];
 
+    // loop over levels of tree
+    for (int l = 1; l < ceil(log2(root.nLeafCells)); l++) {
+
+        int a = std::pow(2, (l-1));
+        int b = std::pow(2, l);
+        int c = std::min((int) std::pow(2,l+1), root.nLeafCells);
+
+        bool status;
+        int* sum;
+        std::tie(status, sum) = MPIMessaging::dispatchService(
+                orb,
+                countService,
+                cells(blitz::Range(a, b)).data(),
+                b - a,
+                sum,
+                b - a,
+                0);
+
+        blitz::Array<Cell, 1> countBlitz(sum, blitz::shape(b - a));
+        // Loop
+        bool foundAll = true;
+
+        while(foundAll) {
+            int* sumLeft;
+            foundAll = true;
+            std::tie(status, sumLeft) = MPIMessaging::dispatchService(
+                    orb,
+                    countLeftService,
+                    cells(blitz::Range(a, b)).data(),
+                    b - a,
+                    sumLeft,
+                    b - a,
+                    0);
+
+            blitz::Array<int, 1> countLeftBlitz(sumLeft, blitz::shape(b - a));
+
+            for (int i = a; i < b; i++) {
+
+               if (abs(countLeftBlitz(i) - countLeftBlitz(i) / 2.0) < CUTOFF) {
+                   cells(i).cutAxis = -1;
+               }
+               else if (countLeftBlitz(i) - countLeftBlitz(i) / 2.0 > 0){
+                    cells(i).cutMarginRight = (cells(i).cutMarginLeft + cells(i).cutMarginRight) / 2.0;
+                    foundAll = false;
+               }
+               else {
+                   cells(i).cutMarginLeft = (cells(i).cutMarginLeft + cells(i).cutMarginRight) / 2.0;
+                   foundAll = false;
+               }
+            }
+        }
+
+        // Dispatch reshuffle service
+        int * dummy;
+        std::tie(status, dummy) = MPIMessaging::dispatchService(
+                orb,
+                localReshuffleService,
+                cells(blitz::Range(a, b)).data(),
+                b - a,
+                dummy,
+                b - a,
+                0);
+
+        // Split and store all cells on current heap level
+        for (int i = a; i < b; i++) {
+            Cell cellLeft;
+            Cell cellRight;
+            std::tie(cellLeft, cellRight) = cells(i).cut();
+
+            cellRight.setCutAxis();
+            cellRight.setCutMargin();
+            cellLeft.setCutAxis();
+            cellLeft.setCutMargin();
+
+            cells(cells(i).getLeftChildId()) = cellLeft;
+            cells(cells(i).getRightChildId()) = cellRight;
+        }
+    }
     return nullptr;
 }
-
-
-

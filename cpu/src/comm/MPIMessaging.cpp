@@ -61,14 +61,22 @@ void MPIMessaging::signalDataSize(int size) {
     );
 }
 
-int * MPIMessaging::dispatchService(
+std::tuple<bool, int*> MPIMessaging::dispatchService(
         Orb &orb,
-        int *(*func)(Orb&, Cell *, int),
+        ServiceIDs id,
         Cell *cells,
         int nCells,
         int *results,
         int nResults,
         int source) {
+
+    MPI_Bcast(
+            &nCells,
+            1,
+            MPI_INT,
+            source,
+            MPI_COMM_WORLD
+    );
 
     if(nCells > 0) {
         MPI_Bcast(
@@ -80,7 +88,42 @@ int * MPIMessaging::dispatchService(
                 );
     }
 
-    int* l_result = func(orb, cells, nCells);
+    MPI_Bcast(
+            &id,
+            1,
+            MPI_INT,
+            source,
+            MPI_COMM_WORLD
+    );
+
+    int* l_result;
+    switch (id) {
+        case countLeftService:
+            l_result = Services::countLeft(orb, cells, nCells);
+            break;
+        case countService:
+            l_result = Services::count(orb, cells, nCells);
+            break;
+        case buildTreeService:
+            l_result = Services::buildTree(orb, cells, nCells);
+            break;
+        case localReshuffleService:
+            l_result = Services::localReshuffle(orb, cells, nCells);
+            break;
+        case terminateService:
+            return std::make_tuple(false, nullptr);
+        default:
+            throw std::invalid_argument("MPIMessaging.dispatchService: is is unknown.");
+    }
+
+    MPI_Bcast(
+            &nResults,
+            1,
+            MPI_INT,
+            source,
+            MPI_COMM_WORLD
+    );
+
     int* g_result;
 
     if (nResults > 0) {
@@ -96,7 +139,7 @@ int * MPIMessaging::dispatchService(
                 );
     }
 
-    return g_result;
+    return std::make_tuple(true, g_result);
 }
 
 void MPIMessaging::destroy() {
