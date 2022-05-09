@@ -1,6 +1,7 @@
 #include "MPIMessaging.h"
 
 void MPIMessaging::Init() {
+
     MPI_Init(NULL, NULL);
 
     MPI_Comm_size(MPI_COMM_WORLD, &MPIMessaging::np );
@@ -38,7 +39,9 @@ void MPIMessaging::Init() {
     offsets[6] = offsetof(Cell, upper);
 
     MPI_Type_create_struct(nItems, blockLengths, offsets, types, &MPIMessaging::MPI_CELL);
-    MPI_Type_commit(&MPIMessaging::MPI_CELL);
+    MPI_Type_commit(&MPI_CELL);
+
+    MPIMessaging::MPI_CELL = MPI_CELL;
 }
 
 void MPIMessaging::signalServiceId(int id) {
@@ -61,6 +64,7 @@ void MPIMessaging::signalDataSize(int size) {
     );
 }
 
+
 std::tuple<bool, int*> MPIMessaging::dispatchService(
         Orb &orb,
         ServiceIDs id,
@@ -68,7 +72,119 @@ std::tuple<bool, int*> MPIMessaging::dispatchService(
         int nCells,
         int *results,
         int nResults,
+        int target,
         int source) {
+
+#if DEBUG
+    if (source < 0 || source >= MPIMessaging::np) {
+        throw std::invalid_argument("MPIMessaging.dispatchService: source is out of bounds.");
+    }
+
+    if (target < 0 || target >= MPIMessaging::np) {
+        throw std::invalid_argument("MPIMessaging.dispatchService: source is out of bounds.");
+    }
+#endif // DEBUG
+
+    std::cout << "dispatching " << id << std::endl;
+
+    if (target != source) {
+        MPI_Bcast(
+                &nCells,
+                1,
+                MPI_INT,
+                source,
+                MPI_COMM_WORLD
+        );
+
+        if (nCells > 0) {
+            MPI_Bcast(
+                    &cells,
+                    nCells,
+                    MPI_CELL,
+                    source,
+                    MPI_COMM_WORLD
+            );
+        }
+
+        MPI_Bcast(
+                &id,
+                1,
+                MPI_INT,
+                source,
+                MPI_COMM_WORLD
+        );
+    }
+
+
+    int* l_result;
+    std::cout << id << std::endl;
+    switch (id) {
+        case countLeftService:
+            Services::countLeft(orb, cells, l_result, nCells);
+            break;
+        case countService:
+            Services::count(orb, cells, l_result, nCells);
+            break;
+        case buildTreeService:
+            Services::buildTree(orb, cells, l_result, nCells);
+            break;
+        case localReshuffleService:
+            Services::localReshuffle(orb, cells, l_result, nCells);
+            break;
+        case terminateService:
+            return std::make_tuple(false, nullptr);
+        default:
+            throw std::invalid_argument("MPIMessaging.dispatchService: is is unknown.");
+    }
+
+    int *g_result;
+    if (target != source) {
+        MPI_Bcast(
+                &nResults,
+                1,
+                MPI_INT,
+                source,
+                MPI_COMM_WORLD
+        );
+
+        if (nResults > 0) {
+            // TODO: make this more flexible
+            MPI_Reduce(
+                    &l_result,
+                    &g_result,
+                    nResults,
+                    MPI_INT,
+                    MPI_SUM,
+                    source,
+                    MPI_COMM_WORLD
+            );
+        }
+    }
+
+    return std::make_tuple(true, g_result);
+}
+
+std::tuple<bool, int*> MPIMessaging::dispatchService(
+        Orb &orb,
+        ServiceIDs id,
+        Cell *cells,
+        int nCells,
+        int *results,
+        int nResults,
+        std::tuple<int, int> target,
+        int source) {
+
+#if DEBUG
+    if (source < 0 || source >= MPIMessaging::np) {
+        throw std::invalid_argument("MPIMessaging.dispatchService: source is out of bounds.");
+    }
+
+    if (source < 0 || source >= MPIMessaging::np) {
+        throw std::invalid_argument("MPIMessaging.dispatchService: source is out of bounds.");
+    }
+#endif // DEBUG
+
+    std::cout << "dispatching " << id << std::endl;
 
     MPI_Bcast(
             &nCells,
@@ -77,6 +193,8 @@ std::tuple<bool, int*> MPIMessaging::dispatchService(
             source,
             MPI_COMM_WORLD
     );
+
+    std::cout << "n " << nCells << std::endl;
 
     if(nCells > 0) {
         MPI_Bcast(
@@ -97,18 +215,19 @@ std::tuple<bool, int*> MPIMessaging::dispatchService(
     );
 
     int* l_result;
+    std::cout << id << std::endl;
     switch (id) {
         case countLeftService:
-            l_result = Services::countLeft(orb, cells, nCells);
+            Services::countLeft(orb, cells, l_result, nCells);
             break;
         case countService:
-            l_result = Services::count(orb, cells, nCells);
+            Services::count(orb, cells, l_result, nCells);
             break;
         case buildTreeService:
-            l_result = Services::buildTree(orb, cells, nCells);
+            Services::buildTree(orb, cells, l_result, nCells);
             break;
         case localReshuffleService:
-            l_result = Services::localReshuffle(orb, cells, nCells);
+            Services::localReshuffle(orb, cells, l_result, nCells);
             break;
         case terminateService:
             return std::make_tuple(false, nullptr);

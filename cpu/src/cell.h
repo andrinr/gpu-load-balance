@@ -10,7 +10,7 @@ public:
     int id;
     int nLeafCells;
     int nLeftOfCut;
-    int8_t cutAxis;
+    int cutAxis;
     float cutMarginLeft;
     float cutMarginRight;
     float lower[3], upper[3];
@@ -30,6 +30,8 @@ public:
         float lower_[3], 
         float upper_[3]
     );
+
+    void log();
 };
 
 #endif // CELL_H

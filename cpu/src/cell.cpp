@@ -1,4 +1,5 @@
 #include "cell.h"
+#include <iostream>
 #include <math.h>
 
 Cell::Cell() {
@@ -35,7 +36,7 @@ std::tuple <Cell, Cell> Cell::cut() {
     Cell leftChild (getLeftChildId(), nCellsLeft, lower, upper);
     leftChild.upper[cutAxis] = (cutMarginRight - cutMarginLeft) / 2.0;
 
-    Cell rightChild (getRightChildId() * 2 + 1, nCellsRight, lower, upper);
+    Cell rightChild (getRightChildId(), nCellsRight, lower, upper);
     rightChild.lower[cutAxis] = (cutMarginRight - cutMarginLeft) / 2.0;
 
     return std::make_tuple(leftChild, rightChild);
@@ -43,11 +44,11 @@ std::tuple <Cell, Cell> Cell::cut() {
 
 
 int Cell::getLeftChildId() {
-    return id * 2;
+    return id * 2 - 1;
 }
 
 int Cell::getRightChildId() {
-    return id * 2 + 1;
+    return id * 2;
 }
 
 int Cell::getParentId() {
@@ -58,7 +59,7 @@ int Cell::getParentId() {
 void Cell::setCutAxis() {
     uint8_t maxD = DIMENSIONS;
     float maxSize = 0.0;
-    for (uint8_t d = 0; d < DIMENSIONS; d++) {
+    for (int d = 0; d < DIMENSIONS; d++) {
         float size = upper[d] - lower[d];
 
 #if DEBUG
@@ -74,4 +75,19 @@ void Cell::setCutAxis() {
     }
 
     cutAxis = int(maxD);
+}
+
+
+void Cell::setCutMargin() {
+    cutMarginLeft = lower[cutAxis];
+    cutMarginRight = upper[cutAxis];
+}
+
+void Cell::log() {
+    std::cout << "------" << std::endl;
+    std::cout << id << " cell id" << std::endl;
+    std::cout << lower[0] << " " << lower[1] << " " << lower[2] << " lower " << std::endl;
+    std::cout << upper[0] << " " << upper[1] << " " << upper[2] << " upper " << std::endl;
+    std::cout << nLeafCells << " nCells " << cutAxis << " cutAxis " << std::endl;
+    std::cout << "------" << std::endl;
 }

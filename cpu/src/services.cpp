@@ -3,98 +3,95 @@
 #include <math.h>
 #include <algorithm>
 
-int* Services::countLeft(Orb &orb, Cell* c, int n) {
-    blitz::Array<Cell, 1> cells(c, blitz::shape(n));
+void Services::countLeft(Orb &orb, Cell *c, int *results, int n) {
+    blitz::Array<int, 1> counts(n);
+    for (int cellPtrOffset = 0; cellPtrOffset < n; cellPtrOffset++){
+        Cell cell = *(c + cellPtrOffset);
+        int beginInd = orb.cellToParticle(cell.id, 0);
+        int endInd = orb.cellToParticle(cell.id, 1);
 
-    int begin = orb.cellToParticle(cells(0).id, 0);
-    int end = orb.cellToParticle(cells(n-1).id, 1);
-    int size = end - begin;
+        blitz::Array<float,1> particles = orb.particles(blitz::Range(beginInd, endInd), cell.cutAxis);
+        float * startPtr = particles.data();
+        float * endPtr = startPtr + (endInd - beginInd);
 
-    float* slice = &orb.particles(begin, end);
+        int nLeft = 0;
 
-    blitz::Array<int, 1> counts(cells.rows());
-    int cellInd = 0;
-    for (int i = 0; i < size; i += DIMENSIONS) {
-        Cell cell = cells(cellInd);
-        if (cell.cutAxis == -1) {
-            i += 1;
-        }
-        float* p = slice + i;
+        float cut = (cell.cutMarginRight + cell.cutMarginLeft) / 2.0;
+        for(auto p=startPtr; p<endPtr; ++p) nLeft += *p < cut;
 
-        // todo: We need to ensure to cell is never empty (no particles) for this to work!!
-        if (i > orb.cellToParticle(cell.id, 1) - begin) {
-            orb.cellToParticle(cell.getLeftChildId(), 1) = counts(cellInd);
-            orb.cellToParticle(cell.getRightChildId(), 0) = counts(cellInd);
-            cellInd++;
-        }
-
-        counts(cellInd) += *p + cell.cutAxis < (cell.cutMarginLeft + cell.cutMarginRight) / 2.0;
+        std::cout << nLeft << " ";
+        results[cellPtrOffset] = nLeft;
     }
-
-    // todo: new boundaries will need to be set
-
-    return counts.data();
 }
 
-int* Services::localReshuffle(Orb& orb, Cell* cells, int n) {
-
+void Services::localReshuffle(Orb &orb, Cell *c, int *results, int n) {
     for (int cellPtrOffset = 0; cellPtrOffset < n; cellPtrOffset++){
-        int id = (cells + cellPtrOffset)->id;
-        int beginInd = orb.cellToParticle(id, 0);
-        int endInd = orb.cellToParticle(id, 1);
+        Cell cell = *(c + cellPtrOffset);
+        int beginInd = orb.cellToParticle(cell.id, 0);
+        int endInd = orb.cellToParticle(cell.id, 1);
+
+        blitz::Array<float,1> particles = orb.particles(blitz::Range(beginInd, endInd), cell.cutAxis);
+        float * startPtr = particles.data();
+        float *endPtr = startPtr + (endInd - beginInd);
+
         int i = beginInd;
         for (int j = beginInd; j < endInd; j++) {
-            if (orb.particles(j, (cells + cellPtrOffset)->cutAxis) <
-                (cells + cellPtrOffset)->cutMarginLeft) {
+            if (orb.particles(j, cell.cutAxis) < (cell.cutMarginLeft + cell.cutMarginRight) / 2.0) {
                 orb.swap(i, j);
                 i = i + 1;
             }
         }
 
         orb.swap(i, endInd - 1);
-        mids(cellPtrOffset) = i;
+        results[cellPtrOffset] = i;
     }
-
-    return mids.data();
 }
 
-int* Services::count(Orb &orb, Cell* c, int n) {
-    blitz::Array<Cell, 1> cells(c, blitz::shape(n));
-    blitz::Array<int, 1> count(cells.rows());
+void Services::count(Orb &orb, Cell *c, int *results, int n) {
 
-    for (int i = 0; i < cells.rows(); ++i) {
-        int begin = orb.cellToParticle(cells(i).id, 0);
-        int end = orb.cellToParticle(cells(i).id, 1);
+    std::cout << " counting " << n << std::endl;
 
-        count(i) = begin - end;
+    for (int i = 0; i < n; ++i) {
+        Cell cell = c[i];
+        cell.log();
+        int begin = orb.cellToParticle(cell.id, 0);
+        int end = orb.cellToParticle(cell.id, 1);
+
+        results[i] = begin - end;
     }
-
-    return count.data();
 }
 
-int* Services::buildTree(Orb& orb, Cell* c, int n) {
+void Services::buildTree(Orb &orb, Cell *c, int *results, int n) {
 
     // Blitz: 2.3.7
     blitz::Array<Cell, 1> cells(c, blitz::shape(n));
 
-    Cell root = c[0];
+    Cell root = cells(0);
 
     // loop over levels of tree
+    root.log();
+
     for (int l = 1; l < ceil(log2(root.nLeafCells)); l++) {
 
-        int a = std::pow(2, (l-1));
-        int b = std::min((int)std::pow(2, l), root.nLeafCells);
+        int a = std::pow(2, (l-1)) - 1;
+        int b = std::min((int)std::pow(2, l), root.nLeafCells) - 1;
+
+        std::cout << l << "-level" << " a "  << a << " b " << b << std::endl;
 
         bool status;
         int* sum;
         std::tie(status, sum) = MPIMessaging::dispatchService(
                 orb,
                 countService,
-                cells(blitz::Range(a, b)).data(),
+                cells(blitz::Range(a, b-1)).data(),
                 b - a,
                 sum,
                 b - a,
+                std::make_tuple(1, MPIMessaging::np),
                 0);
+
+        std::cout << sum << "sum" << std::endl;
+
 
         blitz::Array<Cell, 1> countBlitz(sum, blitz::shape(b - a));
         // Loop
@@ -110,6 +107,7 @@ int* Services::buildTree(Orb& orb, Cell* c, int n) {
                     b - a,
                     sumLeft,
                     b - a,
+                    std::make_tuple(1,MPIMessaging::np),
                     0);
 
             blitz::Array<int, 1> countLeftBlitz(sumLeft, blitz::shape(b - a));
@@ -139,6 +137,7 @@ int* Services::buildTree(Orb& orb, Cell* c, int n) {
                 b - a,
                 dummy,
                 b - a,
+                std::make_tuple(1,MPIMessaging::np),
                 0);
 
         // Split and store all cells on current heap level
@@ -156,5 +155,4 @@ int* Services::buildTree(Orb& orb, Cell* c, int n) {
             cells(cells(i).getRightChildId()) = cellRight;
         }
     }
-    return nullptr;
 }

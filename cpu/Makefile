@@ -38,7 +38,13 @@ $(BUILD_DIR)/$(TARGET_EXEC): $(OBJS)
 # Build step for C++ source
 $(BUILD_DIR)/%.cpp.o: %.cpp
 	mkdir -p $(dir $@)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(DEBUGFLAGS) -c $< -o $@
+
+# Build step for CUDA source
+$(BUILD_DIR)/%.cu.o: %.cu
+	echo $<
+	mkdir -p $(dir $@)
+	$(CCU) $< -o $@
 
 
 .PHONY: clean

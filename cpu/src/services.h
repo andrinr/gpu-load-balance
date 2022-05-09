@@ -14,10 +14,10 @@ enum ServiceIDs {
 
 class Services {
 public:
-    static int* count(Orb& orb, Cell* cells, int n);
-    static int* countLeft(Orb& orb, Cell* cells, int n);
-    static int* localReshuffle(Orb& orb, Cell* cells, int n);
-    static int* buildTree(Orb& orb, Cell* cell, int n);
+    static void count(Orb& orb, Cell* cells, int* results, int n);
+    static void countLeft(Orb& orb, Cell* cells, int* results, int n);
+    static void localReshuffle(Orb& orb, Cell* cells, int* results, int n);
+    static void buildTree(Orb& orb, Cell* cell, int* results, int n);
 };
 
 #endif //SERVICES_H

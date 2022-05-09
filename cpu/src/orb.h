@@ -18,8 +18,6 @@ public:
             blitz::Array<int, 2> &cToP,
             int nLeafCells);
 
-private:
-    
     void swap(int a, int b);
     void assign(int begin, int end, int id);
 

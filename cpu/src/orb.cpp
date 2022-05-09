@@ -4,10 +4,10 @@
 
 Orb::Orb(blitz::Array<float, 2> &p,
          blitz::Array<int, 2> &cToP,
-         int nLeafCells)
+         int n)
     : particles(p), cellToParticle(cToP), nLeafCells(n) {
 
-    int N = particles.nrows();
+    int N = particles.rows();
 
     cellToParticle(1, 0) = particles(0, 0);
     cellToParticle(1, 1) = particles(N - 1, 0);

@@ -28,14 +28,21 @@ int main(int argc, char** argv) {
     int nLeafCells = arg2;
 
     // Init comm
-    MPIMessaging mpiMessaging;
-    std::cout << "Process " << mpiMessaging.rank << " processing " << count / 1000 << "K particles." << std::endl;
-    std::cout << "Process " << mpiMessaging.rank << " starting task..." << std::endl;
+    MPIMessaging::Init();
+    std::cout << "Process " << MPIMessaging::rank << " processing " << count / 1000 << "K particles." << std::endl;
+    std::cout << "Process " << MPIMessaging::rank << " starting task..." << std::endl;
 
+    int N = (count+MPIMessaging::np-1) / MPIMessaging::np ;
+    if (N * MPIMessaging::rank >= count) N = 0;
+    else if (N * (MPIMessaging::rank+1) >= count) N = count - MPIMessaging::rank*N;
 
-    // Number of particles for current processor
-    int N = floor(count / mpiMessaging.np);
-    blitz::Array<float, 2> particles = IO::generateData(N, mpiMessaging.rank);
+    // Set row major -> can enable AVX
+    blitz::GeneralArrayStorage<2> storage;
+    storage.ordering() = 0,1;
+    storage.base() = 0, 0;
+    storage.ascendingFlag() = true, true;
+
+    blitz::Array<float, 2> particles = IO::generateData(N, MPIMessaging::rank);
 
     // We add +1 due to heap storage order
     int nCells = nLeafCells * 2 + 1;
@@ -45,7 +52,7 @@ int main(int argc, char** argv) {
     Orb orb(particles, cellToParticle, nLeafCells);
 
     auto start = high_resolution_clock::now();
-    if (mpiMessaging.rank == 0) {
+    if (MPIMessaging::rank == 0) {
 
         // root cell is at index 1
         blitz::Array<Cell, 1> cells(nCells);
@@ -57,36 +64,39 @@ int main(int argc, char** argv) {
         float upper[DIMENSIONS] = {upperInit, upperInit, upperInit};
 
         Cell cell(1, nLeafCells, lower, upper);
-        cells(1) = cell;
+        cells(0) = cell;
 
-        Messaging::dispatchService(
+        int* results;
+        MPIMessaging::dispatchService(
                 orb,
                 buildTreeService,
                 cells.data(),
                 1,
-                nullptr,
+                results,
+                0,
                 0,
                 0);
     }
     else {
-        Cell* empty_cells;
+        Cell* emptyCells;
         int* results;
         int nResults;
         ServiceIDs id;
-        bool status;
+        bool status = true;
         while(status) {
             std::tie(status, results) = MPIMessaging::dispatchService(
                     orb,
                     id,
-                    nullptr,
+                    emptyCells,
                     nCells,
-                    nullptr,
+                    results,
                     nResults,
+                    std::make_tuple(1, MPIMessaging::np-1),
                     0);
         }
     }
 
-    mpiMessaging.destroy();
+    MPIMessaging::destroy();
 
     return 0;
 }
