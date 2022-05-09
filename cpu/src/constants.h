@@ -2,6 +2,7 @@
 #define CONSTANTS_H
 
 static const int DIMENSIONS = 3;
+static const int PARTICLE_EXTRA_DATA = 1;
 static const int PRECISION = 32;
 static const int CUTOFF = 64;
 static const bool DEBUG = true;

@@ -1,5 +1,9 @@
 #include "MPIMessaging.h"
 
+void MPIMessaging::MPI_Handler_function() {
+
+};
+
 void MPIMessaging::Init() {
 
     MPI_Init(NULL, NULL);
@@ -7,7 +11,6 @@ void MPIMessaging::Init() {
     MPI_Comm_size(MPI_COMM_WORLD, &MPIMessaging::np );
     MPI_Comm_rank(MPI_COMM_WORLD, &MPIMessaging::rank);
 
-    MPI_Datatype MPI_CELL;
     const int nItems = 7;
     int blockLengths[nItems] = {
             1,
@@ -21,7 +24,7 @@ void MPIMessaging::Init() {
     MPI_Datatype types[nItems] = {
             MPI_INT,
             MPI_INT,
-            MPI::UNSIGNED_SHORT,
+            MPI_INT,
             MPI_FLOAT,
             MPI_FLOAT,
             MPI_FLOAT,
@@ -39,31 +42,10 @@ void MPIMessaging::Init() {
     offsets[6] = offsetof(Cell, upper);
 
     MPI_Type_create_struct(nItems, blockLengths, offsets, types, &MPIMessaging::MPI_CELL);
-    MPI_Type_commit(&MPI_CELL);
+    MPI_Type_commit(&MPIMessaging::MPI_CELL);
 
-    MPIMessaging::MPI_CELL = MPI_CELL;
+    std::cout << "MpiMessaging initialized" << std::endl;
 }
-
-void MPIMessaging::signalServiceId(int id) {
-    MPI_Bcast(
-            &id,
-            1,
-            MPI_INT,
-            0,
-            MPI_COMM_WORLD
-    );
-}
-
-void MPIMessaging::signalDataSize(int size) {
-    MPI_Bcast(
-            &size,
-            1,
-            MPI_INT,
-            0,
-            MPI_COMM_WORLD
-    );
-}
-
 
 std::tuple<bool, int*> MPIMessaging::dispatchService(
         Orb &orb,
@@ -100,7 +82,7 @@ std::tuple<bool, int*> MPIMessaging::dispatchService(
             MPI_Bcast(
                     &cells,
                     nCells,
-                    MPI_CELL,
+                    MPIMessaging::MPI_CELL,
                     source,
                     MPI_COMM_WORLD
             );
@@ -197,10 +179,11 @@ std::tuple<bool, int*> MPIMessaging::dispatchService(
     std::cout << "n " << nCells << std::endl;
 
     if(nCells > 0) {
+        std::cout << "init cells bcast" << std::endl;
         MPI_Bcast(
                 &cells,
                 nCells,
-                MPI_CELL,
+                MPIMessaging::MPI_CELL,
                 source,
                 MPI_COMM_WORLD
                 );
@@ -213,6 +196,8 @@ std::tuple<bool, int*> MPIMessaging::dispatchService(
             source,
             MPI_COMM_WORLD
     );
+
+
 
     int* l_result;
     std::cout << id << std::endl;

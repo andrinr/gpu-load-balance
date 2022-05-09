@@ -7,6 +7,9 @@
 class MPIMessaging : public Messaging {
 public:
     static void Init();
+
+    static void MPI_Handler_function();
+
     static std::tuple<bool, int*> dispatchService(
             Orb& orb,
             ServiceIDs id,
@@ -27,8 +30,6 @@ public:
             int target,
             int source);
 
-    static void signalDataSize(int size);
-    static void signalServiceId(int flag);
     static void destroy();
 
     static inline int rank;

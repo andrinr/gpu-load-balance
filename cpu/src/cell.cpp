@@ -29,14 +29,14 @@ Cell::Cell(
     upper[2] = upper_[2];
 };
 
-std::tuple <Cell, Cell> Cell::cut() {
-    int nCellsLeft = ceil(nLeafCells / 2.0);
-    int nCellsRight = nLeafCells - nCellsLeft;
-    nLeftOfCut = 0;
-    Cell leftChild (getLeftChildId(), nCellsLeft, lower, upper);
-    leftChild.upper[cutAxis] = (cutMarginRight - cutMarginLeft) / 2.0;
+std::tuple <Cell, Cell> Cell::cut(Cell &cell) {
+    int nCellsLeft = ceil(cell.nLeafCells / 2.0);
+    int nCellsRight = cell.nLeafCells - nCellsLeft;
 
-    Cell rightChild (getRightChildId(), nCellsRight, lower, upper);
+    Cell leftChild (Cell::getLeftChildId(cell), nCellsLeft, cell.lower, cell.upper);
+    leftChild.upper[cell.cutAxis] = (cell.cutMarginRight - cell.cutMarginLeft) / 2.0;
+
+    Cell rightChild (Cell::(), nCellsRight, lower, upper);
     rightChild.lower[cutAxis] = (cutMarginRight - cutMarginLeft) / 2.0;
 
     return std::make_tuple(leftChild, rightChild);

@@ -5,7 +5,7 @@
 
 void Services::countLeft(Orb &orb, Cell *c, int *results, int n) {
     blitz::Array<int, 1> counts(n);
-    for (int cellPtrOffset = 0; cellPtrOffset < n; cellPtrOffset++){
+    for (int cellPtrOffset = 0; cellPtrOffset < n; ++cellPtrOffset){
         Cell cell = *(c + cellPtrOffset);
         int beginInd = orb.cellToParticle(cell.id, 0);
         int endInd = orb.cellToParticle(cell.id, 1);
@@ -25,7 +25,7 @@ void Services::countLeft(Orb &orb, Cell *c, int *results, int n) {
 }
 
 void Services::localReshuffle(Orb &orb, Cell *c, int *results, int n) {
-    for (int cellPtrOffset = 0; cellPtrOffset < n; cellPtrOffset++){
+    for (int cellPtrOffset = 0; cellPtrOffset < n; ++cellPtrOffset){
         Cell cell = *(c + cellPtrOffset);
         int beginInd = orb.cellToParticle(cell.id, 0);
         int endInd = orb.cellToParticle(cell.id, 1);
@@ -52,7 +52,9 @@ void Services::count(Orb &orb, Cell *c, int *results, int n) {
     std::cout << " counting " << n << std::endl;
 
     for (int i = 0; i < n; ++i) {
+        std::cout << MPIMessaging::rank << "A" << std::endl;
         Cell cell = c[i];
+        std::cout << MPIMessaging::rank << "B" << std::endl;
         cell.log();
         int begin = orb.cellToParticle(cell.id, 0);
         int end = orb.cellToParticle(cell.id, 1);
@@ -71,7 +73,7 @@ void Services::buildTree(Orb &orb, Cell *c, int *results, int n) {
     // loop over levels of tree
     root.log();
 
-    for (int l = 1; l < ceil(log2(root.nLeafCells)); l++) {
+    for (int l = 1; l < ceil(log2(root.nLeafCells)); ++l) {
 
         int a = std::pow(2, (l-1)) - 1;
         int b = std::min((int)std::pow(2, l), root.nLeafCells) - 1;
@@ -112,7 +114,7 @@ void Services::buildTree(Orb &orb, Cell *c, int *results, int n) {
 
             blitz::Array<int, 1> countLeftBlitz(sumLeft, blitz::shape(b - a));
 
-            for (int i = a; i < b; i++) {
+            for (int i = a; i < b; ++i) {
 
                if (abs(countLeftBlitz(i) - countLeftBlitz(i) / 2.0) < CUTOFF) {
                    cells(i).cutAxis = -1;
@@ -141,7 +143,7 @@ void Services::buildTree(Orb &orb, Cell *c, int *results, int n) {
                 0);
 
         // Split and store all cells on current heap level
-        for (int i = a; i < b; i++) {
+        for (int i = a; i < b; ++i) {
             Cell cellLeft;
             Cell cellRight;
             std::tie(cellLeft, cellRight) = cells(i).cut();
