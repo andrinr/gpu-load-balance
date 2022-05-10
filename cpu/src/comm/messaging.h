@@ -2,7 +2,7 @@
 #define MESSAGING_H
 #include "../cell.h"
 #include "../orb.h"
-#include "../services.h"
+#include "../services/services.h"
 #include "tuple"
 
 class Messaging {
@@ -31,7 +31,7 @@ public:
     static void signalDataSize(int size);
     static void signalServiceId(int flag);
 
-    static void destroy();
+    static void finalize();
 
 };
 

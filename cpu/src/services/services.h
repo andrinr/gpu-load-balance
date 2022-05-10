@@ -1,8 +1,8 @@
 #ifndef SERVICES_H
 #define SERVICES_H
 #include <blitz/array.h>
-#include "cell.h"
-#include "orb.h"
+#include "../cell.h"
+#include "../orb.h"
 
 enum ServiceIDs {
     countLeftService,

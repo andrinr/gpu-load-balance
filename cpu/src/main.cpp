@@ -9,7 +9,7 @@
 #include "cell.h"
 #include "IO.h"
 #include "orb.h"
-#include "services.h"
+#include "services/services.h"
 
 using namespace std::chrono;
 
@@ -63,8 +63,10 @@ int main(int argc, char** argv) {
         float lower[DIMENSIONS] = {lowerInit, lowerInit, lowerInit};
         float upper[DIMENSIONS] = {upperInit, upperInit, upperInit};
 
-        Cell cell(1, nLeafCells, lower, upper);
-        cells(0) = cell;
+        Cell root(1, nLeafCells, lower, upper);
+        CellHelpers::setCutAxis(root);
+        CellHelpers::setCutMargin(root);
+        cells(0) = root;
 
         int* results;
         MPIMessaging::dispatchService(
@@ -96,7 +98,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    MPIMessaging::destroy();
+    MPIMessaging::finalize();
 
     return 0;
 }

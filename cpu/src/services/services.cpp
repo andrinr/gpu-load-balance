@@ -1,5 +1,5 @@
 #include "services.h"
-#include "comm/MPIMessaging.h"
+#include "../comm/MPIMessaging.h"
 #include <math.h>
 #include <algorithm>
 
@@ -55,7 +55,7 @@ void Services::count(Orb &orb, Cell *c, int *results, int n) {
         std::cout << MPIMessaging::rank << "A" << std::endl;
         Cell cell = c[i];
         std::cout << MPIMessaging::rank << "B" << std::endl;
-        cell.log();
+        CellHelpers::log(cell);
         int begin = orb.cellToParticle(cell.id, 0);
         int end = orb.cellToParticle(cell.id, 1);
 
@@ -71,7 +71,7 @@ void Services::buildTree(Orb &orb, Cell *c, int *results, int n) {
     Cell root = cells(0);
 
     // loop over levels of tree
-    root.log();
+    CellHelpers::log(root);
 
     for (int l = 1; l < ceil(log2(root.nLeafCells)); ++l) {
 
@@ -93,7 +93,6 @@ void Services::buildTree(Orb &orb, Cell *c, int *results, int n) {
                 0);
 
         std::cout << sum << "sum" << std::endl;
-
 
         blitz::Array<Cell, 1> countBlitz(sum, blitz::shape(b - a));
         // Loop
@@ -146,15 +145,15 @@ void Services::buildTree(Orb &orb, Cell *c, int *results, int n) {
         for (int i = a; i < b; ++i) {
             Cell cellLeft;
             Cell cellRight;
-            std::tie(cellLeft, cellRight) = cells(i).cut();
+            std::tie(cellLeft, cellRight) = CellHelpers::cut(cells(i));
 
-            cellRight.setCutAxis();
-            cellRight.setCutMargin();
-            cellLeft.setCutAxis();
-            cellLeft.setCutMargin();
+            CellHelpers::setCutAxis(cellRight);
+            CellHelpers::setCutAxis(cellLeft);
+            CellHelpers::setCutMargin(cellLeft);
+            CellHelpers::setCutMargin(cellRight);
 
-            cells(cells(i).getLeftChildId()) = cellLeft;
-            cells(cells(i).getRightChildId()) = cellRight;
+            cells(CellHelpers::getLeftChildId(cells(i))) = cellLeft;
+            cells(CellHelpers::getRightChildId(cells(i))) = cellRight;
         }
     }
 }

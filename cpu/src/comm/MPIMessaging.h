@@ -30,7 +30,7 @@ public:
             int target,
             int source);
 
-    static void destroy();
+    static void finalize();
 
     static inline int rank;
     static inline int np;

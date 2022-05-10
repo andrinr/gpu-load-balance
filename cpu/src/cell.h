@@ -4,6 +4,8 @@
 #include "constants.h"
 #include <cstdint>
 #include "tuple"
+#include <iostream>
+#include <math.h>
 
 struct Cell {
     int id;
@@ -13,7 +15,7 @@ struct Cell {
     float cutMarginRight;
     float lower[3], upper[3];
 
-    Cell::Cell(
+    Cell(
             int id_,
             int nLeafCells_,
             float *lower_,
@@ -35,17 +37,85 @@ struct Cell {
         upper[1] = upper_[1];
         upper[2] = upper_[2];
     };
+
+    Cell() {
+
+    };
 };
 
-namespace Cell {
-    static std::tuple<Cell, Cell> cut(Cell &cell);
-    static void setCutAxis(Cell &cell);
-    static void setCutMargin(Cell &cell);
-    static int getLeftChildId(Cell &cell);
-    static int getRightChildId(Cell &cell);
-    static int getParentId(Cell &cell);
 
-    static void log(Cell &cell);
-};
+
+namespace CellHelpers {
+
+    static int getLeftChildId(Cell &cell) {
+        return cell.id * 2 - 1;
+    }
+
+    static int getRightChildId(Cell &cell) {
+        return cell.id * 2;
+    }
+
+    static int getParentId(Cell &cell) {
+        //todo
+        return cell.id;
+    }
+
+    static std::tuple <Cell, Cell> cut(Cell &cell) {
+        int nCellsLeft = ceil(cell.nLeafCells / 2.0);
+        int nCellsRight = cell.nLeafCells - nCellsLeft;
+
+        Cell leftChild(
+                CellHelpers::getLeftChildId(cell),
+                nCellsLeft,
+                cell.lower,
+                cell.upper);
+        leftChild.upper[cell.cutAxis] = (cell.cutMarginRight - cell.cutMarginLeft) / 2.0;
+
+        Cell rightChild(
+                CellHelpers::getRightChildId(cell),
+                nCellsRight,
+                cell.lower,
+                cell.upper);
+        rightChild.lower[cell.cutAxis] = (cell.cutMarginRight - cell.cutMarginLeft) / 2.0;
+
+        return std::make_tuple(leftChild, rightChild);
+    }
+
+    static void setCutAxis(Cell &cell) {
+        uint8_t maxD = DIMENSIONS;
+        float maxSize = 0.0;
+        for (int d = 0; d < DIMENSIONS; d++) {
+            float size = cell.upper[d] - cell.lower[d];
+
+#if DEBUG
+            if (size == 0.0) {
+                throw std::invalid_argument("Cell.SetCutAxis: size is zero.");
+            }
+#endif // DEBUG
+
+            if (size > maxSize) {
+                maxSize = size;
+                maxD = d;
+            }
+        }
+
+        cell.cutAxis = int(maxD);
+    }
+
+    static void setCutMargin(Cell &cell) {
+        cell.cutMarginLeft = cell.lower[cell.cutAxis];
+        cell.cutMarginRight = cell.upper[cell.cutAxis];
+    }
+
+    static void log(Cell &cell) {
+        std::cout << "------" << std::endl;
+        std::cout << cell.id << " cell id" << std::endl;
+        std::cout << cell.lower[0] << " " << cell.lower[1] << " " << cell.lower[2] << " lower " << std::endl;
+        std::cout << cell.upper[0] << " " << cell.upper[1] << " " << cell.upper[2] << " upper " << std::endl;
+        std::cout << cell.nLeafCells << " nCells " << cell.cutAxis << " cutAxis " << std::endl;
+        std::cout << "------" << std::endl;
+    }
+
+}
 
 #endif // CELL_H

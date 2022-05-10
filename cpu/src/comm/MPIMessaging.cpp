@@ -179,7 +179,7 @@ std::tuple<bool, int*> MPIMessaging::dispatchService(
     std::cout << "n " << nCells << std::endl;
 
     if(nCells > 0) {
-        std::cout << "init cells bcast" << std::endl;
+        std::cout << "init cells bcast" << MPIMessaging::MPI_CELL << std::endl;
         MPI_Bcast(
                 &cells,
                 nCells,
@@ -246,6 +246,6 @@ std::tuple<bool, int*> MPIMessaging::dispatchService(
     return std::make_tuple(true, g_result);
 }
 
-void MPIMessaging::destroy() {
+void MPIMessaging::finalize() {
     MPI_Finalize();
 }
