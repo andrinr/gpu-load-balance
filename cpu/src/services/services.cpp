@@ -7,6 +7,7 @@ void Services::countLeft(Orb &orb, Cell *c, int *results, int n) {
     blitz::Array<int, 1> counts(n);
     for (int cellPtrOffset = 0; cellPtrOffset < n; ++cellPtrOffset){
         Cell cell = *(c + cellPtrOffset);
+        if (cell.cutAxis == -1) continue;
         int beginInd = orb.cellToParticle(cell.id, 0);
         int endInd = orb.cellToParticle(cell.id, 1);
 

@@ -1,7 +1,6 @@
 #ifndef ORB_H // include guard
 #define ORB_H
 
-#include <mpi.h>
 #include "cell.h"
 #include <tuple>
 #include <vector>

@@ -97,7 +97,6 @@ std::tuple<bool, int*> MPIMessaging::dispatchService(
         );
     }
 
-
     int* l_result;
     std::cout << id << std::endl;
     switch (id) {
@@ -187,6 +186,8 @@ std::tuple<bool, int*> MPIMessaging::dispatchService(
                 source,
                 MPI_COMM_WORLD
                 );
+
+        CellHelpers::log(cells[0]);
     }
 
     MPI_Bcast(
@@ -196,8 +197,6 @@ std::tuple<bool, int*> MPIMessaging::dispatchService(
             source,
             MPI_COMM_WORLD
     );
-
-
 
     int* l_result;
     std::cout << id << std::endl;
@@ -217,7 +216,7 @@ std::tuple<bool, int*> MPIMessaging::dispatchService(
         case terminateService:
             return std::make_tuple(false, nullptr);
         default:
-            throw std::invalid_argument("MPIMessaging.dispatchService: is is unknown.");
+            throw std::invalid_argument("MPIMessaging.dispatchService: id is unknown.");
     }
 
     MPI_Bcast(

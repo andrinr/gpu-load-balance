@@ -6,9 +6,11 @@ SRC_DIRS := ./src
 
 CC = mpiCC
 CXX = mpiCC
-# Find all the C and C++ files we want to compile
+CCU = nvcc
+
+# Find all the C, C++ and CUDA files we want to compile
 # Note the single quotes around the * expressions. Make will incorrectly expand these otherwise.
-SRCS := $(shell find $(SRC_DIRS) -name '*.cpp' -or -name '*.c' -or -name '*.s')
+SRCS := $(shell find $(SRC_DIRS) -name '*.cpp') # -or -name '*.cu'
 
 # String substitution for every C/C++ file.
 # As an example, hello.cpp turns into ./build/hello.cpp.o
@@ -44,7 +46,7 @@ $(BUILD_DIR)/%.cpp.o: %.cpp
 $(BUILD_DIR)/%.cu.o: %.cu
 	echo $<
 	mkdir -p $(dir $@)
-	$(CCU) $< -o $@
+	$(CCU) -c $< -o $@
 
 
 .PHONY: clean
