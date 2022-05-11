@@ -419,6 +419,10 @@ The underlying distribution is a normal distribution. \TODO{Add reference to sec
 
 \subsection{Reshuffling Algorithm}
 
+We have already introduced all basic building blocks of the ORB algorithm. The only and final piece which is missing is the reshuffling algorithm. Note that it is not necessarily part of the ORB algorithm, but rather the bookkeeping strategy of the data-structure. We want to continuously update the particles array and in the words used before, have a direct correlation between $x_i$ and $i$. This allows us to group all particles, which are contained in a cell in a fixed range of indexes of the particles array. 
+
+When thinking about this in terms of the recursive algorithm, maintaining this is pretty straight forward. Each time we split a cell into two children, we make sure that particles contained in the left child cell are found in a designated range of the particles array, and the same goes for the right cell.
+
 \begin{algorithm}[H]
 	\caption{Reshuffle algorithm}\label{euclid}
 	\begin{algorithmic}[1]
@@ -527,8 +531,9 @@ Another strategy we can use, as soon as we have created two domains, rank 0 can 
 \newpage
 \section{Theoretical Analysis of ORB runtime}
 
-The nature of the ORB algorithm and its application with very large data-sizes, requires that we consider hardware for concrete implementation details. Since we do not have the time to empirically measure all viable option, we try to create a theoretical model. The algorithm is generally very heavy in memory access, but its operations are extremely simple. Therefore we need to consider not only benefits from increased parallelism in GPU hardware, but also possible speed-ups reached by generally higher bandwidths for GPU memory than CPU memory. On the other hand we need to mitigate the very low bandwidths between the GPU and CPU, which cannot be avoided altogether, as the data needs to be sent from the CPU to GPU before we can process it on the graphics processor.
+The nature of the ORB algorithm and its application with very large data-sizes, requires that we consider hardware for concrete implementation details. Since the decision tree for the implementation details of the algorithm is vast and each implementation involves a significant amount of development time, we will propose a theoretical model to guide us in the decision process. Based on this decision, we rule out certain alternatives before the implementation. Finally we will try to verify the models using empirical data.
 
+The algorithm is generally very heavy in memory access and the number of floating point operations is small. We thus need to not only consider benefits from increased parallelism in GPU hardware, but also possible speed-ups reached by generally higher bandwidths for GPU memory than CPU memory. On the other hand we need to mitigate the very low bandwidths between the GPU and CPU, which cannot be avoided altogether, as the data needs to be sent from the CPU to GPU before we can process it on the graphics processor.
 
 
 \subsection{Datapoints of supercomputers}
@@ -808,20 +813,11 @@ A computing system consists of several nodes, where each node has one or more CP
 We now sketch out various implementation ideas, derive for each a formula to estimate its runtime and finally insert datapoints from our target computing systems.
 We assume that the data is stored in the CPU memory initially and we define the size of the data as $s$. 
 
-\TODO{Find tflops}
+\subsection{Estimating tflops}
 
-% Compare flops with speed of memory
-% Add small experiment
-% Memory Bandwidth Cliff
-Let us assume a CPU with a clock speed of $cps$ per second. 
+\TODO{Introduce AVX here}
 
-\subsection{Runtime estimations on a single node}
-
-\TODO{Add introduction}
-\TODO{Argue that is is similar on multinode systems as global reshuffling }
-
-
-\TODO{Local partitioninig is not necessarily better, but simpler. }
+\
 
 \subsubsection{Naive implementation}
 
@@ -1080,6 +1076,7 @@ In this section we will describe the stand-alone implementation of the accelerat
 A brief overview of the core classes and function is as follows:
 
 \begin{itemize}
+	\item \textbf{particles}: The particles array has ownership over all particles. Its built as multidimensional array.
 	\item \textbf{Cell}: The cell class is a structure keeping track of the fundamental cell information. In essence it is the analogue to the concept of the cell which we have already introduced. 
 	\item \textbf{ORB}: The orb class keeps track of the all particles and maintains a data-structure which maps between particles and cells. 
 	\item \textbf{Services}: The services are a set of function, which together form the building block of the ORB algorithm. This abstraction layer allows us to dynamically distribute and collect tasks from different processors. Furthermore individual services can be interchanged by GPU enabled implementations.
@@ -1089,6 +1086,12 @@ A brief overview of the core classes and function is as follows:
 
 For this project we will use C++ 17 along with CUDA 11.3, OpenMPI 4.1.0 and Blitz++ 1.0.2 \cite{blitzcpp}. 
 
+\subsection{Particles}
+
+To implement the particles array, we use simple C-style arrays interchangeably with blitz++ arrays. The blitz++ array is a wrapper class around C-style arrays, which helps with pointer management and can speed up the debugging process. It does so by keeping track of the array size and checking access indexes. Furthermore we can easily create slices and make borrowed copies. 
+In some cases we will directly iterate over the particles using pointers, as we have observed 
+
+\TODO{Add example with and without AVX in assembly}
 \subsection{Cell}
 
 The cell class consists of the following variables:
@@ -1108,11 +1111,11 @@ The cells could be stored as binary tree or as we have already mentioned we coul
 \subsection{ORB}
 
 \begin{itemize}
-	\item \textbf{particles}: The cell class has ownership over the particles array.
-	\item \textbf{cellToParticles}: This array maps from a $cell.id$ to a tuple with entries $a$ and $b$ where a marks the index of the first particle in the particles array which is contained in this cell. Consequently $b$ marks the index after the last particle contained in the volume of the cell. Note that this is possible due to the constant reshuffling.
-	
+	\item $particles$: The cell class has ownership over the particles array.
+	\item $cellToParticles$: This array maps from a $cell.id$ to a tuple with entries $a$ and $b$ where a marks the index of the first particle in the particles array which is contained in this cell. Consequently $b$ marks the index after the last particle contained in the volume of the cell. Note that this is possible due to the constant reshuffling.
 \end{itemize}
 
+The orb class comes with helper functions, which improve abstraction and understandability of the code. For example it introduces a swap function, which can swap two particles in the particles array.
 
 \subsection{Services}
 
@@ -1121,109 +1124,31 @@ Similarly as in PKDGrav we introduce the concept of services, which essentially 
 The services we have implemented are:
 
 \begin{itemize}
-	\item $countLeftService$ : Counts the number of particles left of the cut position for each of the provided cells.
+	\item $countLeftService$ : Counts the number of particles left of a provided cut position for each of the cells.
 	\item $countServiceService$ : Counts the number particles inside the domain for each of the provided cells.
 	\item $localReshuffleService$ : Reshuffles the particles locally, such that their memory locality corresponds to a cell. 
-	\item $buildTreeService$ 
+	\item $buildTreeService$ : This is the operative service, which distributes and coordinates other services. Its comparabale to the ORB main routine. 
 \end{itemize}
 
-With this system, a processor simply needs to wait for new services and fetch their corresponding parameters. The data can be distributed to the processors with any preferred communication method, in our case we will use MPI for this purpose, but the abstraction allows to easily interchange the communicator.
+Each service function is associated with an unique ID.
+
+With this system, a processor simply needs to wait for new services and fetch their corresponding parameters. The fetching and distribution of such services happens over the Messaging interface.
+
+\subsection{CUDA Services}
+
 
 
 \subsection{Messaging}
 
-\subsection{Data-structure}
-
-\subsubsection{Tree}
-
-The data-structure which stores the entire three needs to have following properties:
-
-\begin{itemize}
-	\item store domain information and provide access to left and right child cells
-	\item Allow highly unbalanced trees
-\end{itemize}
-
-The most naive approach is to use a struct for each cell which stores information about the domain and keeps a pointer to the left and right cell. However since we in high performance systems, synchronizing pointers can be a bit of hassle, furthermore PKDGrav implements distributed arrays. Thus we can store all domain information in an array and simply keep track of the indices of its child cells. This can even be reduced further, since the right child cell is being created by the same process as the left child was. Thus we can assign the information about the right child in the positions left + 1 and only keep track of the index of the left child.
-
-The minimal amount of data we need to store for each cell is its exact boundaries, the begin and end index in the particles array, and finally a index of the left child. If we sketch out two cells as a memory layout it looks as follows:
-\begin{figure}[H]
-	\begin{center}
-		\begin{bytefield}{24}
-			\begin{rightwordgroup}{cell 0}
-				\memsection{0}{32}{2}{lower x}\\
-				\memsection{32}{64}{2}{lower y}\\
-				\memsection{64}{96}{2}{lower z}\\
-				\memsection{96}{128}{2}{upper x}\\
-				\memsection{128}{160}{2}{upper y}\\
-				\memsection{160}{192}{2}{upper z}\\
-				\memsection{192}{224}{2}{begin}\\
-				\memsection{224}{256}{2}{end}\\
-				\memsection{256}{288}{2}{left child}\\
-			\end{rightwordgroup}\\
-			\begin{rightwordgroup}{cell 1}
-				\memsection{288}{320}{2}{lower x}\\
-				\memsection{320}{352}{2}{lower y}\\
-				\memsection{352}{384}{2}{lower z}\\
-				\memsection{384}{416}{2}{upper x}\\
-				\memsection{416}{448}{2}{upper y}\\
-				\memsection{448}{480}{2}{upper z}\\
-				\memsection{480}{512}{2}{begin}\\
-				\memsection{512}{544}{2}{end}\\
-				\memsection{544}{576}{2}{left child}\\
-			\end{rightwordgroup}\\
-			
-		\end{bytefield}
-	\end{center}
-\end{figure}
-
-Note that in theory we could only store the split position and axis for each particle, which would only require 32 bits for the positions and 2 bits (for 3D) for the axis. However the exact domain information can then only be achieved by traversing the three starting from the root. We can however make use of this data-structure when the communication overhead is greater than the costs of reconstructing the datastrucutre. Thus this storage version can be thought of as a lossless data compression of the tree.
-\subsubsection{Particles}
-
-The particles need to be stored in an array. We can implement the array using c style arrays, std::array or even an std::vector. The disadvantage of std::array and std::vector is their speed. On the other c-style arrays are limited in terms of multi dimensional indexing and boundary checking. Thus we make use of the library blitz++ which combines the speed of C-style arrays with the functionality of the std::vector. Furthermore blitz++ uses the same memory layout we would expect from a C-style array which looks as follows:
-
-\begin{figure}[H]
-	\begin{center}
-		\begin{bytefield}{24}
-			\begin{rightwordgroup}{particle 0}
-				\memsection{0}{32}{4}{x}\\
-				\memsection{32}{64}{4}{y}\\
-				\memsection{64}{96}{4}{z}\\
-			\end{rightwordgroup}\\
-			\begin{rightwordgroup}{particle 1}
-				\memsection{96}{128}{4}{x}\\
-				\memsection{128}{160}{4}{y}\\
-				\memsection{160}{192}{4}{z}\\
-			\end{rightwordgroup}\\
-		
-		\end{bytefield}
-	\end{center}
-\end{figure}
-
-\TODO{Data compression notice here?}
+The messsaging class has one main function called $dispatchService$. It takes a service ID and distributes the necessary data to the target processors. Furthermore it collects the results of the services and returns them to the source processor.
 
 
-\subsection{Parallel Version Using Processes}
+\section{Empirical Analysis of ORB}
 
-To parallelize the ORB algorithms, we first need to think about which parts of the algorithm can be parallelized and yield in a performance improvement. The most obvious choice for parallelization is the counting part from the binary cut algorithm. In this case the main thread (rank 0) will send a cut position and each processor counts how many particles there are on the left of this cut positions. It does so in a designated range of the entire particle array, which is unique to each rank.
+\subsection{Methodology}
 
+\subsection{Results}
 
-\TODO{Argue from communication standpoint. }
-
-\vspace{5mm}
-
-\subsubsection{Non parallelizable parts}
-It is very difficult to parallelize the reshuffling part of the particle array. This is that it is very difficult to do in place. If we cannot perform it in place, we will probably have to use twice the memory capacity, which is will increase the maximum possible $N$ by a factor of two, which is not ideal.
-
-\TODO{Extend section}
-
-\subsubsection{Performance}
-
-
-\begin{center}
-	\begin{equation}
-		log(d) \times \left ( p \times \frac{ s }{B_{C}} \right ) = t
-	\end{equation}
-\end{center}
 
 \begin{figure}[H]
 	\begin{center}
@@ -1250,10 +1175,10 @@ It is very difficult to parallelize the reshuffling part of the particle array. 
 	\end{center}
 \end{figure}
 
-\subsection{Parallel Version Using CUDA }
+\subsection{Comparison to Theoretical Model}
 
-\subsubsection{CUDA Memory Model}
 
+\subsection{Conclusion}
 
 
 % Use for reduction explanation https://texample.net/tikz/examples/database-decimation-process/
