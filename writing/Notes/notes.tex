@@ -1077,23 +1077,44 @@ We conclude that the GPU version with GPU Tree building enabled yields the best 
 
 In this section we will describe the stand-alone implementation of the accelerated ORB algorithm. We will develop this separately from the PKDGrav codebase in order to have smaller and easily understandable codebase, furthermore we aim to use this platform for extensive empirical testing of different strategies.
 
-We implement the following core classes and functions:
+A brief overview of the core classes and function is as follows:
 
 \begin{itemize}
-	\item \textbf{ORB}: The orb class keeps track of 
+	\item \textbf{Cell}: The cell class is a structure keeping track of the fundamental cell information. In essence it is the analogue to the concept of the cell which we have already introduced. 
+	\item \textbf{ORB}: The orb class keeps track of the all particles and maintains a data-structure which maps between particles and cells. 
+	\item \textbf{Services}: The services are a set of function, which together form the building block of the ORB algorithm. This abstraction layer allows us to dynamically distribute and collect tasks from different processors. Furthermore individual services can be interchanged by GPU enabled implementations.
+	\item \textbf{Messaging}: The messaging class is responsible for building the interface between different processors. Its can be implemented using a wide set of tools. In our case we will solely focus on an MPI implementation.
+	
+\end{itemize}
+
+For this project we will use C++ 17 along with CUDA 11.3, OpenMPI 4.1.0 and Blitz++ 1.0.2 \cite{blitzcpp}. 
+
+\subsection{Cell}
+
+The cell class consists of the following variables:
+
+\begin{itemize}
+	\item $id$: The id is a unique identification of the cell instance.
+	\item $nLeafCells$: this variable is equal to $d_{cell}$ and depicts the number of leaf cells which can be found when walking all possible child cells of this cell. 
+	\item $lower$: The lower is 3D point coordinate which represents the lower boundary corner of the 3D volume $V_{cell}$ which is encompassed by this cells domain.
+	\item $upper$: The represents the upper boundary corner of the volume.	
+	\item $tmp$: The cell has room for additional data, which may be stored during executions of algorithms. 
 \end{itemize}
 
 
-\subsection{Architecture}
+The cells could be stored as binary tree or as we have already mentioned we could make use of a heap datastructure which allows for greater flexibility. Due to performance improvements, we will opt for the second variant.
 
-The stand alone version of the ORB should have following properties:
+
+\subsection{ORB}
 
 \begin{itemize}
-	\item Work with MPI for CPU parallelization
-	\item Work with CUDA for GPU parallelization
-	\item Abstractions which allow profiling of different strategies such as local and global reshuffling
+	\item \textbf{particles}: The cell class has ownership over the particles array.
+	\item \textbf{cellToParticles}: This array maps from a $cell.id$ to a tuple with entries $a$ and $b$ where a marks the index of the first particle in the particles array which is contained in this cell. Consequently $b$ marks the index after the last particle contained in the volume of the cell. Note that this is possible due to the constant reshuffling.
+	
 \end{itemize}
 
+
+\subsection{Services}
 
 Similarly as in PKDGrav we introduce the concept of services, which essentially is a collection of functions which can be sent to any set of processors in the computing system. We abstract the ORB algorithm into such services, such that we can experiment with different workload distribution schemas and easily interchange subroutines with GPU enables ones.
 
@@ -1108,6 +1129,8 @@ The services we have implemented are:
 
 With this system, a processor simply needs to wait for new services and fetch their corresponding parameters. The data can be distributed to the processors with any preferred communication method, in our case we will use MPI for this purpose, but the abstraction allows to easily interchange the communicator.
 
+
+\subsection{Messaging}
 
 \subsection{Data-structure}
 
