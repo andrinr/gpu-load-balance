@@ -11,6 +11,8 @@
 \usepackage{float}
 % Drawing
 \usepackage{tikz}
+\usetikzlibrary{arrows.meta,chains,%
+	decorations.pathreplacing}
 % Memory maps
 \usepackage{bytefield}
 % Simple trees
@@ -113,7 +115,7 @@ Non equal weighting functions for different particles are due to higher accelera
 \TODO{Brief summary of PKDGrav and how this work can be used to improve PKDGrav}
 
 \newpage
-\section{Orthogonal Recursive Bisection (ORB)}
+\section{Orthogonal Recursive Bisection (ORB)} \label{section:orb}
 
 
 %https://de.overleaf.com/learn/latex/TikZ_package
@@ -130,7 +132,7 @@ When we have built the binary tree successfully, we can leverage it in two ways:
 
 Our main objective in this work is to improve the runtime of astrophysical simulations, or more specifically PKDGrav. At the same time we want to minimize penalties in regards to $N$, the total number of particles, such that we can leverage a high $N$ to increase the precision of the simulation. Furthermore we want to adapt and optimize the algorithms with regards to the target data as introduced in \ref{section:target-data} and target computing systems (\ref{section:target-systems}).
 
-\subsection{Memory and Workload Balancing}\label{sec:balancing}
+\subsection{Memory and Workload Balancing}\label{balancing}
 We have now formulated our main objectives for improving ORB, which are to improve the runtime but at the same time keeping $N$ as large as possible. In this section we will explain how the two cannot be maximized at the same time, as there will we averse effects when disregarding interactions. 
 
 As described in section \ref{section:force-integration} if we want to mitigate the error across all particles, we need to introduce more discrete time steps for certain particles than for others. The need for non constant simulations steps across the simulation, is caused by the vastly variant forces which are exercised on different particles. It is possible that certain particles follow a straight path with an almost constant velocity, whereas others are influences by strong gravitational poles. We denote the workload for a particle $p_i$ as the weighting function $w(p_i)$. In an optimally parallelized system the workload should be very similar among computing units, thus it would make sense to distribute the particles regarding the weighting function. This in turn implies an unqeual distribution of the particles with regards to memory.  
@@ -1072,15 +1074,16 @@ We conclude that the GPU version with GPU Tree building enabled yields the best 
 \section{Stand-alone Implementation}
 
 In this section we will describe the stand-alone implementation of the accelerated ORB algorithm. We will develop this separately from the PKDGrav codebase in order to have smaller and easily understandable codebase, furthermore we aim to use this platform for extensive empirical testing of different strategies.
+We aim to implement the CPU version in the most efficient method as possible. Only when we achieve that, we can make a fair comparison between the CPU and GPU implementation. 
 
 A brief overview of the core classes and function is as follows:
 
 \begin{itemize}
-	\item \textbf{particles}: The particles array has ownership over all particles. Its built as multidimensional array.
-	\item \textbf{Cell}: The cell class is a structure keeping track of the fundamental cell information. In essence it is the analogue to the concept of the cell which we have already introduced. 
+	\item \textbf{particles}: The particles array has ownership over all particles. It has the shape of a multidimensional array, where the first three axes are occupied by positional data and the rest can be filled with meta data.
+	\item \textbf{Cell}: The cell class is a structure keeping track of the fundamental cell information. In essence it is the analogue to the concept of the $cell$ which we have already introduced in section \ref{section:orb}.
 	\item \textbf{ORB}: The orb class keeps track of the all particles and maintains a data-structure which maps between particles and cells. 
 	\item \textbf{Services}: The services are a set of function, which together form the building block of the ORB algorithm. This abstraction layer allows us to dynamically distribute and collect tasks from different processors. Furthermore individual services can be interchanged by GPU enabled implementations.
-	\item \textbf{Messaging}: The messaging class is responsible for building the interface between different processors. Its can be implemented using a wide set of tools. In our case we will solely focus on an MPI implementation.
+	\item \textbf{Messaging}: The messaging class is responsible for building the interface between different processors, which essentially is dispatching services. Its can be implemented using a wide set of tools. In our case we will solely focus on an MPI implementation.
 	
 \end{itemize}
 
@@ -1088,11 +1091,61 @@ For this project we will use C++ 17 along with CUDA 11.3, OpenMPI 4.1.0 and Blit
 
 \subsection{Particles}
 
-To implement the particles array, we use simple C-style arrays interchangeably with blitz++ arrays. The blitz++ array is a wrapper class around C-style arrays, which helps with pointer management and can speed up the debugging process. It does so by keeping track of the array size and checking access indexes. Furthermore we can easily create slices and make borrowed copies. 
-In some cases we will directly iterate over the particles using pointers, as we have observed 
+To implement the particles array, we use C-style arrays interchangeably with blitz++ arrays. The blitz++ array is a wrapper class around C-style arrays, which helps with pointer management and can speed up the debugging process by keeping track of the array size and checking access indexes. Furthermore, we can easily create slices and make borrowed copies. 
+Blitz++ allows us to easily access the C-style array with the command $array.data()$, enabling us to 
 
 \TODO{Add example with and without AVX in assembly}
 \subsection{Cell}
+
+As our tree consists of multiple cells, which are to be stored in a tree data-structure, but we have seen that the conditions for a balanced tree must always hold, we can use a heap, and thus a simple array to store all cells.
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}[
+			%  -{Stealth[length = 2.5pt]},
+			start chain = going right,
+			node distance = 0pt,
+			MyStyle/.style={draw, minimum width=2em, minimum height=2em, 
+				outer sep=0pt, on chain},
+			]
+			\node [MyStyle] (1) {$cell_1$};
+			\node [MyStyle] (2) {$cell_2$};
+			\node [MyStyle] (3) {$cell_3$};
+			\node [MyStyle] (4) {$cell_4$};
+			\node [MyStyle] (5) {$cell_5$};
+			\begin{scope}[-{Stealth[length = 2.5pt]}]
+				\draw (1.north) [out=25, in=155] to (2.north);
+				\draw (1.north) [out=30, in=155] to (3.north);
+				\draw (2.north) [out=35, in=155] to (4.north);
+				\draw (2.north) [out=40, in=155] to (5.north);
+			\end{scope}
+		\end{tikzpicture}
+		\qquad
+		\begin{figure}
+			\Tree[.cell_1 [.cell_2 [.cell_4 ] [.cell_5 ] ]
+			[.cell_3 ]]
+		\end{figure}
+	\end{center}
+	\caption{Tree as heap}
+\end{figure}
+
+Note that due to the property of always assigning the larger number of leaf cells to the left child cell, there will never be gaps in the lowest level of the tree, i.e. all consecutive indices in the array are filled with a cell until the last element.
+
+As with all heap data-structures we have the following conditions:
+
+\begin{itemize}
+	\item The root cell has index 1
+	\item The left child of cell at index $i$ can be accessed at the index $i\times2$. 
+	\item The left child of cell at index $i$ can be accessed at the index $i\times2 + 1$. 
+\end{itemize}
+
+Furthermore the following constraints can be derived:
+
+\begin{itemize}
+	\item Given $d$ leaf cells, we can compute the depth of the tree with: $\lceil log(d) \rceil$
+	\item Given $d$ leaf cells, the total number of cells are:
+	$\lfloor log(d) \rfloor$ + 
+\end{itemize}
 
 The cell class consists of the following variables:
 
@@ -1165,7 +1218,7 @@ The messsaging class has one main function called $dispatchService$. It takes a 
 					
 					\addplot +[] 
 					table [col sep=comma, x=N, y=time] 
-					{../../cpu/out/measurements\suffix.csv};
+					{../../code/out/measurements\suffix.csv};
 					
 					\addlegendentryexpanded{\# $\suffix$};
 					

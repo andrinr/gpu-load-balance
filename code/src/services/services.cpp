@@ -77,6 +77,7 @@ void Services::buildTree(Orb &orb, Cell *c, int *results, int n) {
     for (int l = 1; l < ceil(log2(root.nLeafCells)); ++l) {
 
         int a = std::pow(2, (l-1)) - 1;
+        // todo: correct this
         int b = std::min((int)std::pow(2, l), root.nLeafCells) - 1;
 
         std::cout << l << "-level" << " a "  << a << " b " << b << std::endl;
