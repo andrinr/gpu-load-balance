@@ -199,7 +199,7 @@ The ideal cut plane is defined such that exactly $N_{leftChild}$ particles are l
 The reason to choose the cut axis using the mentioned method, is that it reduces thin and non square shapes and converges to squares. 
 In this non general case, where $d$ is a power of two, we are able to construct a binary tree wit exactly $d$ leaf nodes and a height of $log(d)$.
 
-\subsubsection{By example}
+\subsubsection{By example} \ref{section:orb-example}
 
 Let us consider a numerical example and explore it visually.
 We consider the following $N$ = 7 particles:
@@ -1097,7 +1097,8 @@ Blitz++ allows us to easily access the C-style array with the command $array.dat
 \TODO{Add example with and without AVX in assembly}
 \subsection{Cell}
 
-As our tree consists of multiple cells, which are to be stored in a tree data-structure, but we have seen that the conditions for a balanced tree must always hold, we can use a heap, and thus a simple array to store all cells.
+As our tree consists of multiple cells, which are to be stored in a tree data-structure. As seen in section \ref{section:orb-example} the conditions for a balanced tree hold, allowing us to use a heap to store the tree. This of course increases the runtime of the tree, and since we need to store the cells in an array for communication purposes anyways (\TODO{Why exactly?}), this makes a lot of sense.
+When using a parallization schema using local reshuffling we will have to send all cells on a single level using the messaging interface. Using the heap datastructure, cells which corresponds to single level in the tree, can be accessed using a simple range.
 
 \begin{figure}[H]
 	\begin{center}
@@ -1129,8 +1130,9 @@ As our tree consists of multiple cells, which are to be stored in a tree data-st
 	\caption{Tree as heap}
 \end{figure}
 
-Note that due to the property of always assigning the larger number of leaf cells to the left child cell, there will never be gaps in the lowest level of the tree, i.e. all consecutive indices in the array are filled with a cell until the last element.
+Note that due to the property of always assigning the larger desired number of leaf cells to the left child cell, there will never be gaps in the lowest level of the tree, i.e. all consecutive indices in the array are filled with a cell until the last element.
 
+\subsubsection{Heap Conditions}
 As with all heap data-structures we have the following conditions:
 
 \begin{itemize}
@@ -1139,14 +1141,19 @@ As with all heap data-structures we have the following conditions:
 	\item The left child of cell at index $i$ can be accessed at the index $i\times2 + 1$. 
 \end{itemize}
 
-Furthermore the following constraints can be derived:
+\vspace{0.5cm}
+Furthermore we can derive the following constraints given the number of leaf cells $d$:
 
 \begin{itemize}
-	\item Given $d$ leaf cells, we can compute the depth of the tree with: $\lceil log(d) \rceil$
-	\item Given $d$ leaf cells, the total number of cells are:
-	$\lfloor log(d) \rfloor$ + 
+	\item We can compute the depth of the tree with: $\lceil log_2(d) \rceil$
+	\item The number of cells on the second last level (which must all be leaf cells) is given by $2^{depth} - d$ 
+	\item There are exactly $2 \times d - 2^{depth}$ items on the last level. 
+	\item The total number of cells are $2\times d - 1$.
 \end{itemize}
 
+\TODO{Should I add the proofs here?}
+
+\subsubsection{Class}
 The cell class consists of the following variables:
 
 \begin{itemize}
@@ -1180,7 +1187,7 @@ The services we have implemented are:
 	\item $countLeftService$ : Counts the number of particles left of a provided cut position for each of the cells.
 	\item $countServiceService$ : Counts the number particles inside the domain for each of the provided cells.
 	\item $localReshuffleService$ : Reshuffles the particles locally, such that their memory locality corresponds to a cell. 
-	\item $buildTreeService$ : This is the operative service, which distributes and coordinates other services. Its comparabale to the ORB main routine. 
+	\item $buildTreeService$ : This is the operative service, which distributes and coordinates other services. Its comparable to the ORB main routine. 
 \end{itemize}
 
 Each service function is associated with an unique ID.
@@ -1189,13 +1196,16 @@ With this system, a processor simply needs to wait for new services and fetch th
 
 \subsection{CUDA Services}
 
+In this section we describe the services which were implemented using CUDA. In this section we may also add some theory about how exactly CUDA works.
 
 
 \subsection{Messaging}
 
 The messsaging class has one main function called $dispatchService$. It takes a service ID and distributes the necessary data to the target processors. Furthermore it collects the results of the services and returns them to the source processor.
 
+In this section we will take an in depth look at the MPI calls which have to be made in order to make this function work.
 
+\newpage
 \section{Empirical Analysis of ORB}
 
 \subsection{Methodology}
