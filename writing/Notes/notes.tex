@@ -1073,6 +1073,8 @@ We conclude that the GPU version with GPU Tree building enabled yields the best 
 \newpage
 \section{Stand-alone Implementation}
 
+\TODO{Give introduction as to how precise the description is and should be}
+
 In this section we will describe the stand-alone implementation of the accelerated ORB algorithm. We will develop this separately from the PKDGrav codebase in order to have smaller and easily understandable codebase, furthermore we aim to use this platform for extensive empirical testing of different strategies.
 We aim to implement the CPU version in the most efficient method as possible. Only when we achieve that, we can make a fair comparison between the CPU and GPU implementation. 
 
@@ -1097,7 +1099,10 @@ Blitz++ allows us to easily access the C-style array with the command $array.dat
 \TODO{Add example with and without AVX in assembly}
 \subsection{Cell}
 
-As our tree consists of multiple cells, which are to be stored in a tree data-structure. As seen in section \ref{section:orb-example} the conditions for a balanced tree hold, allowing us to use a heap to store the tree. This of course increases the runtime of the tree, and since we need to store the cells in an array for communication purposes anyways (\TODO{Why exactly?}), this makes a lot of sense.
+As our tree consists of multiple cells, which are to be stored in a tree data-structure. As seen in section \ref{section:orb-example} the conditions for a balanced tree hold, allowing us to use a heap to store the tree. This \TODO{hint} reduces the runtime of the tree, and since we need to store the cells in an array for communication purposes anyways (\TODO{Why exactly?}), this makes a lot of sense.
+
+\TODO{Either copy cell into buffer. You have to linearize. Add arguments with leaf cells.}
+
 When using a parallization schema using local reshuffling we will have to send all cells on a single level using the messaging interface. Using the heap datastructure, cells which corresponds to single level in the tree, can be accessed using a simple range.
 
 \begin{figure}[H]

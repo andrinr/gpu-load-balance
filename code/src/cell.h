@@ -41,6 +41,11 @@ struct Cell {
     Cell() {
 
     };
+
+    // todo: do this
+    int getLeftChildId() const {// does not modify{
+        return id * 2 - 1;
+    }
 };
 
 

@@ -6,11 +6,9 @@
 
 class MPIMessaging : public Messaging {
 public:
-    static void Init();
+    virtual void Init() = 0;
 
-    static void MPI_Handler_function();
-
-    static std::tuple<bool, int*> dispatchService(
+    virtual std::tuple<bool, int*> dispatchService(
             Orb& orb,
             ServiceIDs id,
             Cell* cells,
@@ -18,7 +16,7 @@ public:
             int* results,
             int nResults,
             std::tuple<int, int> target,
-            int source);
+            int source) = 0;
 
     static std::tuple<bool, int*> dispatchService(
             Orb& orb,
@@ -30,7 +28,7 @@ public:
             int target,
             int source);
 
-    static void finalize();
+    virtual void finalize() = 0;
 
     static inline int rank;
     static inline int np;
