@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <blitz/array.h>
 #include <chrono>
+#include <cstdlib>
 
 #include "comm/MPIMessaging.h"
 #include "constants.h"
@@ -14,6 +15,11 @@
 using namespace std::chrono;
 
 int main(int argc, char** argv) {
+
+    // report version
+    std::cout << argv[0] << " Version " << glb_VERSION_MAJOR << "." << glb_VERSION_MINOR << std::endl;
+
+    const double inputValue = std::stod(argv[1]);
 
     // read params
     if (strlen(argv[1]) == 0) {

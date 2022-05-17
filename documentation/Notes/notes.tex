@@ -23,6 +23,10 @@
 \usepackage{verbatim}
 % math symbols
 \usepackage{amssymb}
+% csv reader
+\usepackage{csvsimple}
+% create file content
+\usepackage{filecontents}
 
 % Plots
 \usepackage{pgfplots}
@@ -32,6 +36,15 @@
 \usepackage{mymacros}
 \usepackage{parallelP}
 
+\begin{filecontents}{numExample.csv} 
+	0.4, 0.3
+	0.2, 0.6
+	0.1, 0.9
+	0.4, 0.5
+	0.3, 0.8
+	0.7, 0.1
+	0.9, 0.2
+\end{filecontents}
 
 % Title
 \title{Orthogonal Recursive Bisection on the GPU for Accelerated Load Balancing in Large N-Body Simulations \\ - \\ Bachelor Thesis}
@@ -204,19 +217,21 @@ In this non general case, where $d$ is a power of two, we are able to construct 
 Let us consider a numerical example and explore it visually.
 We consider the following $N$ = 7 particles:
 
-\def\N{7}
-\newarray\xs
-\newarray\ys
-\readarray{xs}{0.3&0.05&0.4&0.9&0.2&0.6&0.76}
-\readarray{ys}{0.3&0.6&0.8&0.4&0.1&0.4&0.81}
+\newcommand\dosomethingwith[1]{#1\par}
 
-\begin{center}
-	\foreach \i in {0,...,\N}{
-		$x_{\i} = (\xs(\i), \ys(\i))$\\
-	}
-\end{center}
+\begin{figure}[H]
+	\begin{center}
+		\textbf{x, y}
+		\csvloop{
+			file=numExample.csv,
+			no head,
+			check column count=false,
+			command=\dosomethingwith\csvline,
+		}
+	\end{center}
+\end{figure}
 
-\TODO{Add numeric example here}
+
 \def\x{8}
 \def\y{8}
 \def\s{5}
@@ -1218,30 +1233,33 @@ In this section we will take an in depth look at the MPI calls which have to be 
 \subsection{Results}
 
 
-\begin{figure}[H]
-	\begin{center}
-		\begin{tikzpicture}
-			\begin{axis}[
-				height=10cm,width=13cm, 
-				title={Measured Performance with $d = 1024$},
-				xlabel={Particle Count},
-				ylabel={Execution Time (ms)},
-				]
-				
-				\foreach \i in {0,...,3}{
-					\pgfmathsetmacro\suffix{int(pow(2,\i))};
+\begin{comment}
+	\begin{figure}[H]
+		\begin{center}
+			\begin{tikzpicture}
+				\begin{axis}[
+					height=10cm,width=13cm, 
+					title={Measured Performance with $d = 1024$},
+					xlabel={Particle Count},
+					ylabel={Execution Time (ms)},
+					]
 					
-					\addplot +[] 
-					table [col sep=comma, x=N, y=time] 
-					{../../code/out/measurements\suffix.csv};
-					
-					\addlegendentryexpanded{\# $\suffix$};
-					
-				}	
-			\end{axis}
-		\end{tikzpicture}
-	\end{center}
-\end{figure}
+					\foreach \i in {0,...,3}{
+						\pgfmathsetmacro\suffix{int(pow(2,\i))};
+						
+						\addplot +[] 
+						table [col sep=comma, x=N, y=time] 
+						{../../code/out/measurements\suffix.csv};
+						
+						\addlegendentryexpanded{\# $\suffix$};
+						
+					}	
+				\end{axis}
+			\end{tikzpicture}
+		\end{center}
+	\end{figure}
+\end{comment}
+
 
 \subsection{Comparison to Theoretical Model}
 
