@@ -103,7 +103,7 @@ void Services::buildTree(Orb &orb, Cell *c, int *results, int n) {
         while(foundAll) {
             int* sumLeft;
             foundAll = true;
-            std::tie(status, sumLeft) = MPIMessaging::dispatchService(
+            std::tie(status, sumLeft) = mpiMessaging.dispatchService(
                     orb,
                     countLeftService,
                     cells(blitz::Range(a, b)).data(),
@@ -133,7 +133,7 @@ void Services::buildTree(Orb &orb, Cell *c, int *results, int n) {
 
         // Dispatch reshuffle service
         int * dummy;
-        std::tie(status, dummy) = MPIMessaging::dispatchService(
+        std::tie(status, dummy) = mpiMessaging.dispatchService(
                 orb,
                 localReshuffleService,
                 cells(blitz::Range(a, b)).data(),

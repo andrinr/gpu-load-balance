@@ -16,9 +16,6 @@ using namespace std::chrono;
 
 int main(int argc, char** argv) {
 
-    // report version
-    std::cout << argv[0] << " Version " << glb_VERSION_MAJOR << "." << glb_VERSION_MINOR << std::endl;
-
     const double inputValue = std::stod(argv[1]);
 
     // read params
@@ -34,13 +31,15 @@ int main(int argc, char** argv) {
     int nLeafCells = arg2;
 
     // Init comm
-    MPIMessaging::Init();
-    std::cout << "Process " << MPIMessaging::rank << " processing " << count / 1000 << "K particles." << std::endl;
-    std::cout << "Process " << MPIMessaging::rank << " starting task..." << std::endl;
+    MPIMessaging mpiMessaging;
+    mpiMessaging.Init();
 
-    int N = (count+MPIMessaging::np-1) / MPIMessaging::np ;
-    if (N * MPIMessaging::rank >= count) N = 0;
-    else if (N * (MPIMessaging::rank+1) >= count) N = count - MPIMessaging::rank*N;
+    std::cout << "Process " << mpiMessaging.rank << " processing " << count / 1000 << "K particles." << std::endl;
+    std::cout << "Process " << mpiMessaging.rank << " starting task..." << std::endl;
+
+    int N = (count+mpiMessaging.np-1) / mpiMessaging.np ;
+    if (N * mpiMessaging.rank >= count) N = 0;
+    else if (N * (mpiMessaging.rank+1) >= count) N = count - mpiMessaging.rank*N;
 
     // Set row major -> can enable AVX
     blitz::GeneralArrayStorage<2> storage;
@@ -48,7 +47,7 @@ int main(int argc, char** argv) {
     storage.base() = 0, 0;
     storage.ascendingFlag() = true, true;
 
-    blitz::Array<float, 2> particles = IO::generateData(N, MPIMessaging::rank);
+    blitz::Array<float, 2> particles = IO::generateData(N, mpiMessaging.rank);
 
     // We add +1 due to heap storage order
     int nCells = nLeafCells * 2 + 1;
@@ -58,7 +57,7 @@ int main(int argc, char** argv) {
     Orb orb(particles, cellToParticle, nLeafCells);
 
     auto start = high_resolution_clock::now();
-    if (MPIMessaging::rank == 0) {
+    if (mpiMessaging.rank == 0) {
 
         // root cell is at index 1
         blitz::Array<Cell, 1> cells(nCells);
@@ -75,7 +74,7 @@ int main(int argc, char** argv) {
         cells(0) = root;
 
         int* results;
-        MPIMessaging::dispatchService(
+        mpiMessaging.dispatchService(
                 orb,
                 buildTreeService,
                 cells.data(),
@@ -92,19 +91,19 @@ int main(int argc, char** argv) {
         ServiceIDs id;
         bool status = true;
         while(status) {
-            std::tie(status, results) = MPIMessaging::dispatchService(
+            std::tie(status, results) = mpiMessaging.dispatchService(
                     orb,
                     id,
                     emptyCells,
                     nCells,
                     results,
                     nResults,
-                    std::make_tuple(1, MPIMessaging::np-1),
+                    std::make_tuple(1, mpiMessaging.np-1),
                     0);
         }
     }
 
-    MPIMessaging::finalize();
+    mpiMessaging.finalize();
 
     return 0;
 }

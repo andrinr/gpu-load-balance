@@ -7,7 +7,7 @@
 
 class Messaging {
 public:
-    virtual void Init() override = 0;
+    virtual void Init() = 0;
     virtual std::tuple<bool, int*> dispatchService(
             Orb& orb,
             ServiceIDs id,
@@ -16,7 +16,7 @@ public:
             int* results,
             int nResults,
             std::tuple<int, int> target,
-            int source) override = 0;
+            int source) = 0;
 
     virtual std::tuple<bool, int*> dispatchService(
             Orb& orb,
@@ -26,9 +26,9 @@ public:
             int* results,
             int nResults,
             int target,
-            int source) override = 0;
+            int source) = 0;
 
-    virtual finalize() override s= 0;
+    virtual void finalize() = 0;
 
 };
 

@@ -1,18 +1,18 @@
 #include "MPIMessaging.h"
 
-void MPIMessaging::MPI_Handler_function() {
-
-};
+void MPIMessaging::MPIMessaging() {
+    return;
+}
 
 void MPIMessaging::Init() {
 
     MPI_Init(NULL, NULL);
 
-    MPI_Comm_size(MPI_COMM_WORLD, &MPIMessaging::np );
-    MPI_Comm_rank(MPI_COMM_WORLD, &MPIMessaging::rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &np );
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     const int nItems = 7;
-    int blockLengths[nItems] = {
+    int blockLengths[nItems] = {    
             1,
             1,
             1,
@@ -41,8 +41,8 @@ void MPIMessaging::Init() {
     offsets[5] = offsetof(Cell, lower);
     offsets[6] = offsetof(Cell, upper);
 
-    MPI_Type_create_struct(nItems, blockLengths, offsets, types, &MPIMessaging::MPI_CELL);
-    MPI_Type_commit(&MPIMessaging::MPI_CELL);
+    MPI_Type_create_struct(nItems, blockLengths, offsets, types, &MPI_CELL);
+    MPI_Type_commit(&MPI_CELL);
 
     std::cout << "MpiMessaging initialized" << std::endl;
 }
