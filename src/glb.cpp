@@ -11,6 +11,8 @@
 #include "IO.h"
 #include "orb.h"
 #include "services/services.h"
+#include "services/baseService.h"
+#include "services/countService.h"
 
 using namespace std::chrono;
 
@@ -30,9 +32,11 @@ int main(int argc, char** argv) {
     int count = arg1 * 1000;
     int nLeafCells = arg2;
 
+    // Init all services
+    CountService countService;
+
     // Init comm
     MPIMessaging mpiMessaging;
-    mpiMessaging.Init();
 
     std::cout << "Process " << mpiMessaging.rank << " processing " << count / 1000 << "K particles." << std::endl;
     std::cout << "Process " << mpiMessaging.rank << " starting task..." << std::endl;
@@ -56,6 +60,9 @@ int main(int argc, char** argv) {
     cellToParticle(0,1) = N-1;
     Orb orb(particles, cellToParticle, nLeafCells);
 
+    ServiceManager manager(&orb, &mpiMessaging);
+    manager.addService(&countService);
+
     auto start = high_resolution_clock::now();
     if (mpiMessaging.rank == 0) {
 
@@ -74,15 +81,7 @@ int main(int argc, char** argv) {
         cells(0) = root;
 
         int* results;
-        mpiMessaging.dispatchService(
-                orb,
-                buildTreeService,
-                cells.data(),
-                1,
-                results,
-                0,
-                0,
-                0);
+
     }
     else {
         Cell* emptyCells;
@@ -91,15 +90,7 @@ int main(int argc, char** argv) {
         ServiceIDs id;
         bool status = true;
         while(status) {
-            std::tie(status, results) = mpiMessaging.dispatchService(
-                    orb,
-                    id,
-                    emptyCells,
-                    nCells,
-                    results,
-                    nResults,
-                    std::make_tuple(1, mpiMessaging.np-1),
-                    0);
+
         }
     }
 

@@ -12,7 +12,6 @@
 class CountService : BaseService {
 public:
     struct ServiceInput {
-        Orb & orb;
         Cell * cells;
         int nCells;
 
@@ -26,11 +25,13 @@ public:
         ServiceOutput();
     };
 
-    static const int serviceID = 1;
+    const int serviceID = 1;
 
     CountService();
 
-    virtual void run(void * rawInputData, void * rawOutputData) = 0;
+    void run(void * rawInputData, void * rawOutputData);
+    int getNInputBytes(void * inputPtr);
+    int getNOutputBytes(void * outputPtr);
 };
 
 

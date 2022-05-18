@@ -2,37 +2,17 @@
 #define MPI_MESSAGING_H
 #include "messaging.h"
 #include <mpi.h>
-
+#include "../services/serviceManager.h"
 
 class MPIMessaging : public Messaging {
 public:
     MPIMessaging();
-
-    void Init() override;
-    std::tuple<bool, int*> dispatchService(
-            Orb& orb,
-            ServiceIDs id,
-            Cell* cells,
-            int nCells,
-            int* results,
-            int nResults,
-            std::tuple<int, int> target,
-            int source) override;
-
-    std::tuple<bool, int*> dispatchService(
-            Orb& orb,
-            ServiceIDs id,
-            Cell* cells,
-            int nCells,
-            int* results,
-            int nResults,
-            int target,
-            int source) override;
+    void dispatchService(ServiceManager * manager, int serviceID, void * rawInputData, void * rawOutputData);
+    void workService(ServiceManager * manager, void * rawOutputData);
+    void workService(ServiceManager * manager);
 
     void finalize() override;
     int rank;
     int np;
-
-    MPI_Datatype MPI_CELL;
 };
 #endif //MPI_MESSAGING_H

@@ -1,18 +1,18 @@
 //
 // Created by andrin on 15/05/22.
 //
-
 #include "countService.h"
+
 
 void CountService::run(void * rawInputData, void * rawOutputData) {
     ServiceInput inputData = *(struct ServiceInput*)rawInputData;
     ServiceOutput outputData;
-    /*std::cout << " counting " << n << std::endl;
-*/
+
+    Orb orb = manager->orb;
+
     for (int i = 0; i < inputData.nCells; ++i) {
-        std::cout << MPIMessaging::rank << "A" << std::endl;
+
         Cell cell = inputData.cells[i];
-        std::cout << MPIMessaging::rank << "B" << std::endl;
         CellHelpers::log(cell);
         int begin = orb.cellToParticle(cell.id, 0);
         int end = orb.cellToParticle(cell.id, 1);
@@ -21,6 +21,21 @@ void CountService::run(void * rawInputData, void * rawOutputData) {
     }
 
     outputData.nSums = inputData.nCells;
+    rawOutputData = &outputData;
+}
 
-    rawOutputData = &output;
+
+int CountService::getNInputBytes(void *inputPtr) {
+    ServiceInput input = *(struct ServiceInput*)inputPtr;
+    // we add plus one for the nSums variable itself
+    int nBytes = ( input.nCells ) * sizeof(Cell);
+    nBytes += sizeof(int);
+    return nBytes;
+}
+
+int CountService::getNOutputBytes(void *outputPtr) {
+    ServiceOutput output = *(struct ServiceOutput*)outputPtr;
+    // we add plus one for the nSums variable itself
+    int nBytes = ( 1 + output.nSums ) * sizeof(int);
+    return nBytes;
 }
