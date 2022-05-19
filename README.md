@@ -4,6 +4,31 @@ Bachelor Thesis of Andrin Rehmann
 
 Supervised by Douglas Potter and Micheal Böhlen
 
-``cpu`` for a CPU accelerated version
-``gpu`` for a GPU accelerated version
-``writing`` for the thesis
+``documentation`` for the thesis
+
+
+
+## Get started
+
+1. OpenMPI ``sudo apt-get install openmpi-bin libopenmpi-dev``
+2. Blitz++ https://github.com/blitzpp/blitz
+
+### Compile
+1. ``mkdir build``
+2. ``cd build``
+3. ``cmake ..``
+4. `` cmake --build .``
+
+### Debug
+``mpirun -np <x> gdb glb <# thousand of particles> <# domains>``
+
+Or with   console for each process:
+
+``mpirun -np <x> xterm -e gdb glb <# thousand of particles> <# domains>``
+
+Or run gdb on only one process:
+
+``mpiexec -n 1 gdb glb <# thousand of particles> <# domains>m : -n <x-1> glb <# thousand of particles> <# domains>``
+
+### Run
+``mpirun -np <x> glb <# thousand of particles> <# domains>``

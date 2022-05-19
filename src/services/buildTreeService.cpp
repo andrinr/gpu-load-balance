@@ -2,6 +2,7 @@
 // Created by andrin on 19/05/22.
 //
 
+#include "iostream"
 #include "buildTreeService.h"
 #include "countLeftService.h"
 #include "countService.h"
@@ -9,6 +10,7 @@
 
 void BuildTreeService::run(void *rawInputData, void *rawOutputData) {
 
+    std::cout << "building tree" << std::endl;
     BuildTreeServiceInput inputData = *(struct BuildTreeServiceInput*)rawInputData;
     void * outputData;
 
