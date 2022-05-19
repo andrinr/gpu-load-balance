@@ -19,7 +19,7 @@ public:
         int nCutIndices;
     };
 
-    const int serviceID = 2;
+    const int serviceID = 3;
 
     LocalReshuffleService();
 

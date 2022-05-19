@@ -13,6 +13,8 @@
 #include "services/services.h"
 #include "services/baseService.h"
 #include "services/countService.h"
+#include "services/countLeftService.h"
+#include "services/localReshuffleService.h"
 #include "comm/MPIMessaging.h"
 
 using namespace std::chrono;
@@ -30,9 +32,6 @@ int main(int argc, char** argv) {
 
     int count = arg1 * 1000;
     int nLeafCells = arg2;
-
-    // Init all services
-    CountService countService;
 
     // Init comm
     MPIMessaging mpiMessaging;
@@ -59,8 +58,15 @@ int main(int argc, char** argv) {
     cellToParticle(0,1) = N-1;
     Orb orb(particles, cellToParticle, nLeafCells);
 
+    // Init all services
+    CountService countService;
+    CountLeftService countLeftService;
+    LocalReshuffleService localReshuffleService;
+
     ServiceManager manager(&orb, &mpiMessaging);
     manager.addService(&countService);
+    manager.addService(&countLeftService);
+    manager.addService(&localReshuffleService);
 
     auto start = high_resolution_clock::now();
     if (mpiMessaging.rank == 0) {
