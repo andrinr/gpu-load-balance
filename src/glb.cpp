@@ -18,9 +18,7 @@
 using namespace std::chrono;
 
 int main(int argc, char** argv) {
-
-    const double inputValue = std::stod(argv[1]);
-
+    
     // read params
     if (strlen(argv[1]) == 0) {
         return 1; // empty string
