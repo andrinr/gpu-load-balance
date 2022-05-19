@@ -13,7 +13,7 @@ class Messaging;
 
 class ServiceManager {
 public:
-    std::map<int, BaseService *> m;
+    std::map<int, BaseService * > m;
 
     ServiceManager(Orb * o, Messaging * m) {
         orb = o;

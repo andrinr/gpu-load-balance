@@ -1,4 +1,5 @@
 #include "MPIMessaging.h"
+#include "../services/baseService.h"
 
 MPIMessaging::MPIMessaging() {
     MPI_Init(NULL, NULL);
@@ -25,12 +26,11 @@ void MPIMessaging::dispatchService(ServiceManager * manager, int serviceID, void
 
     MPI_Bcast(&serviceID, 1, MPI_INT, 0, MPI_COMM_WORLD);
     // Get appropriate service class
-    BaseService service = manager->m[id];
 
-    int nInputBytes = service.getNInputBytes(rawInputData);
+    int nInputBytes = manager->m[serviceID]->getNInputBytes(rawInputData);
     MPI_Bcast(&nInputBytes, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-    int nOutputBytes = service.getNOutputBytes(rawOutputData);
+    int nOutputBytes =  manager->m[serviceID]->getNOutputBytes(rawOutputData);
     MPI_Bcast(&nOutputBytes, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
     MPI_Bcast(
@@ -41,7 +41,7 @@ void MPIMessaging::dispatchService(ServiceManager * manager, int serviceID, void
             MPI_COMM_WORLD
     );
 
-    service.run(rawInputData, rawOutputData);
+    manager->m[serviceID]->run(rawInputData, rawOutputData);
 
     MPI_Bcast(
             &rawOutputData,

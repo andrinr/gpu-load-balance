@@ -7,11 +7,12 @@
 class MPIMessaging : public Messaging {
 public:
     MPIMessaging();
-    void dispatchService(ServiceManager * manager, int serviceID, void * rawInputData, void * rawOutputData);
-    void workService(ServiceManager * manager, void * rawOutputData);
-    void workService(ServiceManager * manager);
 
+    void dispatchService(ServiceManager * manager, int serviceID, void * rawInputData, void * rawOutputData) override;
+    void workService(ServiceManager * manager, void * rawOutputData) override;
+    void workService(ServiceManager * manager) override;
     void finalize() override;
+
     int rank;
     int np;
 };

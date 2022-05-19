@@ -5,14 +5,15 @@
 #include <chrono>
 #include <cstdlib>
 
-#include "comm/MPIMessaging.h"
 #include "constants.h"
 #include "cell.h"
 #include "IO.h"
 #include "orb.h"
+#include "services/serviceManager.h"
 #include "services/services.h"
 #include "services/baseService.h"
 #include "services/countService.h"
+#include "comm/MPIMessaging.h"
 
 using namespace std::chrono;
 

@@ -4,15 +4,14 @@
 #include "../orb.h"
 #include "../services/services.h"
 #include "tuple"
-#include "../services/baseService.h"
-#include "../services/serviceManager.h"
+
+class ServiceManager;
 
 class Messaging {
 public:
-    Messaging();
-    void dispatchService(ServiceManager * manager, int serviceID, void * rawInputData, void * rawOutputData);
-    void workService(ServiceManager * manager, void * rawOutputData);
-    void workService(ServiceManager * manager);
+    virtual void dispatchService(ServiceManager * manager, int serviceID, void * rawInputData, void * rawOutputData) = 0;
+    virtual void workService(ServiceManager * manager, void * rawOutputData) = 0;
+    virtual void workService(ServiceManager * manager);
     virtual void finalize() = 0;
 };
 

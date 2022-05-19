@@ -2,13 +2,15 @@
 // Created by andrin on 15/05/22.
 //
 #include "countService.h"
+#include "serviceManager.h"
 
+CountService::CountService() {};
 
 void CountService::run(void * rawInputData, void * rawOutputData) {
     ServiceInput inputData = *(struct ServiceInput*)rawInputData;
     ServiceOutput outputData;
 
-    Orb orb = manager->orb;
+    Orb orb = *manager->orb;
 
     for (int i = 0; i < inputData.nCells; ++i) {
 
@@ -25,7 +27,7 @@ void CountService::run(void * rawInputData, void * rawOutputData) {
 }
 
 
-int CountService::getNInputBytes(void *inputPtr) {
+int CountService::getNInputBytes(void *inputPtr) const {
     ServiceInput input = *(struct ServiceInput*)inputPtr;
     // we add plus one for the nSums variable itself
     int nBytes = ( input.nCells ) * sizeof(Cell);
@@ -33,7 +35,7 @@ int CountService::getNInputBytes(void *inputPtr) {
     return nBytes;
 }
 
-int CountService::getNOutputBytes(void *outputPtr) {
+int CountService::getNOutputBytes(void *outputPtr) const {
     ServiceOutput output = *(struct ServiceOutput*)outputPtr;
     // we add plus one for the nSums variable itself
     int nBytes = ( 1 + output.nSums ) * sizeof(int);
