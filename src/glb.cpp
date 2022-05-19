@@ -18,7 +18,7 @@
 using namespace std::chrono;
 
 int main(int argc, char** argv) {
-    
+
     // read params
     if (strlen(argv[1]) == 0) {
         return 1; // empty string
