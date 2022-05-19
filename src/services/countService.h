@@ -9,19 +9,22 @@
 #include "../cell.h"
 #include "../orb.h"
 
+const int COUNT_SERVICE_ID = 1;
+
+struct CountServiceInput {
+    Cell * cells;
+    int nCells;
+};
+
+struct CountServiceOutput {
+    int * sums;
+    int nSums;
+};
+
 class CountService : public BaseService {
 public:
-    struct ServiceInput {
-        Cell * cells;
-        int nCells;
-    };
 
-    struct ServiceOutput {
-        int * sums;
-        int nSums;
-    };
-
-    const int serviceID = 1;
+    const int serviceID = COUNT_SERVICE_ID;
 
     CountService();
 

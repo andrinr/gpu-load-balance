@@ -10,8 +10,8 @@
 LocalReshuffleService::LocalReshuffleService() {};
 
 void LocalReshuffleService::run(void *rawInputData, void *rawOutputData) {
-    ServiceInput inputData = *(struct ServiceInput*)rawInputData;
-    ServiceOutput outputData;
+    LocalReshuffleServiceInput inputData = *(struct LocalReshuffleServiceInput*)rawInputData;
+    LocalServiceServiceOutput outputData;
 
     Orb orb = *manager->orb;
     blitz::Array<int, 1> indices(inputData.nCells);
@@ -42,7 +42,7 @@ void LocalReshuffleService::run(void *rawInputData, void *rawOutputData) {
 };
 
 int LocalReshuffleService::getNInputBytes(void *inputPtr) const {
-    ServiceInput input = *(struct ServiceInput*)inputPtr;
+    LocalReshuffleServiceInput input = *(struct LocalReshuffleServiceInput*)inputPtr;
     // we add plus one for the nSums variable itself
     int nBytes = ( input.nCells ) * sizeof(Cell);
     nBytes += sizeof(int);
@@ -50,7 +50,7 @@ int LocalReshuffleService::getNInputBytes(void *inputPtr) const {
 };
 
 int LocalReshuffleService::getNOutputBytes(void *outputPtr) const {
-    ServiceOutput output = *(struct ServiceOutput*)outputPtr;
+    LocalServiceServiceOutput output = *(struct LocalServiceServiceOutput*)outputPtr;
     // we add plus one for the nSums variable itself
     int nBytes = ( 1 + output.nCutIndices ) * sizeof(int);
     return nBytes;

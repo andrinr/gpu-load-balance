@@ -2,7 +2,6 @@
 #define MESSAGING_H
 #include "../cell.h"
 #include "../orb.h"
-#include "../services/services.h"
 #include "tuple"
 
 class ServiceManager;

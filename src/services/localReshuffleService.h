@@ -7,19 +7,22 @@
 
 #include "baseService.h"
 
+const int LOCAL_RESHUFFLE_SERVICE_ID = 3;
+
+struct LocalReshuffleServiceInput {
+    Cell * cells;
+    int nCells;
+};
+
+struct LocalServiceServiceOutput {
+    int * cutIndices;
+    int nCutIndices;
+};
+
 class LocalReshuffleService : public BaseService {
 public:
-    struct ServiceInput {
-        Cell * cells;
-        int nCells;
-    };
 
-    struct ServiceOutput {
-        int * cutIndices;
-        int nCutIndices;
-    };
-
-    const int serviceID = 3;
+    const int serviceID = LOCAL_RESHUFFLE_SERVICE_ID;
 
     LocalReshuffleService();
 

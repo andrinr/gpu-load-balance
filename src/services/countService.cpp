@@ -7,8 +7,8 @@
 CountService::CountService() {};
 
 void CountService::run(void * rawInputData, void * rawOutputData) {
-    ServiceInput inputData = *(struct ServiceInput*)rawInputData;
-    ServiceOutput outputData;
+    CountServiceInput inputData = *(struct CountServiceInput*)rawInputData;
+    CountServiceOutput outputData;
 
     Orb orb = *manager->orb;
 
@@ -28,7 +28,7 @@ void CountService::run(void * rawInputData, void * rawOutputData) {
 
 
 int CountService::getNInputBytes(void *inputPtr) const {
-    ServiceInput input = *(struct ServiceInput*)inputPtr;
+    CountServiceInput input = *(struct CountServiceInput*)inputPtr;
     // we add plus one for the nSums variable itself
     int nBytes = ( input.nCells ) * sizeof(Cell);
     nBytes += sizeof(int);
@@ -36,7 +36,7 @@ int CountService::getNInputBytes(void *inputPtr) const {
 }
 
 int CountService::getNOutputBytes(void *outputPtr) const {
-    ServiceOutput output = *(struct ServiceOutput*)outputPtr;
+    CountServiceOutput output = *(struct CountServiceOutput*)outputPtr;
     // we add plus one for the nSums variable itself
     int nBytes = ( 1 + output.nSums ) * sizeof(int);
     return nBytes;

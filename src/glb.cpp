@@ -10,11 +10,11 @@
 #include "IO.h"
 #include "orb.h"
 #include "services/serviceManager.h"
-#include "services/services.h"
 #include "services/baseService.h"
 #include "services/countService.h"
 #include "services/countLeftService.h"
 #include "services/localReshuffleService.h"
+#include "services/buildTreeService.h"
 #include "comm/MPIMessaging.h"
 
 using namespace std::chrono;
@@ -85,17 +85,23 @@ int main(int argc, char** argv) {
         CellHelpers::setCutMargin(root);
         cells(0) = root;
 
-        int* results;
-
+        BuildTreeServiceInput btsi {
+            cells.data(),
+            &mpiMessaging
+        };
+        void * btso;
+        mpiMessaging.dispatchService(
+                &manager,
+                BUILD_TREE_SERVICE_ID,
+                &btsi,
+                btso);
     }
     else {
-        Cell* emptyCells;
-        int* results;
-        int nResults;
-        ServiceIDs id;
         bool status = true;
         while(status) {
-
+            mpiMessaging.workService(
+                    &manager
+                    );
         }
     }
 

@@ -6,19 +6,22 @@
 #define GPU_LOAD_BALANCE_COUNTLEFTSERVICE_H
 #include "baseService.h"
 
+const int COUNT_LEFT_SERVICE_ID = 2;
+
+struct CountLeftServiceInput {
+    Cell * cells;
+    int nCells;
+};
+
+struct CountLeftServiceOutput {
+    int * counts;
+    int nCounts;
+};
+
 class CountLeftService : public BaseService {
 public:
-    struct ServiceInput {
-        Cell * cells;
-        int nCells;
-    };
 
-    struct ServiceOutput {
-        int * counts;
-        int nCounts;
-    };
-
-    const int serviceID = 2;
+    const int serviceID = COUNT_LEFT_SERVICE_ID;
 
     CountLeftService();
 

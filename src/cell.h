@@ -52,6 +52,19 @@ struct Cell {
 
 namespace CellHelpers {
 
+    static int getTotalNumberOfCells(Cell &cell) {
+        return 2 * cell.nLeafCells - 1;
+    }
+
+    static int getNLevels(Cell &cell) {
+        return ceil(log2(cell.nLeafCells));
+    }
+
+    static int getNCellsOnLastLevel(Cell &cell) {
+        int depth = getNLevels(cell);
+        return 2 * cell.nLeafCells - pow(2, depth);
+    }
+
     static int getLeftChildId(Cell &cell) {
         return cell.id * 2 - 1;
     }

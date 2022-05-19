@@ -9,14 +9,17 @@
 #include "baseService.h"
 #include "../comm/MPIMessaging.h"
 
+const int BUILD_TREE_SERVICE_ID = 4;
+
+struct BuildTreeServiceInput {
+    Cell * root;
+    Messaging * messaging;
+};
+
 class BuildTreeService : public BaseService {
 public:
-    struct ServiceInput {
-        Cell * root;
-        Messaging * messaging;
-    };
 
-    const int serviceID = 2;
+    const int serviceID = BUILD_TREE_SERVICE_ID;
 
     BuildTreeService();
 

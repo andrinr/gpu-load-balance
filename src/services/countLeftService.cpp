@@ -10,8 +10,8 @@ CountLeftService::CountLeftService() {};
 
 void CountLeftService::run(void *rawInputData, void *rawOutputData) {
 
-    ServiceInput inputData = *(struct ServiceInput*)rawInputData;
-    ServiceOutput outputData;
+    CountLeftServiceInput inputData = *(struct CountLeftServiceInput*)rawInputData;
+    CountLeftServiceOutput outputData;
 
     Orb orb = *manager->orb;
 
@@ -42,7 +42,7 @@ void CountLeftService::run(void *rawInputData, void *rawOutputData) {
 
 
 int CountLeftService::getNInputBytes(void *inputPtr) const {
-    ServiceInput input = *(struct ServiceInput*)inputPtr;
+    CountLeftServiceInput input = *(struct CountLeftServiceInput*)inputPtr;
     // we add plus one for the nSums variable itself
     int nBytes = ( input.nCells ) * sizeof(Cell);
     nBytes += sizeof(int);
@@ -50,7 +50,7 @@ int CountLeftService::getNInputBytes(void *inputPtr) const {
 }
 
 int CountLeftService::getNOutputBytes(void *outputPtr) const {
-    ServiceOutput output = *(struct ServiceOutput*)outputPtr;
+    CountLeftServiceOutput output = *(struct CountLeftServiceOutput*)outputPtr;
     // we add plus one for the nSums variable itself
     int nBytes = ( 1 + output.nCounts ) * sizeof(int);
     return nBytes;
