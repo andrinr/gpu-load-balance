@@ -11,16 +11,6 @@
 
 const int COUNT_SERVICE_ID = 1;
 
-struct CountServiceInput {
-    Cell * cells;
-    int nCells;
-};
-
-struct CountServiceOutput {
-    int * sums;
-    int nSums;
-};
-
 class CountService : public BaseService {
 public:
 
@@ -28,9 +18,15 @@ public:
 
     CountService();
 
-    void run(void * rawInputData, void * rawOutputData) override;
-    int getNInputBytes(void * inputPtr) const override;
-    int getNOutputBytes(void * outputPtr) const override;
+    void run(const void * inputBuffer,
+             const int nInputElements,
+             void * outputBuffer,
+             int nOutputElements) override;
+
+    virtual std::tuple<int, int> getNBytes(int bufferLength) const override = 0;
+
+    int getNInputBytes(int inputBufferLength) const override;
+    int getNOutputBytes(int outputBufferLength) const override;
 };
 
 

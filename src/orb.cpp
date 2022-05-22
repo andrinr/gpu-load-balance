@@ -2,10 +2,10 @@
 #include <stack>
 #include "orb.h"
 
-Orb::Orb(blitz::Array<float, 2> &p,
-         blitz::Array<int, 2> &cToP,
-         int n)
-    : particles(p), cellToParticle(cToP), nLeafCells(n) {
+Orb::Orb(std::unique_ptr<blitz::Array<float, 2>> p,
+         std::unique_ptr<blitz::Array<int, 2>> cToP,
+         int n) :
+         particles(p), cellToParticles(cToP), nLeafCells(n) {
 
     int N = particles.rows();
 

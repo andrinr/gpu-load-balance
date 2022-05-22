@@ -6,13 +6,13 @@
 
 CountService::CountService() {};
 
-void CountService::run(void * rawInputData, void * rawOutputData) {
-    CountServiceInput inputData = *(struct CountServiceInput*)rawInputData;
-    CountServiceOutput outputData;
+void CountService::run(void *inputBuffer, int inputBufferLength, void *outputBuffer, int outputBufferLength) {
+    Cell *  cells = (Cell*)inputBuffer;
 
     Orb orb = *manager->orb;
 
-    for (int i = 0; i < inputData.nCells; ++i) {
+    blitz::Array<int, 1> counts(inputBufferLength);
+    for (int i = 0; i < inputBufferLength; ++i) {
 
         Cell cell = inputData.cells[i];
         CellHelpers::log(cell);
@@ -22,22 +22,17 @@ void CountService::run(void * rawInputData, void * rawOutputData) {
         outputData.sums[i] = begin - end;
     }
 
-    outputData.nSums = inputData.nCells;
     rawOutputData = &outputData;
 }
 
-
-int CountService::getNInputBytes(void *inputPtr) const {
-    CountServiceInput input = *(struct CountServiceInput*)inputPtr;
-    // we add plus one for the nSums variable itself
-    int nBytes = ( input.nCells ) * sizeof(Cell);
-    nBytes += sizeof(int);
-    return nBytes;
+std::tuple<int, int> CountService::getNBytes(int bufferLength) const {
+    return std::make_tuple(bufferLength * sizeof(Cell), bufferLength * sizeof (int))
 }
 
-int CountService::getNOutputBytes(void *outputPtr) const {
-    CountServiceOutput output = *(struct CountServiceOutput*)outputPtr;
-    // we add plus one for the nSums variable itself
-    int nBytes = ( 1 + output.nSums ) * sizeof(int);
-    return nBytes;
+int CountService::getNOutputBytes(int outputBufferLength) const {
+    return outputBufferLength * sizeof(int);
+}
+
+int CountService::getNInputBytes(int inputBufferLength) const {
+    return inputBufferLength * sizeof(Cell)
 }

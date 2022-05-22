@@ -4,17 +4,17 @@
 #include "cell.h"
 #include <tuple>
 #include <vector>
+#include <memory>
 #include <blitz/array.h>   
 
 class Orb {
 public:
-    blitz::Array<float, 2> particles;
-    blitz::Array<int, 2> cellToParticle;
+    std::unique_ptr<blitz::Array<float, 2>> particles;
+    std::unique_ptr<blitz::Array<int, 2>> cellToParticle;
     int nLeafCells;
 
-    Orb(
-            blitz::Array<float, 2> &p,
-            blitz::Array<int, 2> &cToP,
+    Orb(    std::unique_ptr<blitz::Array<float, 2>> p,
+            std::unique_ptr<blitz::Array<int, 2>> cToP,
             int nLeafCells);
 
     void swap(int a, int b);

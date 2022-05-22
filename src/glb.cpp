@@ -4,6 +4,7 @@
 #include <blitz/array.h>
 #include <chrono>
 #include <cstdlib>
+#include <memory>
 
 #include "constants.h"
 #include "cell.h"
@@ -34,12 +35,12 @@ int main(int argc, char** argv) {
     int nLeafCells = arg2;
 
     // Init comm
-    MPIMessaging mpiMessaging;
+    auto mpiMessaging = std::make_shared<MPIMessaging>;
 
-    std::cout << "Process " << mpiMessaging.rank << " processing " << count / 1000 << "K particles." << std::endl;
-    std::cout << "Process " << mpiMessaging.rank << " starting task..." << std::endl;
+    std::cout << "Process " << mpiMessaging->rank << " processing " << count / 1000 << "K particles." << std::endl;
+    std::cout << "Process " << mpiMessaging->rank << " starting task..." << std::endl;
 
-    int N = (count+mpiMessaging.np-1) / mpiMessaging.np ;
+    int N = (count+mpiMessaging.np-1) / mpiMessaging->np ;
     if (N * mpiMessaging.rank >= count) N = 0;
     else if (N * (mpiMessaging.rank+1) >= count) N = count - mpiMessaging.rank*N;
 
@@ -56,17 +57,21 @@ int main(int argc, char** argv) {
     blitz::Array<int, 2> cellToParticle(nCells);
     cellToParticle(0,0) = 0;
     cellToParticle(0,1) = N-1;
-    Orb orb(particles, cellToParticle, nLeafCells);
+    auto orb std::make_shared<Orb>(particles, cellToParticle, nLeafCells);
 
     // Init all services
-    CountService countService;
-    CountLeftService countLeftService;
-    LocalReshuffleService localReshuffleService;
+    auto countService = std::make_unique<CountService>;
+    auto countLeftService = std::make_unique<CountLeftService>;
+    auto localReshuffleService = std::make_unique<LocalReshuffleService>;
+    auto buildTreeService = std::make_unique<BuildTreeService>;
 
     ServiceManager manager(&orb, &mpiMessaging);
-    manager.addService(&countService);
-    manager.addService(&countLeftService);
-    manager.addService(&localReshuffleService);
+    manager.addService(countService);
+    manager.addService(countService);
+    manager.addService(localReshuffleService);
+    manager.addService(buildTreeService);
+
+    std::cout << "Process " << mpiMessaging.rank << " start building tree" << std::endl;
 
     auto start = high_resolution_clock::now();
     if (mpiMessaging.rank == 0) {
@@ -85,16 +90,16 @@ int main(int argc, char** argv) {
         CellHelpers::setCutMargin(root);
         cells(0) = root;
 
+        std::cout << "building input" << std::endl;
         BuildTreeServiceInput btsi {
             cells.data(),
             &mpiMessaging
         };
-        void * btso;
         mpiMessaging.dispatchService(
                 &manager,
                 BUILD_TREE_SERVICE_ID,
                 &btsi,
-                btso);
+                nullptr);
     }
     else {
         bool status = true;

@@ -5,28 +5,31 @@
 #ifndef GPU_LOAD_BALANCE_SERVICEMANAGER_H
 #define GPU_LOAD_BALANCE_SERVICEMANAGER_H
 
-#include "baseService.h"
 #include <map>
+#include <memory>
+
+#include "baseService.h"
 #include "../comm/messaging.h"
 
 class Messaging;
+class Orb;
 
 class ServiceManager {
 public:
-    std::map<int, BaseService * > m;
+    std::map<int, std::unique_ptr<BaseService>> m;
 
-    ServiceManager(Orb * o, Messaging * m) {
+    ServiceManager(std::shared_ptr<Orb> o, std::shared_ptr<Messaging> m) {
         orb = o;
         messaging = m;
     }
 
-    void addService(BaseService * service) {
+    void addService(std::unique_ptr<BaseService> service) {
         m[service->serviceID] = service;
         service->setManager(this);
     }
 
-    Orb * orb;
-    Messaging * messaging;
+    std::shared_ptr<Orb> orb;
+    std::shared_ptr<Messaging> messaging;
 };
 
 

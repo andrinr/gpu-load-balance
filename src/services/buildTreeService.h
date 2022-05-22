@@ -11,11 +11,6 @@
 
 const int BUILD_TREE_SERVICE_ID = 4;
 
-struct BuildTreeServiceInput {
-    Cell * root;
-    Messaging * messaging;
-};
-
 class BuildTreeService : public BaseService {
 public:
 
@@ -23,9 +18,13 @@ public:
 
     BuildTreeService();
 
-    void run(void * rawInputData, void * rawOutputData) override;
-    int getNInputBytes(void * inputPtr) const override;
-    int getNOutputBytes(void * outputPtr) const override;
+    void run(const void * inputBuffer,
+             const int nInputElements,
+             void * outputBuffer,
+             int nOutputElements) override;
+
+    int getNInputBytes(int inputBufferLength) const override;
+    int getNOutputBytes(int outputBufferLength) const override;
 };
 
 

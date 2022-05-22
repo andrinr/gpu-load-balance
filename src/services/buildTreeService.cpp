@@ -8,7 +8,8 @@
 #include "countService.h"
 #include "localReshuffleService.h"
 
-void BuildTreeService::run(void *rawInputData, void *rawOutputData) {
+
+void BuildTreeService::run(void *inputBuffer, int inputBufferLength, void *outputBuffer, int outputBufferLength) {
 
     std::cout << "building tree" << std::endl;
     BuildTreeServiceInput inputData = *(struct BuildTreeServiceInput*)rawInputData;
@@ -113,9 +114,14 @@ void BuildTreeService::run(void *rawInputData, void *rawOutputData) {
     }
 }
 
+
+std::tuple<int, int> BuildTreeService::getNBytes(int bufferLength) const {
+    return std::make_tuple(sizeof Cell, 0);
+}
+
 int BuildTreeService::getNInputBytes(void *inputPtr) const {
     // simply two pointers
-    return sizeof(int*) + sizeof(int*);
+    return sizeof(Cell);
 }
 
 int BuildTreeService::getNOutputBytes(void *outputPtr) const {

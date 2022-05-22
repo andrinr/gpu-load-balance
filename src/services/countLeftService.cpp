@@ -8,7 +8,7 @@
 
 CountLeftService::CountLeftService() {};
 
-void CountLeftService::run(void *rawInputData, void *rawOutputData) {
+void CountLeftService::run(void *inputBuffer, int inputBufferLength, void *outputBuffer, int outputBufferLength) {
 
     CountLeftServiceInput inputData = *(struct CountLeftServiceInput*)rawInputData;
     CountLeftServiceOutput outputData;
@@ -40,18 +40,14 @@ void CountLeftService::run(void *rawInputData, void *rawOutputData) {
     rawOutputData = &outputData;
 }
 
-
-int CountLeftService::getNInputBytes(void *inputPtr) const {
-    CountLeftServiceInput input = *(struct CountLeftServiceInput*)inputPtr;
-    // we add plus one for the nSums variable itself
-    int nBytes = ( input.nCells ) * sizeof(Cell);
-    nBytes += sizeof(int);
-    return nBytes;
+std::tuple<int, int> CountService::getNBytes(int bufferLength) const {
+    return std::make_tuple(bufferLength * sizeof(Cell), bufferLength * sizeof (int))
 }
 
-int CountLeftService::getNOutputBytes(void *outputPtr) const {
-    CountLeftServiceOutput output = *(struct CountLeftServiceOutput*)outputPtr;
-    // we add plus one for the nSums variable itself
-    int nBytes = ( 1 + output.nCounts ) * sizeof(int);
-    return nBytes;
+int CountLeftService::getNOutputBytes(int outputBufferLength) const {
+    return outputBufferLength * sizeof(int);
+}
+
+int CountLeftService::getNInputBytes(int inputBufferLength) const {
+    return inputBufferLength * sizeof(Cell)
 }

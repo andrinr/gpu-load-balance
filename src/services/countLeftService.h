@@ -8,16 +8,6 @@
 
 const int COUNT_LEFT_SERVICE_ID = 2;
 
-struct CountLeftServiceInput {
-    Cell * cells;
-    int nCells;
-};
-
-struct CountLeftServiceOutput {
-    int * counts;
-    int nCounts;
-};
-
 class CountLeftService : public BaseService {
 public:
 
@@ -25,9 +15,13 @@ public:
 
     CountLeftService();
 
-    void run(void * rawInputData, void * rawOutputData) override;
-    int getNInputBytes(void * inputPtr) const override;
-    int getNOutputBytes(void * outputPtr) const override;
+    void run(const void * inputBuffer,
+             const int nInputElements,
+             void * outputBuffer,
+             int nOutputElements) override;
+
+    int getNInputBytes(int inputBufferLength) const override;
+    int getNOutputBytes(int outputBufferLength) const override;
 };
 
 

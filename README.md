@@ -6,8 +6,6 @@ Supervised by Douglas Potter and Micheal Böhlen
 
 ``documentation`` for the thesis
 
-
-
 ## Get started
 
 1. OpenMPI ``sudo apt-get install openmpi-bin libopenmpi-dev``
@@ -32,3 +30,7 @@ Or run gdb on only one process:
 
 ### Run
 ``mpirun -np <x> glb <# thousand of particles> <# domains>``
+
+## Automized performance analysis
+
+Insert instructions here

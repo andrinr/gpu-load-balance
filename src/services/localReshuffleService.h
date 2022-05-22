@@ -9,16 +9,6 @@
 
 const int LOCAL_RESHUFFLE_SERVICE_ID = 3;
 
-struct LocalReshuffleServiceInput {
-    Cell * cells;
-    int nCells;
-};
-
-struct LocalServiceServiceOutput {
-    int * cutIndices;
-    int nCutIndices;
-};
-
 class LocalReshuffleService : public BaseService {
 public:
 
@@ -26,11 +16,13 @@ public:
 
     LocalReshuffleService();
 
-    void run(void * rawInputData, void * rawOutputData) override;
-    int getNInputBytes(void * inputPtr) const override;
-    int getNOutputBytes(void * outputPtr) const override;
+    void run(const void * inputBuffer,
+             const int nInputElements,
+             void * outputBuffer,
+             int nOutputElements) override;
+
+    int getNInputBytes(int inputBufferLength) const override;
+    int getNOutputBytes(int outputBufferLength) const override;
 };
-
-
 
 #endif //GPU_LOAD_BALANCE_LOCALRESHUFFLESERVICE_H

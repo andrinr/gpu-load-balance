@@ -3,7 +3,10 @@
 
 #include "../comm/messaging.h"
 #include "../orb.h"
-#include "vector"
+
+#include <vector>
+#include <tuple>
+
 class ServiceManager;
 class Messaging;
 
@@ -12,9 +15,16 @@ public:
     const int serviceID = -1;
     ServiceManager * manager;
 
-    virtual void run(void * rawInputData, void * rawOutputData) = 0;
-    virtual int getNInputBytes(void * inputPtr) const = 0;
-    virtual int getNOutputBytes(void * outputPtr) const = 0;
+    virtual void run(const void * inputBuffer,
+                     const int nInputElements,
+                     void * outputBuffer,
+                     int nOutputElements) = 0;
+
+    // In and output data is limited to arrays only
+    virtual int getNInputBytes(int inputBufferLength) const = 0;
+    virtual int getNOutputBytes(int inputBufferLength) const = 0;
+
+    virtual std::tuple<int, int> getNBytes(int bufferLength) const = 0;
 
     void setManager(ServiceManager * m) {
         manager = m;
