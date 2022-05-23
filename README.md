@@ -4,7 +4,7 @@ Bachelor Thesis of Andrin Rehmann
 
 Supervised by Douglas Potter and Micheal Böhlen
 
-``documentation`` for the thesis
+Head to (https://github.com/andrinr/gpu-load-balance/tree/main/documentation)[/documentation] for the writeup.
 
 ## Get started
 
