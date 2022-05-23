@@ -28,7 +28,7 @@ public:
     }
 
     void addService(std::unique_ptr<BaseService> service) {
-        m[service->serviceID] = service;
+        m[service->serviceID] = std::move(service);
     }
 
     std::shared_ptr<Orb> orb;

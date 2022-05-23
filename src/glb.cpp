@@ -66,22 +66,22 @@ int main(int argc, char** argv) {
     std::unique_ptr<BaseService> buildTreeService = std::make_unique<BuildTreeService>();
 
     std::shared_ptr<ServiceManager> serviceManager = std::make_shared<ServiceManager>(&orb, &mpiMessaging);
-    serviceManager->addService(countService);
+    serviceManager->addService(std::move(countService));
     countService->setManager(serviceManager);
 
-    serviceManager->addService(countService);
+    serviceManager->addService(std::move(countService));
     countService->setManager(serviceManager);
 
-    serviceManager->addService(localReshuffleService);
+    serviceManager->addService(std::move(localReshuffleService));
     localReshuffleService->setManager(serviceManager);
 
-    serviceManager->addService(buildTreeService);
+    serviceManager->addService(std::move(buildTreeService));
     buildTreeService->setManager(serviceManager);
 
-    std::cout << "Process " << mpiMessaging.rank << " start building tree" << std::endl;
+    std::cout << "Process " << mpiMessaging->rank << " start building tree" << std::endl;
 
     auto start = high_resolution_clock::now();
-    if (mpiMessaging.rank == 0) {
+    if (mpiMessaging->rank == 0) {
 
         // root cell is at index 1
         blitz::Array<Cell, 1> cells(nCells);
