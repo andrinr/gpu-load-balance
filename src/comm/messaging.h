@@ -13,19 +13,18 @@ public:
             ServiceManager * manager,
             int serviceID,
             void * rawInputData,
-            void * rawOutputData) = 0;
+            void * rawOutputData) const = 0;
 
-    virtual void dispatchService(
-            ServiceManager * manager,
+    virtual void dispatchService(ServiceManager * manager,
             int serviceID,
-            void * rawInputData,
-            void * rawOutputData,
-            int inputSource,
-            std::tuple<int, int> target) = 0;
+            void *  inputBuffer,
+            int inputBufferLength,
+            void * outputBuffer,
+            int outputBufferLength) const = 0;
 
-    virtual void workService(ServiceManager * manager, void * rawOutputData) = 0;
-    virtual void workService(ServiceManager * manager) = 0;
-    virtual void finalize() = 0;
+    virtual void workService(ServiceManager * manager, void * rawOutputData) const = 0;
+    virtual void workService(ServiceManager * manager) const = 0;
+    virtual void finalize() const = 0;
 };
 
 #endif //MESSAGING_H

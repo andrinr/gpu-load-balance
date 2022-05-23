@@ -98,15 +98,12 @@ int main(int argc, char** argv) {
         cells(0) = root;
 
         std::cout << "building input" << std::endl;
-        BuildTreeServiceInput btsi {
-            cells.data(),
-            &mpiMessaging
-        };
-        mpiMessaging.dispatchService(
-                &manager,
+
+        mpiMessaging->dispatchService(
+                serviceManager,
                 BUILD_TREE_SERVICE_ID,
-                &btsi,
-                nullptr);
+
+                )
     }
     else {
         bool status = true;
