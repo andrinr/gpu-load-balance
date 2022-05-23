@@ -13,7 +13,6 @@ set(CMAKE_C_FLAGS -fopenmp)
 add_executable(
         glb
         src/glb.cpp
-        src/IO.cpp
         src/orb.cpp
         src/comm/MPIMessaging.cpp
         src/services/countService.cpp

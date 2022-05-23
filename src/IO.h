@@ -5,16 +5,15 @@
 #include <fstream>
 #include <filesystem>
 #include <string>
+#include <memory>
+
 #include "constants.h"
 
 class IO {
 public:
-    static blitz::Array<float, 2> generateData(int N, int seed) {
-
+    blitz::Array<float, 2> generateData(int N, int seed) {
         // Init positions
-        blitz::Array<float, 2> p(N, DIMENSIONS + 1);
-        p = 0;
-
+        blitz::Array<float, 2> p = blitz::Array<float, 2>(N, DIMENSIONS + 1);
         srand(seed);
         for (int i = 0; i < p.rows(); i++) {
             for (int d = 0; d < DIMENSIONS; d++) {
@@ -26,11 +25,11 @@ public:
         return p;
     }
 
-    static blitz::Array<float, 2> loadData(int N) {
-        blitz::Array<float, 2> p(N, DIMENSIONS + 1);
+    /*static blitz::Array<float, 2> loadData(int N) {
+        blitz::Array<float, 2> p->(N, DIMENSIONS + 1);
 
         return p;
-    }
+    }*/
 
     static void logMeasurements(std::string output) {
         std::filesystem::path cwd = std::filesystem::current_path() / (output);

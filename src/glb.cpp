@@ -35,14 +35,14 @@ int main(int argc, char** argv) {
     int nLeafCells = arg2;
 
     // Init comm
-    auto mpiMessaging = std::make_shared<MPIMessaging>;
+    std::shared_ptr<MPIMessaging> mpiMessaging = std::make_shared<MPIMessaging>();
 
     std::cout << "Process " << mpiMessaging->rank << " processing " << count / 1000 << "K particles." << std::endl;
     std::cout << "Process " << mpiMessaging->rank << " starting task..." << std::endl;
 
-    int N = (count+mpiMessaging.np-1) / mpiMessaging->np ;
-    if (N * mpiMessaging.rank >= count) N = 0;
-    else if (N * (mpiMessaging.rank+1) >= count) N = count - mpiMessaging.rank*N;
+    int N = (count+mpiMessaging->np-1) / mpiMessaging->np ;
+    if (N * mpiMessaging->rank >= count) N = 0;
+    else if (N * (mpiMessaging->rank+1) >= count) N = count - mpiMessaging->rank*N;
 
     // Set row major -> can enable AVX
     blitz::GeneralArrayStorage<2> storage;
@@ -50,26 +50,33 @@ int main(int argc, char** argv) {
     storage.base() = 0, 0;
     storage.ascendingFlag() = true, true;
 
-    blitz::Array<float, 2> particles = IO::generateData(N, mpiMessaging.rank);
+    auto particles = IO::generateData(N, mpiMessaging->rank);
 
     // We add +1 due to heap storage order
     int nCells = nLeafCells * 2 + 1;
-    blitz::Array<int, 2> cellToParticle(nCells);
+    auto cellToParticle = blitz::Array<int, 2>(nCells);
     cellToParticle(0,0) = 0;
     cellToParticle(0,1) = N-1;
-    auto orb std::make_shared<Orb>(particles, cellToParticle, nLeafCells);
+    auto orb = std::make_shared<Orb>(particles, cellToParticle, nLeafCells);
 
     // Init all services
-    auto countService = std::make_unique<CountService>;
-    auto countLeftService = std::make_unique<CountLeftService>;
-    auto localReshuffleService = std::make_unique<LocalReshuffleService>;
-    auto buildTreeService = std::make_unique<BuildTreeService>;
+    std::unique_ptr<BaseService> countService = std::make_unique<CountService>();
+    std::unique_ptr<BaseService> countLeftService = std::make_unique<CountLeftService>();
+    std::unique_ptr<BaseService> localReshuffleService = std::make_unique<LocalReshuffleService>();
+    std::unique_ptr<BaseService> buildTreeService = std::make_unique<BuildTreeService>();
 
-    ServiceManager manager(&orb, &mpiMessaging);
-    manager.addService(countService);
-    manager.addService(countService);
-    manager.addService(localReshuffleService);
-    manager.addService(buildTreeService);
+    std::shared_ptr<ServiceManager> serviceManager = std::make_shared<ServiceManager>(&orb, &mpiMessaging);
+    serviceManager->addService(countService);
+    countService->setManager(serviceManager);
+
+    serviceManager->addService(countService);
+    countService->setManager(serviceManager);
+
+    serviceManager->addService(localReshuffleService);
+    localReshuffleService->setManager(serviceManager);
+
+    serviceManager->addService(buildTreeService);
+    buildTreeService->setManager(serviceManager);
 
     std::cout << "Process " << mpiMessaging.rank << " start building tree" << std::endl;
 

@@ -13,7 +13,7 @@ class Messaging;
 class BaseService {
 public:
     const int serviceID = -1;
-    ServiceManager * manager;
+    std::shared_ptr<ServiceManager> manager;
 
     virtual void run(const void * inputBuffer,
                      const int nInputElements,
@@ -26,7 +26,7 @@ public:
 
     virtual std::tuple<int, int> getNBytes(int bufferLength) const = 0;
 
-    void setManager(ServiceManager * m) {
+    void setManager(std::shared_ptr<ServiceManager> m) {
         manager = m;
     }
 private:

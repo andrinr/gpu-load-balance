@@ -18,6 +18,10 @@ class ServiceManager {
 public:
     std::map<int, std::unique_ptr<BaseService>> m;
 
+    ServiceManager() {
+
+    }
+
     ServiceManager(std::shared_ptr<Orb> o, std::shared_ptr<Messaging> m) {
         orb = o;
         messaging = m;
@@ -25,7 +29,6 @@ public:
 
     void addService(std::unique_ptr<BaseService> service) {
         m[service->serviceID] = service;
-        service->setManager(this);
     }
 
     std::shared_ptr<Orb> orb;
