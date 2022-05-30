@@ -19,7 +19,7 @@ add_executable(
         src/services/countLeftService.cpp
         src/services/localReshuffleService.cpp
         src/services/buildTreeService.cpp
-)
+        analysis/iter-performance/main.cpp)
 set_target_properties(glb PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 target_link_libraries(glb ${MPI_LIBRARIES})
 
