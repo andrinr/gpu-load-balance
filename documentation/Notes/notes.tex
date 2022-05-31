@@ -28,6 +28,8 @@
 % create file content
 \usepackage{filecontents}
 
+\usepackage{listings}
+
 % Plots
 \usepackage{pgfplots}
 \pgfplotsset{compat = newest}
@@ -35,6 +37,13 @@
 % Dependencies
 \usepackage{mymacros}
 \usepackage{parallelP}
+
+\lstset { %
+    language=C++,
+    backgroundcolor=\color{black!5}, % set backgroundcolor
+    basicstyle=\footnotesize,% basic font setting
+}
+
 
 \begin{filecontents}{numExample.csv} 
 	0.4, 0.3
@@ -550,7 +559,7 @@ Another strategy we can use, as soon as we have created two domains, rank 0 can 
 
 The nature of the ORB algorithm and its application with very large data-sizes, requires that we consider hardware for concrete implementation details. Since the decision tree for the implementation details of the algorithm is vast and each implementation involves a significant amount of development time, we will propose a theoretical model to guide us in the decision process. Based on this decision, we rule out certain alternatives before the implementation. Finally we will try to verify the models using empirical data.
 
-The algorithm is generally very heavy in memory access and the number of floating point operations is small. We thus need to not only consider benefits from increased parallelism in GPU hardware, but also possible speed-ups reached by generally higher bandwidths for GPU memory than CPU memory. On the other hand we need to mitigate the very low bandwidths between the GPU and CPU, which cannot be avoided altogether, as the data needs to be sent from the CPU to GPU before we can process it on the graphics processor.
+When creating such a model, the performance is either bound by the number of floating point operations per minute, or in some cases its bound by the memory access speed. In our case, we assume that we are generally bound by memory access times, and not tflops. If we investigate the operations which are needed for the binary cut algorithm, we notice that the actual operations completed inside the loop, are only very few. When comparing the CPU implementation with GPU one, we need to not only consider benefits from increased parallelism in GPU hardware, which will lead to a higher tflops, but also possible speed-ups reached by higher bandwidths in GPU memory than CPU memory. On the other hand we need to mitigate the very low bandwidths between the GPU and CPU, which cannot be avoided altogether, as the data needs to be sent from the CPU to GPU before we can process it on the graphics processor.
 
 
 \subsection{Datapoints of supercomputers}
@@ -572,6 +581,7 @@ We will compare the performance with the datapoints of Piz Daint, Summit and Alp
 			Base $GHZ_C$ & 2.9 GHZ & 4 GHZ & 2.25 GHZ\\
 			Max $GHZ_C$ & 3.8 GHZ & 4 GHZ & 3.4 GHZ\\
 			\# Cores & 12 & 22 & 64 \\
+			Max AVX & AVX2 & ? & AVX2 \\ 
 			\# GPUs & 1 & 6 & 0 \\
 			GPU Model & NVIDIA P100 \cite{TESLAP100} & NVIDIA V100s \cite{NVIDIAV100} & - \\
 			GPU Mem. Cap. & 16 GB & 16 GB $\times$ 6 & -\\
@@ -587,10 +597,46 @@ We will compare the performance with the datapoints of Piz Daint, Summit and Alp
 \end{figure}
 
 
-\subsection{Roofline performance model}
+\subsection{Model parameters}
 
 In order to estimate the runtime of the algorithms we denote the number of particles as $N$. Furthermore we assume a precision $p$ of 32. We only look at $x$ for the runtime analysis, where it follows that the total storage of all particles is $32 \times 3 \times N bits = 4 \times 3 \times N Bytes = 12 \times N Bytes$. Furthermore we assume $d = 1024$ and $N=10^9$.
 
+
+
+\subsection{Roofline performance model}
+
+
+In order to prove or disprove our assumption, about the performance of the ORB algorithm being memory bound, we introduce a theoretical model and also make a few measurements to support the claim. 
+To make a proper model for the CPU version, we also need to consider AVX. With AVX enabled, the compare and 
+
+We consider a minimal C++ code to investigate this issue. We use the -S flag along with the g++ compiler to generate and read the generated assembly code. In this case startPtr is a pointer which indicated the first adress where we want to start out iteration process. Consequently endPtr is the memory of the last entry we want to access. For testing purposes all entries in the array are set to random values between 0 and 1, and cut is set to 0.5. 
+
+\begin{lstlisting}
+for(auto p= startPtr; p<endPtr; ++p) nLeft += *p < cut;
+\end{lstlisting}
+
+\TODO{Add assembler code with actual avx in it?}
+
+\begin{lstlisting}
+.L7:
+	movq	-32(%rbp), %rax
+	cmpq	-56(%rbp), %rax
+	jnb	.L6
+	movq	-32(%rbp), %rax
+	movss	(%rax), %xmm1
+	movss	-36(%rbp), %xmm0
+	comiss	%xmm1, %xmm0
+	seta	%al
+	movzbl	%al, %eax
+	addl	%eax, -20(%rbp)
+	addq	$4, -32(%rbp)
+	jmp	.L7
+.L6:
+\end{lstlisting}
+
+We can see that the actual operations are mainly a compare and an add operation. Both of which can be done using AVX. 
+Depending on the AVX standard which is enabled, this means that the CPU can perform between 128 and 512 bits. For single precision floating point numbers, this means it can process between four and sixteen floating point numbers in a single cycle. In the case of AVX2 we can process eight floats per cycle. 
+	
 \def\N{1}
 \def\Bytes{12}
 \def\s{12}
@@ -600,7 +646,7 @@ In order to estimate the runtime of the algorithms we denote the number of parti
 
 \begin{center}
 	\begin{equation}
-		log(d) \times \left ( p \times \frac{ s }{B_{C}} \right ) = t
+		GHZ * 8 * np / 1000
 	\end{equation}
 \end{center}
 
@@ -610,44 +656,44 @@ In order to estimate the runtime of the algorithms we denote the number of parti
 	\begin{center}
 		\begin{tikzpicture}
 			\begin{axis}[
-				height=10cm,width=12cm, 
+				height=10cm,width=10cm, 
 				xlabel={\# Processors},
-				ylabel={Billion particles per second},
-				xmin = -1, xmax = 71, ymin=-1, ymax=300,
+				ylabel={tflops},
+				xmin = -1, xmax = 71, ymin= -0.5, ymax=3,
 				legend style={at={(0.03,0.8)},anchor=west}]
 				
 				\addplot+[domain = 1:70, mark=none] {
-					4.5 * \x
+					4.5 * 8 * \x / 1000
 				};	
 				\addlegendentryexpanded{4.5 GHZ};
 
 				\addplot+[domain = 1:70, mark=none] {
-					3.5 * \x
+					3.5 * 8 * \x / 1000
 				};	
 				\addlegendentryexpanded{3.5 GHZ};
 				
 		
 				\addplot+[domain = 1:70, mark=none] {
-					2.5 * \x
+					2.5 * 8 * \x / 1000
 				};	
 				\addlegendentryexpanded{2.5 GHZ};
 				
-				\addplot+[mark=none] coordinates {(0,6) (70,6)};
+				\addplot+[mark=none] coordinates {(0,0.002) (70,0.002)};
 				\addlegendentry{$B_{C}$ Intel}
 				
-				\addplot+[mark=none] coordinates {(0,14) (70,14)};
+				\addplot+[mark=none] coordinates {(0,0.005) (70,0.005)};
 				\addlegendentry{$B_{C}$ IBM}
 				
-				\addplot+[mark=none] coordinates {(0,17) (70,17)};
+				\addplot+[mark=none] coordinates {(0,0.0062) (70,0.0062)};
 				\addlegendentry{$B_{C}$ AMD}
+
+				%\node[label={Intel E5-2690 v3},circle,fill,inner sep=2pt] at (axis cs:12,45.6) {};
 				
-				\node[label={Intel E5-2690 v3},circle,fill,inner sep=2pt] at (axis cs:12,45.6) {};
+				%\node[label={AMD EPYC},circle,fill,inner sep=2pt] at (axis cs:64,217.6) {};
 				
-				\node[label={AMD EPYC},circle,fill,inner sep=2pt] at (axis cs:64,217.6) {};
+				%\node[label={IBM Power 9},circle,fill,inner sep=2pt] at (axis cs:22,88) {};
 				
-				\node[label={IBM Power 9},circle,fill,inner sep=2pt] at (axis cs:22,88) {};
-				
-				
+	
 
 			
 			\end{axis}
@@ -657,6 +703,7 @@ In order to estimate the runtime of the algorithms we denote the number of parti
 	\label{fig:modelcpu}
 \end{figure}
 
+Finish this argumentation and explain why we only consider memory access times as they far outweight tflops. 
 
 \subsection{General Memory Model}
 
@@ -830,11 +877,6 @@ A computing system consists of several nodes, where each node has one or more CP
 We now sketch out various implementation ideas, derive for each a formula to estimate its runtime and finally insert datapoints from our target computing systems.
 We assume that the data is stored in the CPU memory initially and we define the size of the data as $s$. 
 
-\subsection{Estimating tflops}
-
-\TODO{Introduce AVX here}
-
-\
 
 \subsubsection{Naive implementation}
 

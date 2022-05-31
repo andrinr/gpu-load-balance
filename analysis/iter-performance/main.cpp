@@ -8,6 +8,8 @@
 
 void versionOne(blitz::Array<float, 2> particles, int n, int k) {
 
+    assert(&particles(begin,axis)+1 == &particles(begin+1,axis));
+
     int nLeft = 0;
     float cut = 0.5;
 
@@ -21,17 +23,16 @@ void versionOne(blitz::Array<float, 2> particles, int n, int k) {
 
     auto end = std::chrono::high_resolution_clock::now();
 
-    std::cout << "cost in microseconds: " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << "\n";
+    std::cout << "cost in microseconds with c style pointer iteration " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << "\n";
 
 }
 
 void versionTwo(blitz::Array<float, 2> particles, int n, int k) {
 
+    assert(&particles(begin,axis)+1 == &particles(begin+1,axis));
+
     int nLeft = 0;
     float cut = 0.5;
-
-    float * startPtr = particles.data();
-    float * endPtr = startPtr + n * k;
 
     auto start = std::chrono::high_resolution_clock::now();
 
@@ -40,7 +41,7 @@ void versionTwo(blitz::Array<float, 2> particles, int n, int k) {
 
     auto end = std::chrono::high_resolution_clock::now();
 
-    std::cout << "cost in microseconds: " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << "\n";
+    std::cout << "cost in microseconds with blitz iterator: " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << "\n";
 
 }
 
