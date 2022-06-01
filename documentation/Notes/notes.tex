@@ -165,18 +165,22 @@ x,y,id
 
 \begin{figure}[H]
     \begin{center}
-        \begin{minipage}[c]{0.4\linewidth}
+        \begin{minipage}[c]{0.2\linewidth}
         \csvreader[
             tabular=ccc,
             table head=\hline \bfseries{x} & \bfseries{y} & \bfseries{id} \\\hline,
             late after last line=\\\hline % horizontal line at the end of the table
             ]{particles.csv}{}{\csvlinetotablerow}
         \end{minipage}
-        \begin{minipage}[c]{0.2\linewidth}
+        \begin{minipage}[c]{0.7\linewidth}
             \begin{tikzpicture}
                 \begin{axis}
-                [
+                 [
                     nodes near coords,
+                    xmin=0,
+                    xmax=1,
+                    ymin=0,
+                    ymax=1
                 ]
                 \addplot+[
                     only marks,
@@ -276,46 +280,98 @@ In this non general case, where $d$ is a power of two, we are able to construct 
 \def\spyb{0.5}
 \begin{figure}[H]
 	\begin{center}
-		\begin{tikzpicture}[scale=0.33]
+		\begin{tikzpicture}
 			\pgfmathsetseed{2};
-			%\foreach \i in {0,...,\N}{
-					%\filldraw [red] (\xs(\i),\ys(\i)) circle (\s pt) node 	[anchor=west]{p};
-		%	};
-			\exdistr{\x}{\y}{\s};
-			\draw (0,0) rectangle (\x, \y);
-			\node[below] at (.5*\x,\y){$cell_1$};
+                \begin{axis}
+                [
+                    nodes near coords,
+                    xmin=-0.,
+                    xmax=1.,
+                    ymin=-0.,
+                    ymax=1.,
+                    title=Recursion depth 0
+                ]
+                \addplot+[
+                    only marks,
+                    point meta=explicit symbolic
+                ] table [
+                    x=x, 
+                    y=y, 
+                    meta=id, 
+                    col sep=comma] 
+                {particles3.csv};
+                \draw [fill=red!20](0.0,0.0) rectangle (1, 1);
+                \node[below] at (0.5, 1){$cell_1$};
+                \end{axis}
+            
 		\end{tikzpicture}
-		\qquad
-		\begin{tikzpicture}[scale=0.33]
+    \end{center}
+\end{figure}
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
 			\pgfmathsetseed{2};
-			\exdistr{\x}{\y}{\s};
-			\draw (0,0) rectangle (\x * \spx, \y);
-			\node[below] at (\spx * 0.5 * \x,\y){$cell_2$};
-			
-			\draw (\x  * \spx, 0) rectangle (\x, \y);
-			\node[below] at (0.63 *\x,\y){$cell_3$};
-			
-			\vspace{2mm}
-			
+                \begin{axis}
+                [
+                    nodes near coords,
+                    xmin=-0.,
+                    xmax=1.,
+                    ymin=-0.,
+                    ymax=1.,
+                    title=Recursion depth 1
+                ]
+                \addplot+[
+                    only marks,
+                    point meta=explicit symbolic
+                ] table [
+                    x=x, 
+                    y=y, 
+                    meta=id, 
+                    col sep=comma] 
+                {particles3.csv};
+                \draw [fill=green!20](0.0,0.0) rectangle (0.45, 1);
+                \draw [fill=blue!20](0.45,0.0) rectangle (1, 1);
+                \node[below] at (0.2, 1){$cell_2$};
+                 \node[below] at (0.7, 1){$cell_3$};
+                \end{axis}
+            
 		\end{tikzpicture}
-		\qquad
-		\begin{tikzpicture}[scale=0.33]
+    \end{center}
+\end{figure}
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
 			\pgfmathsetseed{2};
-			\exdistr{\x}{\y}{\s};
-			\draw (0,0) rectangle (\x * \spx, \y);
-			\node[below] at (\spx * 0.5 * \x,\y){$cell_4$};
-			
-			\draw (0,0) rectangle (\spx * \x, \y * \spyb);
-			\node[below] at (.25*\x,\y * \spyb){$cell_5$};
-			
-			\draw (\x * \spx,0) rectangle (\x, \y);
-			\node[below] at (.75*\x,\y){$cell_3$};
-			
-			\vspace{2mm}
-			
+                \begin{axis}
+                [
+                    nodes near coords,
+                    xmin=-0.,
+                    xmax=1.,
+                    ymin=-0.,
+                    ymax=1.,
+                    title=Recursion depth 1
+                ]
+                \addplot+[
+                    only marks,
+                    point meta=explicit symbolic
+                ] table [
+                    x=x, 
+                    y=y, 
+                    meta=id, 
+                    col sep=comma] 
+                {particles3.csv};
+                \draw [fill=pink!20](0.0,0.0) rectangle (0.45, 0.7);
+                \draw [fill=yellow!20](0.,0.7) rectangle (0.45, 1);
+                \draw [fill=blue!20](0.45,0.0) rectangle (1, 1);
+                \node[below] at (0.2, 1){$cell_4$};
+                \node[above] at (0.2, 0){$cell_5$};
+                \node[below] at (0.7, 1){$cell_3$};
+                \end{axis}
+            
 		\end{tikzpicture}
-	\end{center}
-	\caption{Building a tree of depth 3 using the ORB algorithm }
+    \end{center}
 \end{figure}
 
 \begin{figure}[H]
