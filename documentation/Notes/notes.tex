@@ -27,8 +27,13 @@
 \usepackage{csvsimple}
 % create file content
 \usepackage{filecontents}
-
+% Create c++ fields
 \usepackage{listings}
+% better tables
+\usepackage{tabularx}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
 
 % Plots
 \usepackage{pgfplots}
@@ -44,16 +49,6 @@
     basicstyle=\footnotesize,% basic font setting
 }
 
-
-\begin{filecontents}{numExample.csv} 
-	0.4, 0.3
-	0.2, 0.6
-	0.1, 0.9
-	0.4, 0.5
-	0.3, 0.8
-	0.7, 0.1
-	0.9, 0.2
-\end{filecontents}
 
 % Title
 \title{Orthogonal Recursive Bisection on the GPU for Accelerated Load Balancing in Large N-Body Simulations \\ - \\ Bachelor Thesis}
@@ -154,6 +149,53 @@ When we have built the binary tree successfully, we can leverage it in two ways:
 
 Our main objective in this work is to improve the runtime of astrophysical simulations, or more specifically PKDGrav. At the same time we want to minimize penalties in regards to $N$, the total number of particles, such that we can leverage a high $N$ to increase the precision of the simulation. Furthermore we want to adapt and optimize the algorithms with regards to the target data as introduced in \ref{section:target-data} and target computing systems (\ref{section:target-systems}).
 
+\subsubsection{By example} 
+For the purpose of explaining the algorithm both visualy and by a numveric example, we consider the following minimal dataset:
+
+\begin{filecontents*}{particles3.csv}
+x,y,id
+0.4,0.3,0
+0.2,0.6,1
+0.8,0.9,2
+0.7,0.5,3
+0.3,0.8,4
+0.7,0.1,5
+0.9,0.8,6
+\end{filecontents*}
+
+\begin{figure}[H]
+    \begin{center}
+        \begin{minipage}[c]{0.4\linewidth}
+        \csvreader[
+            tabular=ccc,
+            table head=\hline \bfseries{x} & \bfseries{y} & \bfseries{id} \\\hline,
+            late after last line=\\\hline % horizontal line at the end of the table
+            ]{particles.csv}{}{\csvlinetotablerow}
+        \end{minipage}
+        \begin{minipage}[c]{0.2\linewidth}
+            \begin{tikzpicture}
+                \begin{axis}
+                [
+                    nodes near coords,
+                ]
+                \addplot+[
+                    only marks,
+                    point meta=explicit symbolic
+                ] table [
+                    x=x, 
+                    y=y, 
+                    meta=id, 
+                    col sep=comma] 
+                {particles3.csv};
+                \end{axis}
+
+            \end{tikzpicture}
+        \end{minipage}
+    \end{center}
+\caption{Example distribution with $N$ = 7}
+\end{figure}
+
+
 \subsection{Memory and Workload Balancing}\label{balancing}
 We have now formulated our main objectives for improving ORB, which are to improve the runtime but at the same time keeping $N$ as large as possible. In this section we will explain how the two cannot be maximized at the same time, as there will we averse effects when disregarding interactions. 
 
@@ -221,24 +263,6 @@ The ideal cut plane is defined such that exactly $N_{leftChild}$ particles are l
 The reason to choose the cut axis using the mentioned method, is that it reduces thin and non square shapes and converges to squares. 
 In this non general case, where $d$ is a power of two, we are able to construct a binary tree wit exactly $d$ leaf nodes and a height of $log(d)$.
 
-\subsubsection{By example} \ref{section:orb-example}
-
-Let us consider a numerical example and explore it visually.
-We consider the following $N$ = 7 particles:
-
-\newcommand\dosomethingwith[1]{#1\par}
-
-\begin{figure}[H]
-	\begin{center}
-		\textbf{x, y}
-		\csvloop{
-			file=numExample.csv,
-			no head,
-			check column count=false,
-			command=\dosomethingwith\csvline,
-		}
-	\end{center}
-\end{figure}
 
 
 \def\x{8} 
@@ -447,7 +471,7 @@ The underlying distribution is a normal distribution. \TODO{Add reference to sec
 
 We have already introduced all basic building blocks of the ORB algorithm. The only and final piece which is missing is the reshuffling algorithm. Note that it is not necessarily part of the ORB algorithm, but rather the bookkeeping strategy of the data-structure. We want to continuously update the particles array and in the words used before, have a direct correlation between $x_i$ and $i$. This allows us to group all particles, which are contained in a cell in a fixed range of indexes of the particles array. 
 
-When thinking about this in terms of the recursive algorithm, maintaining this is pretty straight forward. Each time we split a cell into two children, we make sure that particles contained in the left child cell are found in a designated range of the particles array, and the same goes for the right cell.
+When thinking about this in terms of the recursive algorithm, maintaining this data structure is pretty straight forward. Each time we split a cell into two children, we make sure that particles contained in the left child cell are found in a designated range of the particles array, and the exact same concept is applied to the right cell.
 
 \begin{algorithm}[H]
 	\caption{Reshuffle algorithm}\label{euclid}
@@ -475,7 +499,9 @@ The reshuffle algorithm has a clearly observable runtime of $O(N)$ since we iter
 
 In the context of panellization schemas we assume a computing model, where we have number of processors $np$. In most cases we want to set $d = np$ to end up with exactly as many leaf cells as we have processors. This allows us to assign a cell to each processor. 
 
-When distributing the particles among our processors and executing the ORB algorithm, there exist two possibilities on how to approach this. Initially we load an array of particles on all processors. Note that if we take the union of all particles loaded onto all processors, we have the set of all particles. Also a particle is loaded exactly once by any of the processors. Usually its fair to assume that there exists little to no correlation $x_i$ and $i$. Thus the distribution of particles among two nodes may look similar to this:
+When distributing the particles among our processors and executing the ORB algorithm, there exist two possibilities on how to approach this. Initially each processor has a subset of all particles stored in its memory. Also we assume that there exists little to no correlation between $x_i$ and $i$. Thus the distribution of particles among two nodes may look similar to this:
+
+
 
 \TODO{insert graphics with four colors of particles here}
 
@@ -570,7 +596,7 @@ We will compare the performance with the datapoints of Piz Daint, Summit and Alp
 \begin{figure}[H]
 	\begin{center}
 		\begin{tabular}{|@{} c | c | c | c | }
-			& Piz Daint \cite{piz_daint} & Summit\cite{summit} & Alps (Eiger) \\ 
+			Piz Daint \cite{piz_daint} & Summit\cite{summit} & Alps (Eiger) \\ 
 			\hline
 			\# Nodes & 5704 & 4608 & 1024\\
 			\# CPUs & 1 & 2 & 2\\
