@@ -19,6 +19,7 @@ __global__ void reduce(float *g_idata, int *g_odata, float cut) {
     extern __shared__ int sdata[];
     unsigned int tid = threadIdx.x;
     unsigned int i = blockIdx.x*(blockDim.x*2) + threadIdx.x;
+    // todo: Why have such long stride here, no bank conflicts?
     sdata[tid] = g_idata[i] + g_idata[i+blockDim.x];
     __syncthreads();
 
@@ -54,26 +55,27 @@ __global__ void reduce(float *g_idata, int *g_odata, float cut) {
 int main(int argc, char** argv) {
 
     int n = 1 << 20;
+    int nd = 3;
 
     std::cout << n << "\n";
 
-    blitz::Array<float, 2> p = blitz::Array<float, 2>(n, 3);
+    blitz::Array<float, 2> p = blitz::Array<float, 2>(n, nd);
     srand(0);
     for (int i = 0; i < p.rows(); i++) {
-        for (int d = 0; d < 3; d++) {
+        for (int d = 0; d < nd; d++) {
             p(i,d) = (float)(rand())/(float)(RAND_MAX);
         }
     }
 
-    const int nThreads = 512;
-    int nBlocks = n / nThreads;
+    const int nThreads = 256;
+    int nBlocks = n / nThreads / 2;
 
     float * h_particles = p.data();
     float * d_particles;
     int * d_sums;
     int * h_sums = (int*)malloc(n);
-    cudaMalloc(&d_particles, sizeof (float) * n);
-    cudaMemcpy(d_particles, h_particles, sizeof (float ) * n, cudaMemcpyHostToDevice);
+    cudaMalloc(&d_particles, sizeof (float) * n * nd);
+    cudaMemcpy(d_particles, h_particles, sizeof (float ) * n * nd, cudaMemcpyHostToDevice);
 
     cudaMalloc(&d_sums, sizeof (int) * n);
 
@@ -87,6 +89,8 @@ int main(int argc, char** argv) {
 
     cudaFree(d_particles);
     cudaFree(d_sums);
+
+    cudaDeviceReset();
 
     std::cout << n << " " << h_sums[0] << "\n";
 }
