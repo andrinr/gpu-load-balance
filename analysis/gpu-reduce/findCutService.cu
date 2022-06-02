@@ -1,11 +1,7 @@
 //
 // Created by andrin on 15/05/22.
 //
-#include "countService.h"
-#include "serviceManager.h"
-#inlucde "cell.h"
-
-CountService::CountService() {};
+#include <blitz/array.h>
 
 template <unsigned int blockSize>
 __device__ void warpReduce(volatile int *sdata, unsigned int tid) {
@@ -19,12 +15,18 @@ __device__ void warpReduce(volatile int *sdata, unsigned int tid) {
 
 // todo: Rewrite this to work with cells
 template <unsigned int blockSize>
-__global__ void reduce(int *g_idata, int *g_odata, float cut) {
+__global__ void reduce(float *g_idata, int *g_odata, float cut) {
     extern __shared__ int sdata[];
     unsigned int tid = threadIdx.x;
     unsigned int i = blockIdx.x*(blockDim.x*2) + threadIdx.x;
     sdata[tid] = g_idata[i] + g_idata[i+blockDim.x];
     __syncthreads();
+
+    for (unsigned int s=blockDim.x/2; s>32; s>>=1) {
+        if (tid < s)
+            sdata[tid] += sdata[tid + s];
+        __syncthreads();
+    }
 
     if (blockSize >= 512) {
         if (tid < 256) {
@@ -41,10 +43,12 @@ __global__ void reduce(int *g_idata, int *g_odata, float cut) {
             sdata[tid] += sdata[tid + 64];
         } __syncthreads();
     }
-    if (tid < 32)
-        warpReduce(sdata, tid);
-    if (tid == 0)
+    if (tid < 32) {
+        warpReduce<blockSize>(sdata, tid);
+    }
+    if (tid == 0) {
         g_odata[blockIdx.x] = sdata[0];
+    }
 }
 
 int main(int argc, char** argv) {
@@ -54,20 +58,20 @@ int main(int argc, char** argv) {
     std::cout << n << "\n";
 
     blitz::Array<float, 2> p = blitz::Array<float, 2>(n, 3);
-    srand(seed);
+    srand(0);
     for (int i = 0; i < p.rows(); i++) {
         for (int d = 0; d < 3; d++) {
             p(i,d) = (float)(rand())/(float)(RAND_MAX);
         }
     }
 
-    int nBlocks;
-    int nThreads = 512;
+    const int nThreads = 512;
+    int nBlocks = n / nThreads;
 
     float * h_particles = p.data();
     float * d_particles;
     int * d_sums;
-    int * h_sums;
+    int * h_sums = (int*)malloc(n);
     cudaMalloc(&d_particles, sizeof (float) * n);
     cudaMemcpy(d_particles, h_particles, sizeof (float ) * n, cudaMemcpyHostToDevice);
 
@@ -76,9 +80,13 @@ int main(int argc, char** argv) {
     // Number of threads per block is limited
 
     // Need for cut service becomes clear here!
-
-    reduce<512><<<n/ nThreads, nThreads>>>(d_particles, d_sums);
+    float cut = 0.5;
+    reduce<nThreads><<<nBlocks, nThreads>>>(d_particles, d_sums, cut);
 
     cudaMemcpy(h_sums, d_sums, sizeof (int ) * n, cudaMemcpyDeviceToHost);
 
+    cudaFree(d_particles);
+    cudaFree(d_sums);
+
+    std::cout << n << " " << h_sums[0] << "\n";
 }

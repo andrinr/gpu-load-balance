@@ -17,6 +17,8 @@
 \usepackage{bytefield}
 % Simple trees
 \usepackage{qtree}
+% Better trees
+\usepackage{forest} 
 % Custom colors
 \usepackage{xcolor}
 % Comments
@@ -152,12 +154,12 @@ Our main objective in this work is to improve the runtime of astrophysical simul
 \subsubsection{By example} 
 For the purpose of explaining the algorithm both visualy and by a numveric example, we consider the following minimal dataset:
 
-\begin{filecontents*}{particles3.csv}
+\begin{filecontents*}{particles4.csv}
 x,y,id
 0.4,0.3,0
 0.2,0.6,1
 0.8,0.9,2
-0.7,0.5,3
+0.6,0.5,3
 0.3,0.8,4
 0.7,0.1,5
 0.9,0.8,6
@@ -170,7 +172,7 @@ x,y,id
             tabular=ccc,
             table head=\hline \bfseries{x} & \bfseries{y} & \bfseries{id} \\\hline,
             late after last line=\\\hline % horizontal line at the end of the table
-            ]{particles.csv}{}{\csvlinetotablerow}
+            ]{particles4.csv}{}{\csvlinetotablerow}
         \end{minipage}
         \begin{minipage}[c]{0.7\linewidth}
             \begin{tikzpicture}
@@ -190,7 +192,7 @@ x,y,id
                     y=y, 
                     meta=id, 
                     col sep=comma] 
-                {particles3.csv};
+                {particles4.csv};
                 \end{axis}
 
             \end{tikzpicture}
@@ -269,19 +271,11 @@ In this non general case, where $d$ is a power of two, we are able to construct 
 
 
 
-\def\x{8} 
-\def\y{8}
-\def\s{5}
+    
+\begin{figure}[ht]
 
-\def\spx{0.45}
-\def\spya{0.5}
-\def\spyb{0.6}
-\def\spya{0.5}
-\def\spyb{0.5}
-\begin{figure}[H]
-	\begin{center}
-		\begin{tikzpicture}
-			\pgfmathsetseed{2};
+        \centering
+            \begin{tikzpicture}
                 \begin{axis}
                 [
                     nodes near coords,
@@ -291,7 +285,7 @@ In this non general case, where $d$ is a power of two, we are able to construct 
                     ymax=1.,
                     title=Recursion depth 0
                 ]
-                \addplot+[
+                \addplot    +[
                     only marks,
                     point meta=explicit symbolic
                 ] table [
@@ -299,13 +293,21 @@ In this non general case, where $d$ is a power of two, we are able to construct 
                     y=y, 
                     meta=id, 
                     col sep=comma] 
-                {particles3.csv};
+                {particles4.csv};
                 \draw [fill=red!20](0.0,0.0) rectangle (1, 1);
                 \node[below] at (0.5, 1){$cell_1$};
                 \end{axis}
-            
-		\end{tikzpicture}
-    \end{center}
+            \end{tikzpicture}
+
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{forest}
+        [$cell_1$
+        []  
+        ]
+    \end{forest}    
 \end{figure}
 
 \begin{figure}[H]
@@ -329,9 +331,9 @@ In this non general case, where $d$ is a power of two, we are able to construct 
                     y=y, 
                     meta=id, 
                     col sep=comma] 
-                {particles3.csv};
-                \draw [fill=green!20](0.0,0.0) rectangle (0.45, 1);
-                \draw [fill=blue!20](0.45,0.0) rectangle (1, 1);
+                {particles4.csv};
+                \draw [fill=green!20](0.0,0.0) rectangle (0.65, 1);
+                \draw [fill=blue!20](0.65,0.0) rectangle (1, 1);
                 \node[below] at (0.2, 1){$cell_2$};
                  \node[below] at (0.7, 1){$cell_3$};
                 \end{axis}
@@ -341,6 +343,15 @@ In this non general case, where $d$ is a power of two, we are able to construct 
 \end{figure}
 
 \begin{figure}[H]
+\centering
+	\begin{forest}
+		[$cell_1$
+		[$cell_2$][$cell_3$]  
+		]
+	\end{forest}    
+\end{figure}
+
+\begin{figure}[H]
 	\begin{center}
 		\begin{tikzpicture}
 			\pgfmathsetseed{2};
@@ -351,7 +362,7 @@ In this non general case, where $d$ is a power of two, we are able to construct 
                     xmax=1.,
                     ymin=-0.,
                     ymax=1.,
-                    title=Recursion depth 1
+                    title=Recursion depth 2
                 ]
                 \addplot+[
                     only marks,
@@ -361,10 +372,10 @@ In this non general case, where $d$ is a power of two, we are able to construct 
                     y=y, 
                     meta=id, 
                     col sep=comma] 
-                {particles3.csv};
-                \draw [fill=pink!20](0.0,0.0) rectangle (0.45, 0.7);
-                \draw [fill=yellow!20](0.,0.7) rectangle (0.45, 1);
-                \draw [fill=blue!20](0.45,0.0) rectangle (1, 1);
+                {particles4.csv};
+                \draw [fill=pink!20](0.0,0.0) rectangle (0.65, 0.55);
+                \draw [fill=yellow!20](0.0,0.55) rectangle (0.65, 1);
+                \draw [fill=blue!20](0.65,0.0) rectangle (1, 1);
                 \node[below] at (0.2, 1){$cell_4$};
                 \node[above] at (0.2, 0){$cell_5$};
                 \node[below] at (0.7, 1){$cell_3$};
@@ -375,10 +386,14 @@ In this non general case, where $d$ is a power of two, we are able to construct 
 \end{figure}
 
 \begin{figure}[H]
-	\Tree[.cell_1 [.cell_2 [.cell_4 ] [.cell_5 ] ]
-	[.cell_3 ]]
-	\caption{Tree datastructure of depth 3}
+	\centering
+	\begin{forest}
+		[$cell_1$
+		[$cell_2$ [$cell_4$] [$cell_5$]][$cell_3$]  
+		]
+	\end{forest}    
 \end{figure}
+
 
 Since $d_{cellLeft} - d_{cellRight}$ must always be $\leq 1$, it must hold that the tree is a balanced binary tree. Therefore we can conclude that the height of the tree is equal to $\lceil log(d) \rceil$ and the total number of nodes (not only leaf nodes) is $log(d) \times d$. Since we have a balanced tree, we also have the possibility of storing it in a heap data-structure, which can in turn greatly increase the performance, since we will not have to perform a tree walk to access individual cells in the tree.
 
@@ -553,17 +568,16 @@ The reshuffle algorithm has a clearly observable runtime of $O(N)$ since we iter
 
 \subsection{Parallelize ORB }
 
-In the context of panellization schemas we assume a computing model, where we have number of processors $np$. In most cases we want to set $d = np$ to end up with exactly as many leaf cells as we have processors. This allows us to assign a cell to each processor. 
+In the context of parallelization schemas we assume a computing model, where the number of processors is $np$. When the goal of the algorithm is workload balancing, we will want to set $d = np$ to end up with exactly as many leaf cells as we have processors. In the context of a supercomputing system $np$ could also be set no the number of nodes in the system, but the algorithms and also the messaging interfaces are usually the same. 
+When we have a cell for each processor, we can distribute the workload equally in the system and avoid idle time.
 
-When distributing the particles among our processors and executing the ORB algorithm, there exist two possibilities on how to approach this. Initially each processor has a subset of all particles stored in its memory. Also we assume that there exists little to no correlation between $x_i$ and $i$. Thus the distribution of particles among two nodes may look similar to this:
+Initially we assume that each processor has a subset of all the particles stored in its memory. There exists several strategies on how to parallelize the ORB algorithm. 
 
+\subsubsection{Local Reshuffling}
 
+When performing a local reshuffle, each processor sorts its particles according to the cell information available. The cell information is however being held by a single processor. This processor supervises the ORB algorithm and broadcast the data to the workers.  
 
-\TODO{insert graphics with four colors of particles here}
-
-After executing ORB 
-
-\begin{figure}[H]
+\begin{figure}
 	\begin{center}
 		\begin{tikzpicture}
 			
@@ -576,20 +590,20 @@ After executing ORB
 			
 			\communication{Broadcast cells}{0}{7}{15};
 			
-			\process{local\\ reshuffle}{0}{14};
-			\process{local\\ reshuffle}{2}{14};
-			\process{local\\ reshuffle}{4}{14};
-			\process{local\\ reshuffle}{6}{14};
+			\process{reorder}{0}{14};
+			\process{reorder}{2}{14};
+			\process{reorder}{4}{14};
+			\process{reorder}{6}{14};
 			
 			\process{compute\\ cut}{0}{11};
 			
 			
 			\communication{Broadcast cut from operative}{0}{7}{8};
 			
-			\process{local \\ count}{0}{7};
-			\process{local \\ count}{2}{7};
-			\process{local \\ count}{4}{7};
-			\process{local \\ count}{6}{7};
+			\process{count}{0}{7};
+			\process{count}{2}{7};
+			\process{count}{4}{7};
+			\process{count}{6}{7};
 			
 			
 			\communication{Reduce count to operative}{0}{7}{4};
@@ -602,10 +616,9 @@ After executing ORB
 	\label{fig:orb_parallel}
 \end{figure}
 
-
 \subsubsection{Global Reshuffling}
 
-Another strategy we can use, as soon as we have created two domains, rank 0 can process one domain and rank 1 can process the other domain. This has the advantage that not only the counting part, but also the costly reshuffling part of the ORB algorithm can be parallelized. Furthermore the amount of data which needs to be communicated between the different threads is smaller. This is due to the fact that as soon as we found our first cut, only half the array of particles 
+As soon as we have finished the first iteration of the  two domains, rank 0 can process one domain and rank 1 can process the other domain. This has the advantage that not only the counting part, but also the costly reshuffling part of the ORB algorithm can be parallelized. Furthermore the amount of data which needs to be communicated between the different threads is smaller. This is due to the fact that as soon as we found our first cut, only half the array of particles 
 
 
 \begin{figure}[H]
