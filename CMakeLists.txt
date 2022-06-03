@@ -9,6 +9,7 @@ project(glb VERSION 0.1 LANGUAGES CXX CUDA )
 find_package(MPI REQUIRED)
 include_directories(${MPI_INCLUDE_PATH})
 
+# Set architecture flag
 set(CMAKE_C_FLAGS -fopenmp)
 add_executable(
         glb

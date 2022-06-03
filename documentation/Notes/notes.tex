@@ -712,6 +712,7 @@ for(auto p= startPtr; p<endPtr; ++p) nLeft += *p < cut;
 
 \TODO{Add assembler code with actual avx in it?}
 
+Without AVX:
 \begin{lstlisting}
 .L7:
 	movq	-32(%rbp), %rax
@@ -728,6 +729,31 @@ for(auto p= startPtr; p<endPtr; ++p) nLeft += *p < cut;
 	jmp	.L7
 .L6:
 \end{lstlisting}
+
+With AVX:
+\begin{lstlisting}
+	
+.L7:
+	movq	-32(%rbp), %rax
+	cmpq	-56(%rbp), %rax
+	jnb	.L6
+	movq	-32(%rbp), %rax
+	vmovss	(%rax), %xmm1
+	vmovss	-36(%rbp), %xmm0
+	vcomiss	%xmm1, %xmm0
+	seta	%al
+	movzbl	%al, %eax
+	addl	%eax, -20(%rbp)
+	addq	$4, -32(%rbp)
+	jmp	.L7
+.L6:	
+
+\end{lstlisting}
+
+Note how the commands movss were replaced by the AVX enabled commands vmovss. Furthemore comiss was also replaced with vcomiss. 
+
+We also performed some testing on CPU with AVX2 enabled. We summed up $2^{26}$ particles. 
+The version with AVX enabled took 0.25 seconds, meanwhile the non AVX version took 1.2 seconds. This yields in a speed improvement of almost a factor of 6, which is not to expect considering some overhead. 
 
 We can see that the actual operations are mainly a compare and an add operation. Both of which can be done using AVX. 
 Depending on the AVX standard which is enabled, this means that the CPU can perform between 128 and 512 bits. For single precision floating point numbers, this means it can process between four and sixteen floating point numbers in a single cycle. In the case of AVX2 we can process eight floats per cycle. 

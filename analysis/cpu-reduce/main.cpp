@@ -8,8 +8,6 @@
 
 void versionOne(blitz::Array<float, 2> particles, int n, int k) {
 
-    assert(&particles(begin,axis)+1 == &particles(begin+1,axis));
-
     int nLeft = 0;
     float cut = 0.5;
 
@@ -29,8 +27,6 @@ void versionOne(blitz::Array<float, 2> particles, int n, int k) {
 
 void versionTwo(blitz::Array<float, 2> particles, int n, int k) {
 
-    assert(&particles(begin,axis)+1 == &particles(begin+1,axis));
-
     int nLeft = 0;
     float cut = 0.5;
 
@@ -46,7 +42,7 @@ void versionTwo(blitz::Array<float, 2> particles, int n, int k) {
 }
 
 int main(int argc, char** argv) {
-    int n = 1 << 25;
+    int n = 1 << 27;
     int k = 10;
     std::cout << "Performing measurements " << n << "\n";
 
