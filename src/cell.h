@@ -38,9 +38,7 @@ struct Cell {
         upper[2] = upper_[2];
     };
 
-    Cell() {
-
-    };
+    Cell() = default; // Trivial structs need a default constructor
 
     // todo: do this
     int getLeftChildId() const {// does not modify{
