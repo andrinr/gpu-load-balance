@@ -14,7 +14,7 @@ int ServiceCountLeft::Service(PST pst,void *vin,int nIn,void *vout,int nOut) {
     printf("ServiceCountLeft invoked on thread %d\n",pst->idSelf);
 
     for(auto i=0; i<nCells; i++) {
-	out[i] = pst->idSelf; // The count
+	    out[i] = pst->idSelf; // The count
     }
     return nCells * sizeof(output);
 }

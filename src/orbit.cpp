@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include "mdl.h"
+#inlcude "IO.h"
 #include "services/pst.h"
 #include "services/setadd.h"
 #include "services/MDLcountLeftService.h"
@@ -12,8 +13,10 @@ int master(MDL vmdl,void *vpst) {
     ServiceSetAdd::input inAdd(mdl->Threads());
     mdl->RunService(PST_SETADD,sizeof(inAdd),&inAdd);
 
+    int N = 1 << 25;
     // user code
 
+    //IO::generateData(N, )
 
     int nCells = 1;
     ServiceCountLeft::input incl[nCells];

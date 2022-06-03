@@ -37,6 +37,7 @@ else()
 endif()
 
 find_package(MPI REQUIRED)
+find_package(FFTW REQUIRED)
 include_directories(${MPI_INCLUDE_PATH})
 
 # Set architecture flag

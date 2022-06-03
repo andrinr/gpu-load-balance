@@ -9,9 +9,8 @@
 
 #include "constants.h"
 
-class IO {
-public:
-    blitz::Array<float, 2> generateData(int N, int seed) {
+namespace IO {
+    static blitz::Array<float, 2> generateData(int N, int seed) {
         // Init positions
         blitz::Array<float, 2> p = blitz::Array<float, 2>(N, DIMENSIONS + 1);
         srand(seed);
