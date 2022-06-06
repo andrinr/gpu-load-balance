@@ -65,10 +65,16 @@ int main(int argc, char** argv) {
         pos[i] = (float)(rand())/(float)(RAND_MAX);
     }
 
-    std::cout << pos[0] << "\n";
+    int testSum = 0;
+    for (int i = 0; i < 10000; i++) {
+        testSum += pos[i] < 0.5;
+    }
+    std::cout << testSum << "\n";
 
     const int nThreads = 256;
-    int nBlocks = n / nThreads / 2;
+    // Can increase speed by another factor of around two
+    int elementsPerThread = 16;
+    int nBlocks = ceil(n / nThreads / 2 / elementsPerThread);
 
     float * d_particles;
     int * d_sums;
@@ -93,7 +99,7 @@ int main(int argc, char** argv) {
 
     std::cout << milliseconds << "\n";
 
-    cudaMemcpy(h_sums, d_sums, sizeof (int ) * n, cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_sums, d_sums, sizeof (int ) * nBlocks, cudaMemcpyDeviceToHost);
 
     int sum = 0;
 
