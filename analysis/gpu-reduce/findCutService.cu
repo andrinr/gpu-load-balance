@@ -15,19 +15,18 @@ __device__ void warpReduce(volatile int *sdata, unsigned int tid) {
 
 // todo: Rewrite this to work with cells
 template <unsigned int blockSize>
-__global__ void reduce(float *g_idata, int *g_odata, float cut) {
+__global__ void reduce(float *g_idata, int *g_odata, float cut, int n) {
     extern __shared__ int sdata[];
-    unsigned int tid = threadIdx.x;
-    unsigned int i = blockIdx.x*(blockDim.x*2) + threadIdx.x;
-    // todo: Why have such long stride here, no bank conflicts?
-    sdata[tid] = g_idata[i] + g_idata[i+blockDim.x];
-    __syncthreads();
 
-    for (unsigned int s=blockDim.x/2; s>32; s>>=1) {
-        if (tid < s)
-            sdata[tid] += sdata[tid + s];
-        __syncthreads();
+    unsigned int tid = threadIdx.x;
+    unsigned int i = blockIdx.x*(blockSize*2) + threadIdx.x;
+    unsigned int gridSize = blockSize*2*gridDim.x;
+    sdata[tid] = 0;
+    while (i < n) {
+        sdata[tid] += g_idata[i] + g_idata[i+blockSize];
+        i += gridSize;
     }
+    __syncthreads();
 
     if (blockSize >= 512) {
         if (tid < 256) {
@@ -54,28 +53,28 @@ __global__ void reduce(float *g_idata, int *g_odata, float cut) {
 
 int main(int argc, char** argv) {
 
-    int n = 1 << 20;
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
+    int n = 1 << 27;
     int nd = 3;
 
-    std::cout << n << "\n";
-
-    blitz::Array<float, 2> p = blitz::Array<float, 2>(n, nd);
-    srand(0);
-    for (int i = 0; i < p.rows(); i++) {
-        for (int d = 0; d < nd; d++) {
-            p(i,d) = (float)(rand())/(float)(RAND_MAX);
-        }
+    float * pos = (float*)calloc(n, sizeof(float));
+    for (int i = 0; i < n; i++) {
+        pos[i] = (float)(rand())/(float)(RAND_MAX);
     }
+
+    std::cout << pos[0] << "\n";
 
     const int nThreads = 256;
     int nBlocks = n / nThreads / 2;
 
-    float * h_particles = p.data();
     float * d_particles;
     int * d_sums;
-    int * h_sums = (int*)malloc(n);
-    cudaMalloc(&d_particles, sizeof (float) * n * nd);
-    cudaMemcpy(d_particles, h_particles, sizeof (float ) * n * nd, cudaMemcpyHostToDevice);
+    int * h_sums = (int*)calloc(n, sizeof(int));
+    cudaMalloc(&d_particles, sizeof (float) * n);
+    cudaMemcpy(d_particles, pos, sizeof (float ) * n, cudaMemcpyHostToDevice);
 
     cudaMalloc(&d_sums, sizeof (int) * n);
 
@@ -83,14 +82,32 @@ int main(int argc, char** argv) {
 
     // Need for cut service becomes clear here!
     float cut = 0.5;
-    reduce<nThreads><<<nBlocks, nThreads>>>(d_particles, d_sums, cut);
+
+    cudaEventRecord(start);
+    reduce<nThreads><<<nBlocks, nThreads, nThreads * sizeof (int) >>>(d_particles, d_sums, cut, n);
+    cudaEventRecord(stop);
+
+    cudaEventSynchronize(stop);
+    float milliseconds = 0;
+    cudaEventElapsedTime(&milliseconds, start, stop);
+
+    std::cout << milliseconds << "\n";
 
     cudaMemcpy(h_sums, d_sums, sizeof (int ) * n, cudaMemcpyDeviceToHost);
+
+    int sum = 0;
+
+    for (int i = 0; i < nBlocks; ++i) {
+        sum += h_sums[i];
+    }
+
+    std::cout << sum << " " << n << "\n";
 
     cudaFree(d_particles);
     cudaFree(d_sums);
 
-    cudaDeviceReset();
+    free(h_sums);
+    free(pos);
 
-    std::cout << n << " " << h_sums[0] << "\n";
+    cudaDeviceReset();
 }

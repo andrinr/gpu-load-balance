@@ -7,6 +7,6 @@ Run:
 ```./a.out```
 
 Debug:
-```cuda gdb``` & ```run``` & ```backtrace```
+```cuda-gdb``` & ```run``` & ```backtrace```
 
 ```cuda-memcheck --leak-check full ./a.out```

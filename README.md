@@ -34,3 +34,8 @@ Or run gdb on only one process:
 ## Automized performance analysis
 
 Insert instructions here
+
+## Open questions
+- cannot generate cmake file, due to dependency issue, fftw not fftw3 required??
+- AVX commands yes for vmovss etc but not add, speedup improvement very minor
+- 

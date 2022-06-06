@@ -6,6 +6,8 @@ INCLUDE(CheckCSourceCompiles)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
+set(CUDAToolkit_ROOT /usr/bin)
+
 project(glb VERSION 0.1 LANGUAGES C CXX CUDA )
 
 # Check for restrict keyword
@@ -37,7 +39,7 @@ else()
 endif()
 
 find_package(MPI REQUIRED)
-find_package(FFTW REQUIRED)
+#find_package(FFTW3 REQUIRED)
 include_directories(${MPI_INCLUDE_PATH})
 
 # Set architecture flag
@@ -58,7 +60,14 @@ set(CMAKE_C_FLAGS -fopenmp)
 #set_target_properties(glb PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 #target_link_libraries(glb ${MPI_LIBRARIES} blitz)
 
-add_executable(orbit src/orbit.cpp src/services/setadd.cpp src/services/TraversePST.cpp src/services/MDLcountLeftService.cpp)
+add_executable(
+        orbit
+        src/orbit.cpp
+        src/services/setadd.cpp
+        src/services/TraversePST.cpp
+        src/services/MDLcountLeftService.cpp
+)
+
 target_include_directories(orbit PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set_target_properties(orbit PROPERTIES
     CXX_STANDARD 17
