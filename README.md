@@ -28,6 +28,11 @@ Or run gdb on only one process:
 
 ``mpiexec -n 1 gdb glb <# thousand of particles> <# domains>m : -n <x-1> glb <# thousand of particles> <# domains>``
 
+### CUDA Profile
+
+Using Nvidia Nsight: 
+```run ./nsys-ui```
+
 ### Run
 ``mpirun -np <x> glb <# thousand of particles> <# domains>``
 
@@ -39,3 +44,4 @@ Insert instructions here
 - cannot generate cmake file, due to dependency issue, fftw not fftw3 required??
 - AVX commands yes for vmovss etc but not add, speedup improvement very minor
 - Do I put pointers and streams in local data from pst when trying to preserve data in device memory?
+- Nvidia Nsight not wokring
