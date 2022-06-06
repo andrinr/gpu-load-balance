@@ -1,5 +1,6 @@
 #include "countLeftService.h"
 #include <blitz/array.h>
+#inlcude <vector>
 
 // Make sure that the communication structure is "trivial" so that it
 // can be moved around with "memcpy" which is required for MDL.
@@ -53,74 +54,6 @@ __global__ void reduce(float *g_idata, int *g_odata, float cut, int n) {
     }
 }
 
-int main(int argc, char** argv) {
-
-    cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
-
-    int n = 1 << 27;
-    int nd = 3;
-
-    float * pos = (float*)calloc(n, sizeof(float));
-    for (int i = 0; i < n; i++) {
-        pos[i] = (float)(rand())/(float)(RAND_MAX);
-    }
-
-    int testSum = 0;
-    for (int i = 0; i < 10000; i++) {
-        testSum += pos[i] < 0.5;
-    }
-    std::cout << testSum << "\n";
-
-    const int nThreads = 256;
-    // Can increase speed by another factor of around two
-    int elementsPerThread = 16;
-    int nBlocks = ceil(n / nThreads / 2 / elementsPerThread);
-
-    float * d_particles;
-    int * d_sums;
-    int * h_sums = (int*)calloc(n, sizeof(int));
-    cudaMalloc(&d_particles, sizeof (float) * n);
-    cudaMemcpy(d_particles, pos, sizeof (float ) * n, cudaMemcpyHostToDevice);
-
-    cudaMalloc(&d_sums, sizeof (int) * n);
-
-    // Number of threads per block is limited
-
-    // Need for cut service becomes clear here!
-    float cut = 0.5;
-
-    cudaEventRecord(start);
-    reduce<nThreads><<<nBlocks, nThreads, nThreads * sizeof (int) >>>(d_particles, d_sums, cut, n);
-    cudaEventRecord(stop);
-
-    cudaEventSynchronize(stop);
-    float milliseconds = 0;
-    cudaEventElapsedTime(&milliseconds, start, stop);
-
-    std::cout << milliseconds << "\n";
-
-    cudaMemcpy(h_sums, d_sums, sizeof (int ) * nBlocks, cudaMemcpyDeviceToHost);
-
-    int sum = 0;
-
-    for (int i = 0; i < nBlocks; ++i) {
-        sum += h_sums[i];
-    }
-
-    std::cout << sum << " " << n << "\n";
-
-    cudaFree(d_particles);
-    cudaFree(d_sums);
-
-    free(h_sums);
-    free(pos);
-
-    cudaDeviceReset();
-}
-
-
 int ServiceCountLeft::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     auto lcl = pst->lcl;
     auto in  = static_cast<input *>(vin);
@@ -134,6 +67,7 @@ int ServiceCountLeft::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
 
     cudaMalloc(&d_sums, sizeof (int) * n);
 
+    std::vector<cudaStream_t> streams;
     // https://developer.nvidia.com/blog/how-overlap-data-transfers-cuda-cc/
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset){
 
@@ -150,6 +84,7 @@ int ServiceCountLeft::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
 
         cudaStream_t stream;
         cudaError_t result;
+        streams.push_back(stream);
         result = cudaStreamCreate(&stream);
 
         float * d_particles;
@@ -166,7 +101,7 @@ int ServiceCountLeft::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
         reduce<nThreads><<<nBlocks, nThreads, nThreads * sizeof (int), stream>>>(
                 d_particles, d_counts, cut, endInd - beginInd);
 
-        cudaMemcpy(h_sums, d_sums, sizeof (int ) * nBlocks, cudaMemcpyDeviceToHost);
+        cudaMemcpyAsync(h_sums, d_sums, sizeof (int ) * nBlocks, cudaMemcpyDeviceToHost, stream);
 
         for (int i = 0; i < nBlocks; ++i) {
             out[cellPtrOffset] += h_sums[i];
@@ -175,6 +110,10 @@ int ServiceCountLeft::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
 
     // Wait till all streams have finished
     cudaDeviceSynchronize();
+
+    for (auto stream : streams) {
+        cudaStreamDestroy(stream);
+    }
 
     return nCells * sizeof(output);
 }
