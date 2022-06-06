@@ -3,7 +3,8 @@
 #include "mdl.h"
 
 class LocalData {
-    //blitz::Array<> ...
+    blitz::Array<float, 2> particles;
+    blitz::Array<int, 2> cellToRangeMap;
 };
 
 

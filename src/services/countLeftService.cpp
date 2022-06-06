@@ -1,28 +1,26 @@
-//
-// Created by andrin on 19/05/22.
-//
 #include "countLeftService.h"
-#include "serviceManager.h"
-#include <blitz/array.h>
-#include "../cell.h"
 
-CountLeftService::CountLeftService() {};
+// Make sure that the communication structure is "trivial" so that it
+// can be moved around with "memcpy" which is required for MDL.
+static_assert(std::is_void<ServiceCountLeft::input>()  || std::is_trivial<ServiceCountLeft::input>());
+static_assert(std::is_void<ServiceCountLeft::output>() || std::is_trivial<ServiceCountLeft::output>());
 
-void CountLeftService::run(void *inputBuffer, int inputBufferLength, void *outputBuffer, int outputBufferLength) {
+int ServiceCountLeft::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
+    auto lcl = pst->lcl;
+    auto in  = static_cast<input *>(vin);
+    auto out = static_cast<output *>(vout);
+    auto nCells = nIn / sizeof(input);
+    assert(nOut / sizeof(output) >= nCells);
+    printf("ServiceCountLeft invoked on thread %d\n",pst->idSelf);
 
-    CountLeftServiceInput inputData = *(struct CountLeftServiceInput*)rawInputData;
-    CountLeftServiceOutput outputData;
-
-    Orb orb = *manager->orb;
-
-    blitz::Array<int, 1> counts(inputData.nCells);
-    for (int cellPtrOffset = 0; cellPtrOffset < inputData.nCells; ++cellPtrOffset){
-        Cell cell = *(inputData.cells + cellPtrOffset);
+    for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset){
+        auto cell = static_cast<Cell>*(in + cellPtrOffset);
+        // -1 axis signals no need to count
         if (cell.cutAxis == -1) continue;
-        int beginInd = orb.cellToParticle(cell.id, 0);
-        int endInd = orb.cellToParticle(cell.id, 1);
+        int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
+        int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
 
-        blitz::Array<float,1> particles = orb.particles(blitz::Range(beginInd, endInd), cell.cutAxis);
+        blitz::Array<float,1> particles = pst->lcl->particles(blitz::Range(beginInd, endInd), cell.cutAxis);
         float * startPtr = particles.data();
         float * endPtr = startPtr + (endInd - beginInd);
 
@@ -32,22 +30,19 @@ void CountLeftService::run(void *inputBuffer, int inputBufferLength, void *outpu
         for(auto p= startPtr; p<endPtr; ++p) nLeft += *p < cut;
 
         std::cout << nLeft << " ";
-        counts[cellPtrOffset] = nLeft;
+        out[cellPtrOffset] = nLeft;
     }
 
-    outputData.nCounts = inputData.nCells;
-    outputData.counts = counts.data();
-    rawOutputData = &outputData;
+    return nCells * sizeof(output);
 }
 
-std::tuple<int, int> CountService::getNBytes(int bufferLength) const {
-    return std::make_tuple(bufferLength * sizeof(Cell), bufferLength * sizeof (int))
-}
-
-int CountLeftService::getNOutputBytes(int outputBufferLength) const {
-    return outputBufferLength * sizeof(int);
-}
-
-int CountLeftService::getNInputBytes(int inputBufferLength) const {
-    return inputBufferLength * sizeof(Cell)
+int ServiceCountLeft::Combine(void *vout,void *vout2,int nIn,int nOut1,int nOut2) {
+    auto out  = static_cast<output *>(vout);
+    auto out2 = static_cast<output *>(vout2);
+    int nCounts = nIn / sizeof(input);
+    assert(nOut1 >= nCounts*sizeof(output));
+    assert(nOut2 >= nCounts*sizeof(output));
+    for(auto i=0; i<nCounts; ++i)
+	    out[i] += out2[i];
+    return nCounts * sizeof(output);
 }

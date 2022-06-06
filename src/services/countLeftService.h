@@ -1,28 +1,14 @@
-//
-// Created by andrin on 19/05/22.
-//
+#include "TraversePST.h"
+#include "cell.h"
 
-#ifndef GPU_LOAD_BALANCE_COUNTLEFTSERVICE_H
-#define GPU_LOAD_BALANCE_COUNTLEFTSERVICE_H
-#include "baseService.h"
-
-const int COUNT_LEFT_SERVICE_ID = 2;
-
-class CountLeftService : public BaseService {
+class ServiceCountLeft : public TraverseCombinePST {
 public:
-
-    const int serviceID = COUNT_LEFT_SERVICE_ID;
-
-    CountLeftService();
-
-    void run(const void * inputBuffer,
-             const int nInputElements,
-             void * outputBuffer,
-             int nOutputElements) override;
-
-    int getNInputBytes(int inputBufferLength) const override;
-    int getNOutputBytes(int outputBufferLength) const override;
+    static constexpr int max_cells = 8192;
+    typedef struct Cell input; // Array of Cells
+    typedef uint64_t output;   // Array of counts
+    explicit ServiceCountLeft(PST pst)
+        : TraverseCombinePST(pst,PST_COUNTLEFT,max_cells*sizeof(input),max_cells*sizeof(output),"CountLeft") {}
+protected:
+    virtual int Service(PST pst,void *vin,int nIn,void *vout,int nOut);
+    virtual int Combine(void *vout,void *vout2,int nIn,int nOut1,int nOut2);
 };
-
-
-#endif //GPU_LOAD_BALANCE_COUNTLEFTSERVICE_H
