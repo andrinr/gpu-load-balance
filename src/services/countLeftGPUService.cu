@@ -36,7 +36,7 @@ __global__ void reduce(float *g_idata, int *g_odata, float cut, int n) {
             sdata[tid] += sdata[tid + 256];
         } __syncthreads();
     }
-    if (blockSize >= 256) {
+    if (blockSize >= 256)https://developer.nvidia.com/blog/how-overlap-data-transfers-cuda-cc/ {
         if (tid < 128) {
             sdata[tid] += sdata[tid + 128];
         } __syncthreads();
@@ -55,6 +55,8 @@ __global__ void reduce(float *g_idata, int *g_odata, float cut, int n) {
 }
 
 int ServiceCountLeft::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
+    // store streams / initialize in local data
+    //
     auto lcl = pst->lcl;
     auto in  = static_cast<input *>(vin);
     auto out = static_cast<output *>(vout);

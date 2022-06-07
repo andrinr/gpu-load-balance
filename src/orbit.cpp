@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include "mdl.h"
-#inlcude "IO.h"
 #include "services/pst.h"
 #include "services/setadd.h"
 #include "services/countLeftService.h"
@@ -31,24 +30,14 @@ void *worker_init(MDL vmdl) {
     // Construct a PST node for this thread. The SetAdd service will be called in "master" to contruct a tree of them.
     auto pst = new pstNode(mdl);
 
-    int n = 1 << 20;
-    int k = 4;
-    int maxD = 1024;
-    blitz::Array<float, 2> p = blitz::Array<float, 2>(n, k);
-    blitz::Array<float, 2> CTRM = blitz::Array<float, 2>(maxD, 2);
-    p = 0;
-    CTRM = -1;
-    // srand(vmdl);
-    for (int i = 0; i < n; i++) {
-        for (int d = 0; d < 3; d++) {
-            p(i,d) = (float)(rand())/(float)(RAND_MAX);
-        }
-    }
+    // Put that in a service
 
-    pst->lcl = new LocalData {
-        p,
-        CTRM
-    };
+    // Services:
+    // Initialize particles
+    // Copy to device
+    // Count Left
+    // Reshuffle
+
 
     mdl->AddService(std::make_unique<ServiceSetAdd>(pst));
     mdl->AddService(std::make_unique<ServiceCountLeft>(pst));

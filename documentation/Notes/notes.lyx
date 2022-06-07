@@ -1,0 +1,10653 @@
+#LyX file created by tex2lyx 2.3
+\lyxformat 544
+\begin_document
+\begin_header
+\save_transient_properties true
+\origin /home/andrin/projects/gpu-load-balance/documentation/Notes/
+\textclass article
+\begin_preamble
+
+
+% Packages
+
+% Pseudocode
+\usepackage{algpseudocode}
+\usepackage{algorithm}
+\usepackage{arrayjob}
+
+
+% Placing
+% Drawing
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,chains,%
+	decorations.pathreplacing}
+% Memory maps
+\usepackage{bytefield}
+% Simple trees
+\usepackage{qtree}
+% Better trees
+\usepackage{forest}
+% Custom colors
+\usepackage{xcolor}
+% Comments
+% math symbols
+% csv reader
+\usepackage{csvsimple}
+% create file content
+\usepackage{filecontents}
+% Create c++ fields
+\usepackage{listings}
+% better tables
+\usepackage{tabularx}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
+
+
+% Plots
+\usepackage{pgfplots}
+\pgfplotsset{compat = newest}
+
+% Dependencies
+\usepackage{mymacros}
+\usepackage{parallelP}
+
+
+\lstset { %
+    language=C++,
+    backgroundcolor=\color{black!5}, % set backgroundcolor
+    basicstyle=\footnotesize,% basic font setting
+}
+
+
+% Title
+\title{Orthogonal Recursive Bisection on the GPU for Accelerated Load Balancing in Large N-Body Simulations \\ - \\ Bachelor Thesis}
+
+\author{Andrin Rehmann}
+
+% Start
+
+\end_preamble
+\use_default_options false
+\maintain_unincluded_children false
+\language english
+\language_package none
+\inputencoding auto
+\fontencoding default
+\font_roman "default" "default"
+\font_sans "default" "default"
+\font_typewriter "default" "default"
+\font_math "auto" "auto"
+\font_default_family default
+\use_non_tex_fonts false
+\font_sc false
+\font_osf false
+\font_sf_scale 100 100
+\font_tt_scale 100 100
+\use_microtype false
+\use_dash_ligatures true
+\graphics default
+\default_output_format default
+\output_sync 0
+\bibtex_command default
+\index_command default
+\paperfontsize default
+\spacing single
+\use_hyperref false
+\papersize default
+\use_geometry false
+\use_package amsmath 1
+\use_package amssymb 2
+\use_package cancel 0
+\use_package esint 1
+\use_package mathdots 0
+\use_package mathtools 0
+\use_package mhchem 0
+\use_package stackrel 0
+\use_package stmaryrd 0
+\use_package undertilde 0
+\cite_engine basic
+\cite_engine_type default
+\biblio_style plain
+\use_bibtopic false
+\use_indices false
+\paperorientation portrait
+\suppress_date false
+\justification true
+\use_refstyle 0
+\use_minted 0
+\index Index
+\shortcut idx
+\color #008000
+\end_index
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation indent
+\paragraph_indentation default
+\is_math_indent 0
+\math_numbering_side default
+\quotes_style english
+\dynamic_quotes 0
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\html_math_output 0
+\html_css_as_file 0
+\html_be_strict false
+\end_header
+
+\begin_body
+
+\begin_layout Standard
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+maketitle
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset Newpage newpage
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset CommandInset toc
+LatexCommand tableofcontents
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset Newpage newpage
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section
+Introduction
+\end_layout
+
+\begin_layout Standard
+The N-Body technique has been used for decades to simulate the Universe so we can compare theory with observations. This technique uses 
+\begin_inset Quotes eld
+\end_inset
+
+particles
+\begin_inset Quotes erd
+\end_inset
+
+ or 
+\begin_inset Quotes eld
+\end_inset
+
+bodies
+\begin_inset Quotes erd
+\end_inset
+
+ to sample phase space, and as gravity operates over infinite distance it is necessary to consider all pair-wise interactions which makes a naive implementation 
+\begin_inset Formula $\mathcal{O}(n^2)$
+\end_inset
+
+. It is clear that this does not scale particularly well with large particle counts.
+\end_layout
+
+\begin_layout Standard
+One common approach is to decompose the particles into a tree structure and multipole expansions of the particles in each tree cell to approximate the forces. This reduces the complexity of the algorithm to 
+\begin_inset Formula $\mathcal{O}(n\log{}n)$
+\end_inset
+
+. More recently the Fast Multipole Method (FMM) has gained wider option primarily due to the extremely large sizes of modern simulations. This technique further reduces the complexity to 
+\begin_inset Formula $\mathcal{O}(n)$
+\end_inset
+
+!
+\end_layout
+
+\begin_layout Standard
+The computational effort required in modern N-Body simulations can thus be split into three categories:
+\end_layout
+
+\begin_layout Itemize
+
+\series bold
+Load Balancing:
+\series default
+ Distribute particles equally among nodes with regards to memory. 
+\end_layout
+
+\begin_layout Itemize
+
+\series bold
+Tree Building:
+\series default
+ Build tree on each node for accelerated force calculation and integration. 
+\end_layout
+
+\begin_layout Itemize
+
+\series bold
+Force calculation and integration:
+\series default
+ Calculate forces between particles and apply them. 
+\end_layout
+
+\begin_layout Standard
+Before the implementation of FMM into codes, and particularly before the era of modern accelerated computing (e.g., SIMD vectorization and GPU computing) the forces calculations dominated the computational cost. In more recent simulations, each category is about one third of the total calculation time
+\begin_inset CommandInset citation
+LatexCommand cite
+after ""
+key "2017ComAC...4....2P"
+literal "false"
+
+\end_inset
+
+. This makes the tree building and load balancing subjects to great performance gains, since GPU acceleration is usually not exploited.
+\end_layout
+
+\begin_layout Standard
+This project proposes to implement Tree Building with the GPU using CUDA to accelerate load balancing.
+\end_layout
+
+\begin_layout Subsection
+Target Data
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset CommandInset label
+LatexCommand label
+name "section:target-data"
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+TODO
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+Write about properties of datasets
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+The target data consists of 
+\begin_inset Formula $N$
+\end_inset
+
+ particles where each particle has several data points and introduce the following definitions:
+\end_layout
+
+\begin_layout Itemize
+We define a particle as 
+\begin_inset Formula $p_i$
+\end_inset
+
+ where 
+\begin_inset Formula $i \in \{0,...,N\}$
+\end_inset
+
+. 
+\end_layout
+
+\begin_layout Itemize
+We define the space of binary numbers with a precision of 
+\begin_inset Formula $p$
+\end_inset
+
+ as 
+\begin_inset Formula $\mathbb{B}_p$
+\end_inset
+
+ where we have 
+\begin_inset Formula $a \in \mathbb{B}_p \Leftrightarrow a \in \{0,1\}^{p}$
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Itemize
+We define the corner coordinates of root domain with 
+\begin_inset Formula $\vec{lower}, \vec{upper}$
+\end_inset
+
+ where we have 
+\begin_inset Formula $\vec{b} \in \mathbb{B}_p^3$
+\end_inset
+
+. 
+\end_layout
+
+\begin_layout Itemize
+We define the coordinates of a particle 
+\begin_inset Formula $p_i$
+\end_inset
+
+ as 
+\begin_inset Formula $\vec{x_i}$
+\end_inset
+
+ for which holds 
+\begin_inset Formula $\{\vec{x} | \vec{lower} \leq \vec{x} \leq \vec{upper}, \vec{x} \in \mathbb{B}_p^3 \}$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset Float figure
+placement H
+wide false
+sideways false
+status open
+
+
+\begin_layout Standard
+\align center
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+begin{tikzpicture}
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+randistr{10}{5}{100}
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+draw (0,0) rectangle (10, 5);
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+filldraw  (0,0) circle (3pt) node [anchor=west]{};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node[yshift=0.3cm, xshift=-0.3cm] at (0,0) {$-
+\backslash
+frac{b}{2}$};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+filldraw  (10,5) circle (3pt) node [anchor=west]{};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node[yshift=0.3cm, xshift=-0.3cm] at (10,5) {$
+\backslash
+frac{b}{2}$};
+\end_layout
+
+\begin_layout Plain Layout
+		
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+end{tikzpicture}
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Unfiorm random distribution of 3D coordinates in square domain projected onto a 2d plane
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+Q
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+Ask Doug
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Force Integration and FFM
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset CommandInset label
+LatexCommand label
+name "section:force-integration"
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+TODO
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+Write about how the very unequal data can also affect integration 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ Non equal weighting functions for different particles are due to higher accelerations and greater proximity to strong gravitational influences. This in turn requires a higher integrations accuracy to mitigate errors. When we try to balance the workload, this implies drawbacks in terms of memory balance.
+\end_layout
+
+\begin_layout Subsection
+Target Computing Systems
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset CommandInset label
+LatexCommand label
+name "section:target-systems"
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+TODO
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+Write about systems which can be used to test data and systems which are worth considering while estimating runtimes of this approach.
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+PKDGrav
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+TODO
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+Brief summary of PKDGrav and how this work can be used to improve PKDGrav
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset Newpage newpage
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section
+Orthogonal Recursive Bisection (ORB)
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset CommandInset label
+LatexCommand label
+name "section:orb"
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+%https://de.overleaf.com/learn/latex/TikZ_package
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+%https://texample.net/tikz/examples/
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+
+In this section we will introduce the ORB algorithm along with its subroutines. In principle the ORB Algorithm is used to partition a multi dimensional domain into subdomains based on spatial proximity. It does so by splitting a 
+\begin_inset Formula $k$
+\end_inset
+
+ dimensional domain containing 
+\begin_inset Formula $N$
+\end_inset
+
+ particles into 
+\begin_inset Formula $d$
+\end_inset
+
+ subdomains each of 
+\begin_inset Formula $k$
+\end_inset
+
+ dimensions. This is most efficiently achieved using a recursive algorithm. During the recursive process, we can store all intermediate domains a binary tree. We commonly refer to a node of this tree as 
+\begin_inset Formula $cell$
+\end_inset
+
+. A 
+\begin_inset Formula $cell$
+\end_inset
+
+ is a datastructure which keeps track of the domain information and also keeps pointers to its left and right child cells. When regarding the final tree, we will notice that the number of leaf nodes, or in our case leaf cells must be exactly equal to 
+\begin_inset Formula $d$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+When we have built the binary tree successfully, we can leverage it in two ways:
+\end_layout
+
+\begin_layout Enumerate
+For simulation code and more specifically for the Fast Multipole Method the tree can be leveraged to greatly accelerate the simulation time. 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+TODO
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+expand
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Enumerate
+The tree can be used to equally distribute memory and/or workload among nodes or processors in a computing system. 
+\end_layout
+
+\begin_layout Standard
+Our main objective in this work is to improve the runtime of astrophysical simulations, or more specifically PKDGrav. At the same time we want to minimize penalties in regards to 
+\begin_inset Formula $N$
+\end_inset
+
+, the total number of particles, such that we can leverage a high 
+\begin_inset Formula $N$
+\end_inset
+
+ to increase the precision of the simulation. Furthermore we want to adapt and optimize the algorithms with regards to the target data as introduced in 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "section:target-data"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+ and target computing systems (
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "section:target-systems"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+).
+\end_layout
+
+\begin_layout Subsubsection
+By example
+\end_layout
+
+\begin_layout Standard
+For the purpose of explaining the algorithm both visualy and by a numveric example, we consider the following minimal dataset:
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+begin{filecontents*}
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+particles4.csv
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ x,y,id 0.4,0.3,0 0.2,0.6,1 0.8,0.9,2 0.6,0.5,3 0.3,0.8,4 0.7,0.1,5 0.9,0.8,6 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+end{filecontents*}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset Float figure
+placement H
+wide false
+sideways false
+status open
+
+
+\begin_layout Standard
+\align center
+
+\begin_inset Box Frameless
+position "c"
+hor_pos "l"
+has_inner_box 1
+inner_pos "c"
+use_parbox 0
+use_makebox 0
+width "20line%"
+special "none"
+height "1in"
+height_special "totalheight"
+thickness "0.4pt"
+separation "3pt"
+shadowsize "4pt"
+framecolor "black"
+backgroundcolor "none"
+status open
+
+
+\begin_layout Plain Layout
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+csvreader
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+[
+\end_layout
+
+\end_inset
+
+ tabular=ccc, table head=
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+hline
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+bfseries
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+x
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ & 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+bfseries
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+y
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ & 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+bfseries
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+id
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Newline newline
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+hline
+\end_layout
+
+\end_inset
+
+, late after last line=
+\begin_inset Newline newline
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+hline
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+% horizontal line at the end of the table
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+]
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+particles4.csv
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{}
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+csvlinetotablerow
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+
+
+\begin_inset Box Frameless
+position "c"
+hor_pos "l"
+has_inner_box 1
+inner_pos "c"
+use_parbox 0
+use_makebox 0
+width "70line%"
+special "none"
+height "1in"
+height_special "totalheight"
+thickness "0.4pt"
+separation "3pt"
+shadowsize "4pt"
+framecolor "black"
+backgroundcolor "none"
+status open
+
+
+\begin_layout Plain Layout
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+begin{tikzpicture}
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+                
+\backslash
+begin{axis}
+\end_layout
+
+\begin_layout Plain Layout
+                 [
+\end_layout
+
+\begin_layout Plain Layout
+                    nodes near coords,
+\end_layout
+
+\begin_layout Plain Layout
+                    xmin=0,
+\end_layout
+
+\begin_layout Plain Layout
+                    xmax=1,
+\end_layout
+
+\begin_layout Plain Layout
+                    ymin=0,
+\end_layout
+
+\begin_layout Plain Layout
+                    ymax=1
+\end_layout
+
+\begin_layout Plain Layout
+                ]
+\end_layout
+
+\begin_layout Plain Layout
+                
+\backslash
+addplot+[
+\end_layout
+
+\begin_layout Plain Layout
+                    only marks,
+\end_layout
+
+\begin_layout Plain Layout
+                    point meta=explicit symbolic
+\end_layout
+
+\begin_layout Plain Layout
+                ] table [
+\end_layout
+
+\begin_layout Plain Layout
+                    x=x, 
+\end_layout
+
+\begin_layout Plain Layout
+                    y=y, 
+\end_layout
+
+\begin_layout Plain Layout
+                    meta=id, 
+\end_layout
+
+\begin_layout Plain Layout
+                    col sep=comma] 
+\end_layout
+
+\begin_layout Plain Layout
+                {particles4.csv};
+\end_layout
+
+\begin_layout Plain Layout
+                
+\backslash
+end{axis}
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+            
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+end{tikzpicture}
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Example distribution with 
+\begin_inset Formula $N$
+\end_inset
+
+ = 7
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Memory and Workload Balancing
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset CommandInset label
+LatexCommand label
+name "balancing"
+
+\end_inset
+
+ We have now formulated our main objectives for improving ORB, which are to improve the runtime but at the same time keeping 
+\begin_inset Formula $N$
+\end_inset
+
+ as large as possible. In this section we will explain how the two cannot be maximized at the same time, as there will we averse effects when disregarding interactions.
+\end_layout
+
+\begin_layout Standard
+As described in section 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "section:force-integration"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+ if we want to mitigate the error across all particles, we need to introduce more discrete time steps for certain particles than for others. The need for non constant simulations steps across the simulation, is caused by the vastly variant forces which are exercised on different particles. It is possible that certain particles follow a straight path with an almost constant velocity, whereas others are influences by strong gravitational poles. We denote the workload for a particle 
+\begin_inset Formula $p_i$
+\end_inset
+
+ as the weighting function 
+\begin_inset Formula $w(p_i)$
+\end_inset
+
+. In an optimally parallelized system the workload should be very similar among computing units, thus it would make sense to distribute the particles regarding the weighting function. This in turn implies an unqeual distribution of the particles with regards to memory.
+\end_layout
+
+\begin_layout Standard
+Let us consider a simple example to illustrate the point. Given the set of particles 
+\begin_inset Formula $A = {p_1, p_2, .., p_{2N/3}}$
+\end_inset
+
+ and respectively 
+\begin_inset Formula $B = {p_{2N/3 + 1}, p_2, .., p_{N}}$
+\end_inset
+
+. Let us now consider the that 
+\begin_inset Formula $\forall p \in A : w(p) = 1$
+\end_inset
+
+ and 
+\begin_inset Formula $\forall p \in B : w(p) = 2$
+\end_inset
+
+. If we assign all particles from set 
+\begin_inset Formula $A$
+\end_inset
+
+ to process with rank 0 and the particles from B to rank 1. It is clear that 
+\begin_inset Formula $\sum_{p\in A}^{} w(p) = \sum_{p\in B}^{} w(p)$
+\end_inset
+
+. Thus the two processors are balanced in terms of computing costs, but clearly they are not balanced in terms of memory size. In fact process with rank 0 has 
+\begin_inset Formula $2N/3$
+\end_inset
+
+ elements and rank 1 has 
+\begin_inset Formula $N/3$
+\end_inset
+
+ elements. Thus there will be processes with free memory capacity which are not taken advantage of. This in turn means that we need to reduce the total number of particles 
+\begin_inset Formula $N$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+To which degree we decide to favour memory over workload balancing is difficult to answer. But as for now we will parametrize the workload using the weighting function, which allows us to optimize and decide at a later stage. If we decide to completely ignore the workload balancing and solely focus on memory balancing, we can simply set the 
+\begin_inset Formula $w(p_i) = 1$
+\end_inset
+
+ for all particles.
+\end_layout
+
+\begin_layout Subsection
+ORB
+\end_layout
+
+\begin_layout Standard
+In each recursive call of the ORB algorithm, we are given a 
+\begin_inset Formula $cell$
+\end_inset
+
+ along with a number of desired leaf cells 
+\begin_inset Formula $d_{cell}$
+\end_inset
+
+, which of course corresponds to 
+\begin_inset Formula $d$
+\end_inset
+
+ for the root cell. Furthermore each cell has information about the volume it encompasses (also refereed to its domain) stored as 
+\begin_inset Formula $V_{cell}$
+\end_inset
+
+. We then split this 
+\begin_inset Formula $cell$
+\end_inset
+
+, into two child cells 
+\begin_inset Formula $leftCell$
+\end_inset
+
+ and 
+\begin_inset Formula $rightCell$
+\end_inset
+
+. For the domains of 
+\begin_inset Formula $leftCell$
+\end_inset
+
+ and 
+\begin_inset Formula $rightCell$
+\end_inset
+
+ we have the following properties:
+\end_layout
+
+\begin_layout Standard
+\align center
+
+\begin_inset Formula \begin{equation}
+		V_{cell} = V_{leftCell} \cup V_{rightChild}
+	\end{equation}
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\align center
+
+\begin_inset Formula \begin{equation}
+		V_{leftCell} \cap V_{rightChild} = \emptyset
+	\end{equation}
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+How the domains of the child cells are exactly defined, will be explained in later stages of this section. Primarily we need to define the variable 
+\begin_inset Formula $d$
+\end_inset
+
+ for the child cells.
+\end_layout
+
+\begin_layout Standard
+Given a cell with we recursively define 
+\begin_inset Formula $nLeafCells$
+\end_inset
+
+ for its children as follows:
+\end_layout
+
+\begin_layout Standard
+\align center
+
+\begin_inset Formula \begin{equation}
+		d_{leftCell} = \left \lceil\frac{d_{cell}}{2} \right \rceil 
+	\end{equation}
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\align center
+
+\begin_inset Formula \begin{equation}
+		d_{rightCell} = d_{cell} - d_{leftCell}
+	\end{equation}
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Finally we need to determine the number of particles, which should be encompassed in 
+\begin_inset Formula $V_{leftCell}$
+\end_inset
+
+ and 
+\begin_inset Formula $V_{rigtCell}$
+\end_inset
+
+. We define the number of particles as 
+\begin_inset Formula $N_{cell}$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+\align center
+
+\begin_inset Formula \begin{equation}
+		N_{leftCell} = min \left \{ x \in \{0,...,N_{cell} \} : \sum_{i=0}^{x} w(p_i) \geq 0.5 \times \sum_{i=0}^{N_{cell}} w(p_i) \right \} 
+	\end{equation}
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\align center
+
+\begin_inset Formula \begin{equation}
+		N_{rightCell} = N_{cell} - N_{leftCell}
+	\end{equation}
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+To simplify the visual and numeric explanation of the ORB algorithm, we assume 
+\begin_inset Formula $\forall i \in \{0,..,N\} : w(p_i) = 1$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+The ORB algorithm is initiated by considering the volume 
+\begin_inset Formula $V_{cell}$
+\end_inset
+
+ which encompasses all particle coordinates. In each iteration we use a binary search algorithm, which we will introduce in later stages, to determine a cut 
+\begin_inset Formula $c$
+\end_inset
+
+ position. This cut position is defined along a specified axis, which is determined by the dimension where the domain is largest. In three dimensional space we can then represent this cut as a plane and make simple checks weather a particle is right or left of this plane.
+\end_layout
+
+\begin_layout Standard
+The ideal cut plane is defined such that exactly 
+\begin_inset Formula $N_{leftChild}$
+\end_inset
+
+ particles are located to its left side. This cut plane allows us to split the volume 
+\begin_inset Formula $V_{cell}$
+\end_inset
+
+ in two subdomain, where the 
+\begin_inset Formula $V_{leftCell}$
+\end_inset
+
+ is constrained by our original domain boundaries and the cut plane on its right side. The same can be done for the right cell, where the cut plane determines the left side boundaries of the volume 
+\begin_inset Formula $V_{rightCell}$
+\end_inset
+
+. We repeat this process until we have segmented our initial domain into 
+\begin_inset Formula $d$
+\end_inset
+
+ leaf cells.
+\end_layout
+
+\begin_layout Standard
+The reason to choose the cut axis using the mentioned method, is that it reduces thin and non square shapes and converges to squares. In this non general case, where 
+\begin_inset Formula $d$
+\end_inset
+
+ is a power of two, we are able to construct a binary tree wit exactly 
+\begin_inset Formula $d$
+\end_inset
+
+ leaf nodes and a height of 
+\begin_inset Formula $log(d)$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset Float figure
+placement ht
+wide false
+sideways false
+status open
+
+
+\begin_layout Standard
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+centering
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+begin{tikzpicture}
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+                
+\backslash
+begin{axis}
+\end_layout
+
+\begin_layout Plain Layout
+                [
+\end_layout
+
+\begin_layout Plain Layout
+                    nodes near coords,
+\end_layout
+
+\begin_layout Plain Layout
+                    xmin=-0.,
+\end_layout
+
+\begin_layout Plain Layout
+                    xmax=1.,
+\end_layout
+
+\begin_layout Plain Layout
+                    ymin=-0.,
+\end_layout
+
+\begin_layout Plain Layout
+                    ymax=1.,
+\end_layout
+
+\begin_layout Plain Layout
+                    title=Recursion depth 0
+\end_layout
+
+\begin_layout Plain Layout
+                ]
+\end_layout
+
+\begin_layout Plain Layout
+                
+\backslash
+addplot    +[
+\end_layout
+
+\begin_layout Plain Layout
+                    only marks,
+\end_layout
+
+\begin_layout Plain Layout
+                    point meta=explicit symbolic
+\end_layout
+
+\begin_layout Plain Layout
+                ] table [
+\end_layout
+
+\begin_layout Plain Layout
+                    x=x, 
+\end_layout
+
+\begin_layout Plain Layout
+                    y=y, 
+\end_layout
+
+\begin_layout Plain Layout
+                    meta=id, 
+\end_layout
+
+\begin_layout Plain Layout
+                    col sep=comma] 
+\end_layout
+
+\begin_layout Plain Layout
+                {particles4.csv};
+\end_layout
+
+\begin_layout Plain Layout
+                
+\backslash
+draw [fill=red!20](0.0,0.0) rectangle (1, 1);
+\end_layout
+
+\begin_layout Plain Layout
+                
+\backslash
+node[below] at (0.5, 1){$cell_1$};
+\end_layout
+
+\begin_layout Plain Layout
+                
+\backslash
+end{axis}
+\end_layout
+
+\begin_layout Plain Layout
+            
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+end{tikzpicture}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset Float figure
+placement H
+wide false
+sideways false
+status open
+
+
+\begin_layout Standard
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+centering
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+begin{forest}
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+[
+\end_layout
+
+\end_inset
+
+ [
+\begin_inset Formula $cell_1$
+\end_inset
+
+ [
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+]
+\end_layout
+
+\end_inset
+
+ ] 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+end{forest}
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset Float figure
+placement H
+wide false
+sideways false
+status open
+
+
+\begin_layout Standard
+\align center
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+begin{tikzpicture}
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+pgfmathsetseed{2};
+\end_layout
+
+\begin_layout Plain Layout
+                
+\backslash
+begin{axis}
+\end_layout
+
+\begin_layout Plain Layout
+                [
+\end_layout
+
+\begin_layout Plain Layout
+                    nodes near coords,
+\end_layout
+
+\begin_layout Plain Layout
+                    xmin=-0.,
+\end_layout
+
+\begin_layout Plain Layout
+                    xmax=1.,
+\end_layout
+
+\begin_layout Plain Layout
+                    ymin=-0.,
+\end_layout
+
+\begin_layout Plain Layout
+                    ymax=1.,
+\end_layout
+
+\begin_layout Plain Layout
+                    title=Recursion depth 1
+\end_layout
+
+\begin_layout Plain Layout
+                ]
+\end_layout
+
+\begin_layout Plain Layout
+                
+\backslash
+addplot+[
+\end_layout
+
+\begin_layout Plain Layout
+                    only marks,
+\end_layout
+
+\begin_layout Plain Layout
+                    point meta=explicit symbolic
+\end_layout
+
+\begin_layout Plain Layout
+                ] table [
+\end_layout
+
+\begin_layout Plain Layout
+                    x=x, 
+\end_layout
+
+\begin_layout Plain Layout
+                    y=y, 
+\end_layout
+
+\begin_layout Plain Layout
+                    meta=id, 
+\end_layout
+
+\begin_layout Plain Layout
+                    col sep=comma] 
+\end_layout
+
+\begin_layout Plain Layout
+                {particles4.csv};
+\end_layout
+
+\begin_layout Plain Layout
+                
+\backslash
+draw [fill=green!20](0.0,0.0) rectangle (0.65, 1);
+\end_layout
+
+\begin_layout Plain Layout
+                
+\backslash
+draw [fill=blue!20](0.65,0.0) rectangle (1, 1);
+\end_layout
+
+\begin_layout Plain Layout
+                
+\backslash
+node[below] at (0.2, 1){$cell_2$};
+\end_layout
+
+\begin_layout Plain Layout
+                 
+\backslash
+node[below] at (0.7, 1){$cell_3$};
+\end_layout
+
+\begin_layout Plain Layout
+                
+\backslash
+end{axis}
+\end_layout
+
+\begin_layout Plain Layout
+            
+\end_layout
+
+\begin_layout Plain Layout
+		
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+end{tikzpicture}
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset Float figure
+placement H
+wide false
+sideways false
+status open
+
+
+\begin_layout Standard
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+centering
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+begin{forest}
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+[
+\end_layout
+
+\end_inset
+
+ [
+\begin_inset Formula $cell_1$
+\end_inset
+
+ [
+\begin_inset Formula $cell_2$
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+]
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+[
+\end_layout
+
+\end_inset
+
+
+\begin_inset Formula $cell_3$
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+]
+\end_layout
+
+\end_inset
+
+ ] 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+end{forest}
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset Float figure
+placement H
+wide false
+sideways false
+status open
+
+
+\begin_layout Standard
+\align center
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+begin{tikzpicture}
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+pgfmathsetseed{2};
+\end_layout
+
+\begin_layout Plain Layout
+                
+\backslash
+begin{axis}
+\end_layout
+
+\begin_layout Plain Layout
+                [
+\end_layout
+
+\begin_layout Plain Layout
+                    nodes near coords,
+\end_layout
+
+\begin_layout Plain Layout
+                    xmin=-0.,
+\end_layout
+
+\begin_layout Plain Layout
+                    xmax=1.,
+\end_layout
+
+\begin_layout Plain Layout
+                    ymin=-0.,
+\end_layout
+
+\begin_layout Plain Layout
+                    ymax=1.,
+\end_layout
+
+\begin_layout Plain Layout
+                    title=Recursion depth 2
+\end_layout
+
+\begin_layout Plain Layout
+                ]
+\end_layout
+
+\begin_layout Plain Layout
+                
+\backslash
+addplot+[
+\end_layout
+
+\begin_layout Plain Layout
+                    only marks,
+\end_layout
+
+\begin_layout Plain Layout
+                    point meta=explicit symbolic
+\end_layout
+
+\begin_layout Plain Layout
+                ] table [
+\end_layout
+
+\begin_layout Plain Layout
+                    x=x, 
+\end_layout
+
+\begin_layout Plain Layout
+                    y=y, 
+\end_layout
+
+\begin_layout Plain Layout
+                    meta=id, 
+\end_layout
+
+\begin_layout Plain Layout
+                    col sep=comma] 
+\end_layout
+
+\begin_layout Plain Layout
+                {particles4.csv};
+\end_layout
+
+\begin_layout Plain Layout
+                
+\backslash
+draw [fill=pink!20](0.0,0.0) rectangle (0.65, 0.55);
+\end_layout
+
+\begin_layout Plain Layout
+                
+\backslash
+draw [fill=yellow!20](0.0,0.55) rectangle (0.65, 1);
+\end_layout
+
+\begin_layout Plain Layout
+                
+\backslash
+draw [fill=blue!20](0.65,0.0) rectangle (1, 1);
+\end_layout
+
+\begin_layout Plain Layout
+                
+\backslash
+node[below] at (0.2, 1){$cell_4$};
+\end_layout
+
+\begin_layout Plain Layout
+                
+\backslash
+node[above] at (0.2, 0){$cell_5$};
+\end_layout
+
+\begin_layout Plain Layout
+                
+\backslash
+node[below] at (0.7, 1){$cell_3$};
+\end_layout
+
+\begin_layout Plain Layout
+                
+\backslash
+end{axis}
+\end_layout
+
+\begin_layout Plain Layout
+            
+\end_layout
+
+\begin_layout Plain Layout
+		
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+end{tikzpicture}
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset Float figure
+placement H
+wide false
+sideways false
+status open
+
+
+\begin_layout Standard
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+centering
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+begin{forest}
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+[
+\end_layout
+
+\end_inset
+
+ [
+\begin_inset Formula $cell_1$
+\end_inset
+
+ [
+\begin_inset Formula $cell_2$
+\end_inset
+
+ [
+\begin_inset Formula $cell_4$
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+]
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+[
+\end_layout
+
+\end_inset
+
+[
+\begin_inset Formula $cell_5$
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+]
+\end_layout
+
+\end_inset
+
+][
+\begin_inset Formula $cell_3$
+\end_inset
+
+] ] 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+end{forest}
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Since 
+\begin_inset Formula $d_{cellLeft} - d_{cellRight}$
+\end_inset
+
+ must always be 
+\begin_inset Formula $\leq 1$
+\end_inset
+
+, it must hold that the tree is a balanced binary tree. Therefore we can conclude that the height of the tree is equal to 
+\begin_inset Formula $\lceil log(d) \rceil$
+\end_inset
+
+ and the total number of nodes (not only leaf nodes) is 
+\begin_inset Formula $log(d) \times d$
+\end_inset
+
+. Since we have a balanced tree, we also have the possibility of storing it in a heap data-structure, which can in turn greatly increase the performance, since we will not have to perform a tree walk to access individual cells in the tree.
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset Float algorithm
+placement H
+wide false
+sideways false
+status open
+
+
+\begin_layout Standard
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+The ORB main routine
+\end_layout
+
+\end_inset
+
+
+\begin_inset CommandInset label
+LatexCommand label
+name "euclid"
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+begin{algorithmic}
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+[
+\end_layout
+
+\end_inset
+
+1
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+]
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+Procedure
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+orb
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+
+\begin_inset Formula $\vec{lower}, \vec{upper} ,x, d_i$
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+State
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Formula $\vec{size} = \vec{upper} - \vec{lower}$
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+State
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Formula $axis = maxIndex(\vec{size}_0, \vec{size}_1, \vec{size}_2)$
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+Comment
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+Get index of max value
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Newline newline
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+State
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Formula $cut = cut(x, \vec{lower}_{axis}, \vec{upper}_{axis}, axis, )$
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+State
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Formula $mid = reshuffle(split, axis, x)$
+\end_inset
+
+ 
+\begin_inset Newline newline
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+State
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Formula $\vec{upperChild} = \vec{upper}$
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+State
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Formula $upperChild_{axis} = cut$
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+State
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Formula $\vec{lowerChild} = \vec{lower}$
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+State
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Formula $lowerChild_{axis} = cut$
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+State
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Formula $d_{i \times 2 } = \left \lceil\frac{d_{i}}{2} \right \rceil$
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+State
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+Call
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+orb
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+
+\begin_inset Formula $\vec{lower}, \vec{upperChild}, x, $
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+EndProcedure
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+end{algorithmic}
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Binary Search
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+%Finding the median of a large particle array is an essential step for ORB. We will thus explore different algorithms alongside their advantages and disadvantages for our specific use case.
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+%Note that there exists approximation algorithms for example the median of medians algorithms. But the correctness guarantee of the median lying between 30
+\backslash
+% and 70
+\backslash
+% is not good enough in our case. If we were to implement such an approximation algorithms we would run into similar issues as described in 
+\backslash
+ref{sec:balancing}. But in this case the unequal memory balancing do not have the advantage of equal workload balancing, which in turn will worsen the performance and the maximum number of workable particles. Thus we will only consider approximation algorithms, if their approximation to the ideal values are very exact and can be determined.
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+The binary search algorithm takes an array of particles, an axis, a left and right boundary as well as a percentage 
+\begin_inset Formula $r$
+\end_inset
+
+ of particles which should be on the left side to the determined cut. Its goal is to return a position, such that the particles on the left side of the cut are equal to the percentage input parameter multiplied by all particles.
+\end_layout
+
+\begin_layout Standard
+Due to time constraints we will not investigate the use of approximate algorithms and leave this open to further work.
+\end_layout
+
+\begin_layout Subsubsection
+Basic Binary Search
+\end_layout
+
+\begin_layout Standard
+The first step is to make an estimation for a cut. In our case we simply assume it to be the exact middle of the domain boundaries. In principle the binary cut counts the number of particles on the left side of the of an initial cut. In case the particles are less than half of all particles, it clear that the cut was too far to the left, and the new right boundary of the domain is the cut. In case the particles are more than half, we set the the left boundary as the cut. This is repeated until we find a precise cut position.
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset Float algorithm
+placement H
+wide false
+sideways false
+status open
+
+
+\begin_layout Standard
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Basic Binary search
+\end_layout
+
+\end_inset
+
+
+\begin_inset CommandInset label
+LatexCommand label
+name "algo:cut"
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+begin{algorithmic}
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+[
+\end_layout
+
+\end_inset
+
+1
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+]
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+Procedure
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+cut
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+
+\begin_inset Formula $x, N_j, left, right, axis, percentage$
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+State
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Formula $nLeft = 0$
+\end_inset
+
+ 
+\begin_inset Newline newline
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+While
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+
+\begin_inset Formula $abs(nLeft - N_j * percentage) > 0 $
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+State
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Formula $cut = (right + left ) / 2 $
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+State
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Formula $nLeft\gets sum(x_{:,axis} < split)$
+\end_inset
+
+ 
+\begin_inset Newline newline
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+If
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+
+\begin_inset Formula $nLeft <= N_j * percentage$
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+State
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Formula $left = cut$
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+Else
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+State
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Formula $right = cut$
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+EndIf
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Newline newline
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+EndWhile
+\end_layout
+
+\end_inset
+
+
+\begin_inset CommandInset label
+LatexCommand label
+name "euclidendwhile"
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+State
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+Return
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Formula $cut$
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+EndProcedure
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+end{algorithmic}
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+We analyse the runtime of the cut algorithm as follows: Inside the loop we count the number of particles on the left side of the cut and since the array is unordered, we need to sweep over elements once which results in a runtime of 
+\begin_inset Formula $O(N)$
+\end_inset
+
+. Next we estimate the maximum number of iterations our loop needs to repeated. With each iteration we cut in half the domain size. 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+TODO
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+ Thus after the first iteration the domain size is 
+\begin_inset Formula $2^{31}$
+\end_inset
+
+. It is therefore where easy to verify that a maximum of 32 repetitions can be performed before our domain reaches a size of 
+\begin_inset Formula $2^0$
+\end_inset
+
+. In this case the cut cannot be improved as it has already reached the maximum precision. We conclude a worst case performance of 
+\begin_inset Formula $O(N \times 32)$
+\end_inset
+
+. 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsubsection
+Improved Binary Search
+\end_layout
+
+\begin_layout Standard
+In this version we will replace the while loop by a for loop, furthermore we will add an early stopping condition. We will show that this change (1) improves the runtime and (2) is actually necessary in some cases.
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset Float algorithm
+placement H
+wide false
+sideways false
+status open
+
+
+\begin_layout Standard
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Deterministic find cut with early stopping
+\end_layout
+
+\end_inset
+
+
+\begin_inset CommandInset label
+LatexCommand label
+name "algo:cut"
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+begin{algorithmic}
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+[
+\end_layout
+
+\end_inset
+
+1
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+]
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+Procedure
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+cut
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+
+\begin_inset Formula $x, N_j, left, right, axis, percentage$
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+State
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Formula $nLeft = 0$
+\end_inset
+
+ 
+\begin_inset Newline newline
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+For
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+
+\begin_inset Formula $k \in {0,..,p}$
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+State
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Formula $cut = (right + left ) / 2 $
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+State
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Formula $nLeft\gets sum(x_{:,axis} < split)$
+\end_inset
+
+ 
+\begin_inset Newline newline
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+If
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+
+\begin_inset Formula $abs(nLeft - N_j * percentage) < \alpha $
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+State
+\end_layout
+
+\end_inset
+
+ Break 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+EndIf
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Newline newline
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+If
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+
+\begin_inset Formula $nLeft <= N_j * percentage$
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+State
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Formula $left = cut$
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+Else
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+State
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Formula $right = cut$
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+EndIf
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Newline newline
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+EndFor
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+State
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+Return
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Formula $cut$
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+EndProcedure
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+end{algorithmic}
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Let us consider the following example particle distribution where 
+\begin_inset Formula $particle_1$
+\end_inset
+
+ and 
+\begin_inset Formula $particle_2$
+\end_inset
+
+ have identical x coordinates.
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset Float figure
+placement H
+wide false
+sideways false
+status open
+
+
+\begin_layout Standard
+\align center
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+begin{tikzpicture}
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+draw [ dashed](5 cm, 0 cm) -- (5 cm, 3 cm);
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+cutoffdistr{10}{3}{3};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+draw (0,0) rectangle (10, 3);
+\end_layout
+
+\begin_layout Plain Layout
+		
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+end{tikzpicture}
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+If we want to split this domain, there would not exists a correct split, where 
+\begin_inset Formula $nLeft$
+\end_inset
+
+ is equal to 
+\begin_inset Formula $\frac{N}{2}$
+\end_inset
+
+. In fact this example can be made more extreme by adding more particles which are distributed along a the line. The 
+\begin_inset Formula $\alpha$
+\end_inset
+
+ value defines by how many particles the final cut value can be off from the actual ideal median value. In this case we would assign 
+\begin_inset Formula $particle_0$
+\end_inset
+
+ to the left child cell and the other particles to the right child cell. Since we can extend this example where our 
+\begin_inset Formula $\alpha$
+\end_inset
+
+ value should be equal to 
+\begin_inset Formula $N$
+\end_inset
+
+, we also replace the while with a for loop. Since we have already shown that the maximum number of iterations is equal to 
+\begin_inset Formula $p$
+\end_inset
+
+, we can make use of this to avoid infinite loops.
+\end_layout
+
+\begin_layout Standard
+Considering the runtime improvements, we will show that the introduction of the 
+\begin_inset Formula $\alpha$
+\end_inset
+
+ value brings some improvements. 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+TODO
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+Elaborate
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset Note Comment
+status open
+
+\begin_layout Subsubsection
+Binary Search with improved guessing
+\end_layout
+
+\begin_layout Standard
+As we can see in 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "algo:cut"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+, the initial guess of the cut is simply the center of the domain. But if we consider non uniform distributions, this initial guess can possibly rather bad. Let us consider the following example:
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset Float figure
+placement H
+wide false
+sideways false
+status open
+
+
+\begin_layout Standard
+\align center
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+begin{tikzpicture}
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+def
+\backslash
+mean{0.1}
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+def
+\backslash
+sigma{0.1}
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+def
+\backslash
+pi{3.14159265359}
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+begin{axis}[xmin = 0, xmax = 1, ymin=0, ymax=5, samples=60]
+\end_layout
+
+\begin_layout Plain Layout
+				
+\backslash
+addplot[domain = 0:1,blue] {1 / (
+\backslash
+sigma * sqrt(2 * 
+\backslash
+pi)) * exp(-0.5 * ((x - 
+\backslash
+mean) / 
+\backslash
+sigma)^2) };
+\end_layout
+
+\begin_layout Plain Layout
+				
+\backslash
+draw (axis cs:0.5,0) -- node[left]{$c_0$} (axis cs:0.5,5);
+\end_layout
+
+\begin_layout Plain Layout
+				
+\backslash
+draw (axis cs:0.25,0) -- node[left]{$c_1$} (axis cs:0.25,5);
+\end_layout
+
+\begin_layout Plain Layout
+				
+\backslash
+draw (axis cs:0.125,0) -- node[left]{$c_2$} (axis cs:0.125,5);
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+end{axis}
+\end_layout
+
+\begin_layout Plain Layout
+		
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+end{tikzpicture}
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+3 iterations of binary search with naive initial guess
+\end_layout
+
+\end_inset
+
+
+\begin_inset CommandInset label
+LatexCommand label
+name "euclid"
+
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+The underlying distribution is a normal distribution. 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+TODO
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+Add reference to section about data
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+. We can see that the algorithm will have to sweep 3 times over the entire array to get into the region of the actual median. One suggestion for improvement is to use an approximated median as a guess for the first split. We can sample 100 particles and find their median in constant time. Then we will run the binary cut algorithm using the approximated median as an initial guess. This can reduce the runtime by a few iterations, however we cannot make any assessment about the runtime, as this improvement will make the algorithm even slower on some distributions. Let us for example consider the uniform distribution, in this case the addition is pure overhead as the center is already the most accurate initial guess. 
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Reshuffling Algorithm
+\end_layout
+
+\begin_layout Standard
+We have already introduced all basic building blocks of the ORB algorithm. The only and final piece which is missing is the reshuffling algorithm. Note that it is not necessarily part of the ORB algorithm, but rather the bookkeeping strategy of the data-structure. We want to continuously update the particles array and in the words used before, have a direct correlation between 
+\begin_inset Formula $x_i$
+\end_inset
+
+ and 
+\begin_inset Formula $i$
+\end_inset
+
+. This allows us to group all particles, which are contained in a cell in a fixed range of indexes of the particles array.
+\end_layout
+
+\begin_layout Standard
+When thinking about this in terms of the recursive algorithm, maintaining this data structure is pretty straight forward. Each time we split a cell into two children, we make sure that particles contained in the left child cell are found in a designated range of the particles array, and the exact same concept is applied to the right cell.
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset Float algorithm
+placement H
+wide false
+sideways false
+status open
+
+
+\begin_layout Standard
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Reshuffle algorithm
+\end_layout
+
+\end_inset
+
+
+\begin_inset CommandInset label
+LatexCommand label
+name "euclid"
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+begin{algorithmic}
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+[
+\end_layout
+
+\end_inset
+
+1
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+]
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+Procedure
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+reshuffle
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+
+\begin_inset Formula $x, N_j, cut, axis$
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+State
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Formula $i = 0$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+For
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+
+\begin_inset Formula $k \in {0,..N_j - 1}$
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+If
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+
+\begin_inset Formula $\vec{x}_{k, axis} < split$
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+State
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Formula $i = i + 1$
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+State
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Formula $x_{i}, x_{k} = x_{k}, x_{i}$
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+EndIf
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+EndFor
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+State
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Formula $ x_{i}, x_{N_j-1} = x_{N_j-1}, x_{i}$
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+State
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+Return
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset Formula $i$
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+EndProcedure
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+end{algorithmic}
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+The reshuffle algorithm has a clearly observable runtime of 
+\begin_inset Formula $O(N)$
+\end_inset
+
+ since we iterate over all particles once. Since we need to touch each element at least once to reshuffle the entire array there is no better algorithm than this.
+\end_layout
+
+\begin_layout Subsection
+Parallelize ORB 
+\end_layout
+
+\begin_layout Standard
+In the context of parallelization schemas we assume a computing model, where the number of processors is 
+\begin_inset Formula $np$
+\end_inset
+
+. When the goal of the algorithm is workload balancing, we will want to set 
+\begin_inset Formula $d = np$
+\end_inset
+
+ to end up with exactly as many leaf cells as we have processors. In the context of a supercomputing system 
+\begin_inset Formula $np$
+\end_inset
+
+ could also be set no the number of nodes in the system, but the algorithms and also the messaging interfaces are usually the same. When we have a cell for each processor, we can distribute the workload equally in the system and avoid idle time.
+\end_layout
+
+\begin_layout Standard
+Initially we assume that each processor has a subset of all the particles stored in its memory. There exists several strategies on how to parallelize the ORB algorithm.
+\end_layout
+
+\begin_layout Subsubsection
+Local Reshuffling
+\end_layout
+
+\begin_layout Standard
+When performing a local reshuffle, each processor sorts its particles according to the cell information available. The cell information is however being held by a single processor. This processor supervises the ORB algorithm and broadcast the data to the workers.
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset Float figure
+wide false
+sideways false
+status open
+
+
+\begin_layout Standard
+\align center
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+begin{tikzpicture}
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+timeline{6}{16}{3}
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+parallelloop{-2}{15.5}{8}{0.5}{loop till all cells found};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+parallelloop{-1}{11.5}{7}{3.5}{loop till cut found};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+communication{Broadcast cells}{0}{7}{15};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+process{reorder}{0}{14};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+process{reorder}{2}{14};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+process{reorder}{4}{14};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+process{reorder}{6}{14};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+process{compute
+\backslash
+
+\backslash
+ cut}{0}{11};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+communication{Broadcast cut from operative}{0}{7}{8};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+process{count}{0}{7};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+process{count}{2}{7};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+process{count}{4}{7};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+process{count}{6}{7};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+communication{Reduce count to operative}{0}{7}{4};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+process{generate
+\backslash
+
+\backslash
+ new 
+\backslash
+
+\backslash
+ cells}{0}{3};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+		
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+end{tikzpicture}
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Parallelized ORB for np = 4 and local reshuffling
+\end_layout
+
+\end_inset
+
+
+\begin_inset CommandInset label
+LatexCommand label
+name "fig:orb_parallel"
+
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsubsection
+Global Reshuffling
+\end_layout
+
+\begin_layout Standard
+As soon as we have finished the first iteration of the two domains, rank 0 can process one domain and rank 1 can process the other domain. This has the advantage that not only the counting part, but also the costly reshuffling part of the ORB algorithm can be parallelized. Furthermore the amount of data which needs to be communicated between the different threads is smaller. This is due to the fact that as soon as we found our first cut, only half the array of particles
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset Float figure
+placement H
+wide false
+sideways false
+status open
+
+
+\begin_layout Standard
+\align center
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+begin{tikzpicture}
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+timeline{6}{8}{3}
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+communication{Compute cut}{0}{7}{7};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+communication{Generate and Broadcast new cells}{0}{7}{6};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+communication{Global reshuffle}{0}{7}{5};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+communication{Compute cut}{0}{3}{4};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+communication{Generate and 
+\backslash
+
+\backslash
+ Broadcast new cells}{0}{3}{3};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+communication{Global reshuffle}{0}{3}{2};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+communication{Compute cut}{4}{7}{4};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+communication{Generate and 
+\backslash
+
+\backslash
+ Broadcast new cells}{4}{7}{3};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+communication{Global reshuffle}{4}{7}{2};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+		
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+end{tikzpicture}
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Parallelized ORB for np = 4 and global reshuffling
+\end_layout
+
+\end_inset
+
+
+\begin_inset CommandInset label
+LatexCommand label
+name "fig:orb_parallel"
+
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset VSpace 5mm
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\begin_inset Newpage newpage
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section
+Theoretical Analysis of ORB runtime
+\end_layout
+
+\begin_layout Standard
+The nature of the ORB algorithm and its application with very large data-sizes, requires that we consider hardware for concrete implementation details. Since the decision tree for the implementation details of the algorithm is vast and each implementation involves a significant amount of development time, we will propose a theoretical model to guide us in the decision process. Based on this decision, we rule out certain alternatives before the implementation. Finally we will try to verify the models using empirical data.
+\end_layout
+
+\begin_layout Standard
+When creating such a model, the performance is either bound by the number of floating point operations per minute, or in some cases its bound by the memory access speed. In our case, we assume that we are generally bound by memory access times, and not tflops. If we investigate the operations which are needed for the binary cut algorithm, we notice that the actual operations completed inside the loop, are only very few. When comparing the CPU implementation with GPU one, we need to not only consider benefits from increased parallelism in GPU hardware, which will lead to a higher tflops, but also possible speed-ups reached by higher bandwidths in GPU memory than CPU memory. On the other hand we need to mitigate the very low bandwidths between the GPU and CPU, which cannot be avoided altogether, as the data needs to be sent from the CPU to GPU before we can process it on the graphics processor.
+\end_layout
+
+\begin_layout Subsection
+Datapoints of supercomputers
+\end_layout
+
+\begin_layout Standard
+We will compare the performance with the datapoints of Piz Daint, Summit and Alps which is a part of Eiger. We choose Piz Daint because we have the possibility to test the Code on its systems. We choose Eiger because we can also access its systems and it will give us a good reference values, due to it being a non hybrid supercomputer, meaning the nodes to not have GPU. Finally we analyse its performance on Summit, as its at the time of writing this thesis, one of the most capable supercomputers in the world.
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset Float figure
+placement H
+wide false
+sideways false
+status open
+
+
+\begin_layout Standard
+\align center
+
+\size small
+
+\begin_inset Tabular 
+<lyxtabular version="3" rows="19" columns="4">
+<features rotate="0" tabularvalignment="middle" tabularwidth="0pt">
+<column alignment="none" valignment="top" special="@{}c">
+<column alignment="center" valignment="top">
+<column alignment="center" valignment="top">
+<column alignment="center" valignment="top">
+<row>
+<cell alignment="none" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+Piz Daint 
+\begin_inset CommandInset citation
+LatexCommand cite
+after ""
+key "piz_daint"
+literal "false"
+
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+Summit
+\begin_inset CommandInset citation
+LatexCommand cite
+after ""
+key "summit"
+literal "false"
+
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+Alps (Eiger) 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="none" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="none" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+# Nodes 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+5704 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+4608 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+1024
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="none" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+# CPUs 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+1 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+2 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+2
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="none" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+CPU Model 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+Intel E5-2690 v3 
+\begin_inset CommandInset citation
+LatexCommand cite
+after ""
+key "E5-2690"
+literal "false"
+
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+IBM POWER9 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+AMD EPYC 7742
+\begin_inset CommandInset citation
+LatexCommand cite
+after ""
+key "AMDEPYC"
+literal "false"
+
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="none" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+CPU Mem. 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+64 GB 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+256 GB 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+?? 
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="none" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset Formula $B_C$
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+68 GB/s 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+170 GB/s 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+204.8 GB/s x 2 
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="none" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset Formula $I_{CC}$
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+- 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+64 GB/s 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+?? 
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="none" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+Base 
+\begin_inset Formula $GHZ_C$
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+2.9 GHZ 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+4 GHZ 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+2.25 GHZ
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="none" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+Max 
+\begin_inset Formula $GHZ_C$
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+3.8 GHZ 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+4 GHZ 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+3.4 GHZ
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="none" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+# Cores 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+12 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+22 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+64 
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="none" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+Max AVX 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+AVX2 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+? 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+AVX2 
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="none" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+# GPUs 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+1 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+6 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+0 
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="none" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+GPU Model 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+NVIDIA P100 
+\begin_inset CommandInset citation
+LatexCommand cite
+after ""
+key "TESLAP100"
+literal "false"
+
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+NVIDIA V100s 
+\begin_inset CommandInset citation
+LatexCommand cite
+after ""
+key "NVIDIAV100"
+literal "false"
+
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+- 
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="none" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+GPU Mem. Cap. 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+16 GB 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+16 GB 
+\begin_inset Formula $\times$
+\end_inset
+
+ 6 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+-
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="none" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset Formula $B_G$
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+732 GB/s 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+900 GB/s 
+\begin_inset Formula $\times$
+\end_inset
+
+ 6 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+-
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="none" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset Formula $I_{GC}$
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+32 GB/s 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+50 GB/s 
+\begin_inset Formula $\times$
+\end_inset
+
+ 6 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+-
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="none" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset Formula $I_{GG}$
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+- 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+50 GB/s 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+-
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="none" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+Tflops 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+10.6 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+14 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="none" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="none" valignment="top" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+# CUDA Cores 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+3584 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\size small
+5120 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="none" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\end_inset
+</cell>
+</row>
+</lyxtabular>
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Datapoints of Supercomputers
+\end_layout
+
+\end_inset
+
+
+\begin_inset CommandInset label
+LatexCommand label
+name "fig:datapoints"
+
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Model parameters
+\end_layout
+
+\begin_layout Standard
+
+\size small
+In order to estimate the runtime of the algorithms we denote the number of particles as 
+\begin_inset Formula $N$
+\end_inset
+
+. Furthermore we assume a precision 
+\begin_inset Formula $p$
+\end_inset
+
+ of 32. We only look at 
+\begin_inset Formula $x$
+\end_inset
+
+ for the runtime analysis, where it follows that the total storage of all particles is 
+\begin_inset Formula $32 \times 3 \times N bits = 4 \times 3 \times N Bytes = 12 \times N Bytes$
+\end_inset
+
+. Furthermore we assume 
+\begin_inset Formula $d = 1024$
+\end_inset
+
+ and 
+\begin_inset Formula $N=10^9$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Subsection
+Roofline performance model
+\end_layout
+
+\begin_layout Standard
+
+\size small
+In order to prove or disprove our assumption, about the performance of the ORB algorithm being memory bound, we introduce a theoretical model and also make a few measurements to support the claim. To make a proper model for the CPU version, we also need to consider AVX. With AVX enabled, the compare and
+\end_layout
+
+\begin_layout Standard
+
+\size small
+We consider a minimal C++ code to investigate this issue. We use the -S flag along with the g++ compiler to generate and read the generated assembly code. In this case startPtr is a pointer which indicated the first adress where we want to start out iteration process. Consequently endPtr is the memory of the last entry we want to access. For testing purposes all entries in the array are set to random values between 0 and 1, and cut is set to 0.5.
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+for(auto p= startPtr; p<endPtr; ++p) nLeft += *p < cut;
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+TODO
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+Add assembler code with actual avx in it?
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\size small
+Without AVX: 
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+.L7:
+\end_layout
+
+\begin_layout Plain Layout
+	movq	-32(%rbp), %rax
+\end_layout
+
+\begin_layout Plain Layout
+	cmpq	-56(%rbp), %rax
+\end_layout
+
+\begin_layout Plain Layout
+	jnb	.L6
+\end_layout
+
+\begin_layout Plain Layout
+	movq	-32(%rbp), %rax
+\end_layout
+
+\begin_layout Plain Layout
+	movss	(%rax), %xmm1
+\end_layout
+
+\begin_layout Plain Layout
+	movss	-36(%rbp), %xmm0
+\end_layout
+
+\begin_layout Plain Layout
+	comiss	%xmm1, %xmm0
+\end_layout
+
+\begin_layout Plain Layout
+	seta	%al
+\end_layout
+
+\begin_layout Plain Layout
+	movzbl	%al, %eax
+\end_layout
+
+\begin_layout Plain Layout
+	addl	%eax, -20(%rbp)
+\end_layout
+
+\begin_layout Plain Layout
+	addq	$4, -32(%rbp)
+\end_layout
+
+\begin_layout Plain Layout
+	jmp	.L7
+\end_layout
+
+\begin_layout Plain Layout
+.L6:
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\size small
+With AVX: 
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+	
+\end_layout
+
+\begin_layout Plain Layout
+.L7:
+\end_layout
+
+\begin_layout Plain Layout
+	movq	-32(%rbp), %rax
+\end_layout
+
+\begin_layout Plain Layout
+	cmpq	-56(%rbp), %rax
+\end_layout
+
+\begin_layout Plain Layout
+	jnb	.L6
+\end_layout
+
+\begin_layout Plain Layout
+	movq	-32(%rbp), %rax
+\end_layout
+
+\begin_layout Plain Layout
+	vmovss	(%rax), %xmm1
+\end_layout
+
+\begin_layout Plain Layout
+	vmovss	-36(%rbp), %xmm0
+\end_layout
+
+\begin_layout Plain Layout
+	vcomiss	%xmm1, %xmm0
+\end_layout
+
+\begin_layout Plain Layout
+	seta	%al
+\end_layout
+
+\begin_layout Plain Layout
+	movzbl	%al, %eax
+\end_layout
+
+\begin_layout Plain Layout
+	addl	%eax, -20(%rbp)
+\end_layout
+
+\begin_layout Plain Layout
+	addq	$4, -32(%rbp)
+\end_layout
+
+\begin_layout Plain Layout
+	jmp	.L7
+\end_layout
+
+\begin_layout Plain Layout
+.L6:	
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\size small
+Note how the commands movss were replaced by the AVX enabled commands vmovss. Furthemore comiss was also replaced with vcomiss.
+\end_layout
+
+\begin_layout Standard
+
+\size small
+We also performed some testing on CPU with AVX2 enabled. We summed up 
+\begin_inset Formula $2^{26}$
+\end_inset
+
+ particles. The version with AVX enabled took 0.25 seconds, meanwhile the non AVX version took 1.2 seconds. This yields in a speed improvement of almost a factor of 6, which is not to expect considering some overhead.
+\end_layout
+
+\begin_layout Standard
+
+\size small
+We can see that the actual operations are mainly a compare and an add operation. Both of which can be done using AVX. Depending on the AVX standard which is enabled, this means that the CPU can perform between 128 and 512 bits. For single precision floating point numbers, this means it can process between four and sixteen floating point numbers in a single cycle. In the case of AVX2 we can process eight floats per cycle.
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset FormulaMacro
+\def\N {1}
+\end_inset
+
+ 
+\begin_inset FormulaMacro
+\def\Bytes {12}
+\end_inset
+
+ 
+\begin_inset FormulaMacro
+\def\s {12}
+\end_inset
+
+ 
+\begin_inset FormulaMacro
+\def\d {8096}
+\end_inset
+
+ 
+\begin_inset FormulaMacro
+\def\p {32}
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\align center
+
+\size small
+
+\begin_inset Formula \begin{equation}
+		GHZ * 8 * np / 1000
+	\end{equation}
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+TODO
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+Consider having multiple CPUs
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset Float figure
+placement H
+wide false
+sideways false
+status open
+
+
+\begin_layout Standard
+\align center
+
+\size small
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+begin{tikzpicture}
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+begin{axis}[
+\end_layout
+
+\begin_layout Plain Layout
+				height=10cm,width=10cm, 
+\end_layout
+
+\begin_layout Plain Layout
+				xlabel={
+\backslash
+# Processors},
+\end_layout
+
+\begin_layout Plain Layout
+				ylabel={tflops},
+\end_layout
+
+\begin_layout Plain Layout
+				xmin = -1, xmax = 71, ymin= -0.5, ymax=3,
+\end_layout
+
+\begin_layout Plain Layout
+				legend style={at={(0.03,0.8)},anchor=west}]
+\end_layout
+
+\begin_layout Plain Layout
+				
+\end_layout
+
+\begin_layout Plain Layout
+				
+\backslash
+addplot+[domain = 1:70, mark=none] {
+\end_layout
+
+\begin_layout Plain Layout
+					4.5 * 8 * 
+\backslash
+x / 1000
+\end_layout
+
+\begin_layout Plain Layout
+				};	
+\end_layout
+
+\begin_layout Plain Layout
+				
+\backslash
+addlegendentryexpanded{4.5 GHZ};
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+				
+\backslash
+addplot+[domain = 1:70, mark=none] {
+\end_layout
+
+\begin_layout Plain Layout
+					3.5 * 8 * 
+\backslash
+x / 1000
+\end_layout
+
+\begin_layout Plain Layout
+				};	
+\end_layout
+
+\begin_layout Plain Layout
+				
+\backslash
+addlegendentryexpanded{3.5 GHZ};
+\end_layout
+
+\begin_layout Plain Layout
+				
+\end_layout
+
+\begin_layout Plain Layout
+		
+\end_layout
+
+\begin_layout Plain Layout
+				
+\backslash
+addplot+[domain = 1:70, mark=none] {
+\end_layout
+
+\begin_layout Plain Layout
+					2.5 * 8 * 
+\backslash
+x / 1000
+\end_layout
+
+\begin_layout Plain Layout
+				};	
+\end_layout
+
+\begin_layout Plain Layout
+				
+\backslash
+addlegendentryexpanded{2.5 GHZ};
+\end_layout
+
+\begin_layout Plain Layout
+				
+\end_layout
+
+\begin_layout Plain Layout
+				
+\backslash
+addplot+[mark=none] coordinates {(0,0.002) (70,0.002)};
+\end_layout
+
+\begin_layout Plain Layout
+				
+\backslash
+addlegendentry{$B_{C}$ Intel}
+\end_layout
+
+\begin_layout Plain Layout
+				
+\end_layout
+
+\begin_layout Plain Layout
+				
+\backslash
+addplot+[mark=none] coordinates {(0,0.005) (70,0.005)};
+\end_layout
+
+\begin_layout Plain Layout
+				
+\backslash
+addlegendentry{$B_{C}$ IBM}
+\end_layout
+
+\begin_layout Plain Layout
+				
+\end_layout
+
+\begin_layout Plain Layout
+				
+\backslash
+addplot+[mark=none] coordinates {(0,0.0062) (70,0.0062)};
+\end_layout
+
+\begin_layout Plain Layout
+				
+\backslash
+addlegendentry{$B_{C}$ AMD}
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+				%
+\backslash
+node[label={Intel E5-2690 v3},circle,fill,inner sep=2pt] at (axis cs:12,45.6) {};
+\end_layout
+
+\begin_layout Plain Layout
+				
+\end_layout
+
+\begin_layout Plain Layout
+				%
+\backslash
+node[label={AMD EPYC},circle,fill,inner sep=2pt] at (axis cs:64,217.6) {};
+\end_layout
+
+\begin_layout Plain Layout
+				
+\end_layout
+
+\begin_layout Plain Layout
+				%
+\backslash
+node[label={IBM Power 9},circle,fill,inner sep=2pt] at (axis cs:22,88) {};
+\end_layout
+
+\begin_layout Plain Layout
+				
+\end_layout
+
+\begin_layout Plain Layout
+	
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+end{axis}
+\end_layout
+
+\begin_layout Plain Layout
+		
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+end{tikzpicture}
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Operations per second for different GHZ and number of processors
+\end_layout
+
+\end_inset
+
+
+\begin_inset CommandInset label
+LatexCommand label
+name "fig:modelcpu"
+
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\size small
+Finish this argumentation and explain why we only consider memory access times as they far outweight tflops.
+\end_layout
+
+\begin_layout Subsection
+General Memory Model
+\end_layout
+
+\begin_layout Standard
+
+\size small
+In order to have a clear terminology and understanding of a computing system, we will briefly describe a general computer model which can be applied to most modern high performance systems.
+\end_layout
+
+\begin_layout Standard
+
+\size small
+A computing system consists of several nodes, where each node has one or more CPU`s and some additionally have one or more GPU`s. Both the CPU and the GPU have their own memory which are connected by a data link. The bandwidth of this link is called Memory Bandwidth. We name the capacity of the CPU Memory Bandwidth 
+\begin_inset Formula $B_{CPU}$
+\end_inset
+
+ and the GPU Memory Bandwidth 
+\begin_inset Formula $B_{GPU}$
+\end_inset
+
+. Furthermore we have a separate data link between the CPU and the GPU memory which is in some cases called PCI express, NVLink (for modern NVidia GPU`s) among others. We will refer to it as 
+\begin_inset Formula $I_{GC}$
+\end_inset
+
+. In systems with multiple CPU there is a link between the individiual CPU which we denote as 
+\begin_inset Formula $I_{CC}$
+\end_inset
+
+. Finally we denote the link between GPUs as 
+\begin_inset Formula $I_{GG}$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset Float figure
+placement H
+wide false
+sideways false
+status open
+
+
+\begin_layout Standard
+\align center
+
+\size small
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+begin{tikzpicture}
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node[rectangle,
+\end_layout
+
+\begin_layout Plain Layout
+			draw = black,
+\end_layout
+
+\begin_layout Plain Layout
+			text = black,
+\end_layout
+
+\begin_layout Plain Layout
+			anchor = west,
+\end_layout
+
+\begin_layout Plain Layout
+			fill = white,
+\end_layout
+
+\begin_layout Plain Layout
+			align=center,
+\end_layout
+
+\begin_layout Plain Layout
+			minimum width = 2cm, 
+\end_layout
+
+\begin_layout Plain Layout
+			minimum height = 1.5cm] (cpu1) at (0cm,1.5cm) {CPU1};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node[rectangle,
+\end_layout
+
+\begin_layout Plain Layout
+			draw = black,
+\end_layout
+
+\begin_layout Plain Layout
+			text = black,
+\end_layout
+
+\begin_layout Plain Layout
+			anchor = west,
+\end_layout
+
+\begin_layout Plain Layout
+			fill = white,
+\end_layout
+
+\begin_layout Plain Layout
+			align=center,
+\end_layout
+
+\begin_layout Plain Layout
+			minimum width = 2cm, 
+\end_layout
+
+\begin_layout Plain Layout
+			minimum height = 1.5cm] (cpu2) at (0cm,-1.5cm) {CPU2};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node[rectangle,
+\end_layout
+
+\begin_layout Plain Layout
+			draw = black,
+\end_layout
+
+\begin_layout Plain Layout
+			text = black,
+\end_layout
+
+\begin_layout Plain Layout
+			anchor = west,
+\end_layout
+
+\begin_layout Plain Layout
+			fill = white,
+\end_layout
+
+\begin_layout Plain Layout
+			align=center,
+\end_layout
+
+\begin_layout Plain Layout
+			minimum width = 2cm, 
+\end_layout
+
+\begin_layout Plain Layout
+			minimum height = 1.5cm] (cpum1) at (-3cm,1.5cm) {CPU1 
+\backslash
+
+\backslash
+ Memory};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node[rectangle,
+\end_layout
+
+\begin_layout Plain Layout
+			draw = black,
+\end_layout
+
+\begin_layout Plain Layout
+			text = black,
+\end_layout
+
+\begin_layout Plain Layout
+			anchor = west,
+\end_layout
+
+\begin_layout Plain Layout
+			fill = white,
+\end_layout
+
+\begin_layout Plain Layout
+			align=center,
+\end_layout
+
+\begin_layout Plain Layout
+			minimum width = 2cm, 
+\end_layout
+
+\begin_layout Plain Layout
+			minimum height = 1.5cm] (cpum2) at (-3cm,-1.5cm) {CPU2 
+\backslash
+
+\backslash
+ Memory};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node[rectangle,
+\end_layout
+
+\begin_layout Plain Layout
+			draw = black,
+\end_layout
+
+\begin_layout Plain Layout
+			text = black,
+\end_layout
+
+\begin_layout Plain Layout
+			anchor = west,
+\end_layout
+
+\begin_layout Plain Layout
+			fill = white,
+\end_layout
+
+\begin_layout Plain Layout
+			align=center,
+\end_layout
+
+\begin_layout Plain Layout
+			minimum width = 2cm, 
+\end_layout
+
+\begin_layout Plain Layout
+			minimum height = 1.5cm] (gpu1) at (4cm,4cm) {GPU1};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node[rectangle,
+\end_layout
+
+\begin_layout Plain Layout
+			draw = black,
+\end_layout
+
+\begin_layout Plain Layout
+			text = black,
+\end_layout
+
+\begin_layout Plain Layout
+			anchor = west,
+\end_layout
+
+\begin_layout Plain Layout
+			fill = white,
+\end_layout
+
+\begin_layout Plain Layout
+			align=center,
+\end_layout
+
+\begin_layout Plain Layout
+			minimum width = 2cm, 
+\end_layout
+
+\begin_layout Plain Layout
+			minimum height = 1.5cm] (gpu2) at (4cm,1cm) {GPU2};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node[rectangle,
+\end_layout
+
+\begin_layout Plain Layout
+			draw = black,
+\end_layout
+
+\begin_layout Plain Layout
+			text = black,
+\end_layout
+
+\begin_layout Plain Layout
+			anchor = west,
+\end_layout
+
+\begin_layout Plain Layout
+			fill = white,
+\end_layout
+
+\begin_layout Plain Layout
+			align=center,
+\end_layout
+
+\begin_layout Plain Layout
+			minimum width = 2cm, 
+\end_layout
+
+\begin_layout Plain Layout
+			minimum height = 1.5cm] (gpu3) at (4cm,-1cm) {GPU3};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+					
+\backslash
+node[rectangle,
+\end_layout
+
+\begin_layout Plain Layout
+			draw = black,
+\end_layout
+
+\begin_layout Plain Layout
+			text = black,
+\end_layout
+
+\begin_layout Plain Layout
+			anchor = west,
+\end_layout
+
+\begin_layout Plain Layout
+			fill = white,
+\end_layout
+
+\begin_layout Plain Layout
+			align=center,
+\end_layout
+
+\begin_layout Plain Layout
+			minimum width = 2cm, 
+\end_layout
+
+\begin_layout Plain Layout
+			minimum height = 1.5cm] (gpu4) at (4cm,-4cm) {GPU4};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+							
+\backslash
+node[rectangle,
+\end_layout
+
+\begin_layout Plain Layout
+			draw = black,
+\end_layout
+
+\begin_layout Plain Layout
+			text = black,
+\end_layout
+
+\begin_layout Plain Layout
+			anchor = west,
+\end_layout
+
+\begin_layout Plain Layout
+			fill = white,
+\end_layout
+
+\begin_layout Plain Layout
+			align=center,
+\end_layout
+
+\begin_layout Plain Layout
+			minimum width = 2cm, 
+\end_layout
+
+\begin_layout Plain Layout
+			minimum height = 1.5cm] (gpum1) at (7cm,4cm) {GPU1 
+\backslash
+
+\backslash
+ Memory};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+				
+\backslash
+node[rectangle,
+\end_layout
+
+\begin_layout Plain Layout
+			draw = black,
+\end_layout
+
+\begin_layout Plain Layout
+			text = black,
+\end_layout
+
+\begin_layout Plain Layout
+			anchor = west,
+\end_layout
+
+\begin_layout Plain Layout
+			fill = white,
+\end_layout
+
+\begin_layout Plain Layout
+			align=center,
+\end_layout
+
+\begin_layout Plain Layout
+			minimum width = 2cm, 
+\end_layout
+
+\begin_layout Plain Layout
+			minimum height = 1.5cm] (gpum2) at (7cm,1cm) {GPU2 
+\backslash
+
+\backslash
+ Memory};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node[rectangle,
+\end_layout
+
+\begin_layout Plain Layout
+			draw = black,
+\end_layout
+
+\begin_layout Plain Layout
+			text = black,
+\end_layout
+
+\begin_layout Plain Layout
+			anchor = west,
+\end_layout
+
+\begin_layout Plain Layout
+			fill = white,
+\end_layout
+
+\begin_layout Plain Layout
+			align=center,
+\end_layout
+
+\begin_layout Plain Layout
+			minimum width = 2cm, 
+\end_layout
+
+\begin_layout Plain Layout
+			minimum height = 1.5cm] (gpum3) at (7cm,-1cm) {GPU3 
+\backslash
+
+\backslash
+ Memory};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node[rectangle,
+\end_layout
+
+\begin_layout Plain Layout
+			draw = black,
+\end_layout
+
+\begin_layout Plain Layout
+			text = black,
+\end_layout
+
+\begin_layout Plain Layout
+			anchor = west,
+\end_layout
+
+\begin_layout Plain Layout
+			fill = white,
+\end_layout
+
+\begin_layout Plain Layout
+			align=center,
+\end_layout
+
+\begin_layout Plain Layout
+			minimum width = 2cm, 
+\end_layout
+
+\begin_layout Plain Layout
+			minimum height = 1.5cm] (gpum4) at (7cm,-4cm) {GPU4 
+\backslash
+
+\backslash
+ Memory};
+\end_layout
+
+\begin_layout Plain Layout
+		
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+draw[red,  thick, stealth-stealth] (cpum1) to (cpu1);
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+draw[red,  thick, stealth-stealth] (cpum2) to (cpu2);
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+draw[red, double,  thick, stealth-stealth] (cpu1) to (cpu2);
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+draw[orange, dashed,  thick, stealth-stealth] (cpu1) to (gpu1);
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+draw[orange, dashed,  thick, stealth-stealth] (cpu1) to (gpu2);
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+draw[orange, dashed,  thick, stealth-stealth] (cpu2) to (gpu3);
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+draw[orange, dashed,  thick, stealth-stealth] (cpu2) to (gpu4);
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+draw[cyan,  thick, stealth-stealth] (gpum1) to (gpu1);
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+draw[cyan,  thick, stealth-stealth] (gpum2) to (gpu2);
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+draw[cyan,  thick, stealth-stealth] (gpum3) to (gpu3);
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+draw[cyan,  thick, stealth-stealth] (gpum4) to (gpu4);
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+draw[cyan, double,  thick, stealth-stealth] (gpu1) to (gpu2);
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+draw[cyan, double,  thick, stealth-stealth] (gpu3) to (gpu4);
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node(al) at (-2cm, -3.5cm) {};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node (ar) at (-3cm, -3.5cm) {};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node[align=left] () at (0.5cm, -3.5cm) {CPU Mem Bandwidth, $B_{C}$};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+draw[red,  thick, stealth-stealth] (al) to (ar);
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node(al) at (-2cm, -4cm) {};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node (ar) at (-3cm, -4cm) {};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node[align=left] () at (0.5cm, -4cm) {GPU Mem Bandwidth, $B_{G}$};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+draw[cyan,  thick, stealth-stealth] (al) to (ar);
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node (bl) at (-2cm, -4.5cm) {};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node (br) at (-3cm, -4.5cm) {};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node[align=left] () at (0.5cm, -4.5cm) { CPU-CPU Interconnect, $I_{CC}$};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+draw[red, double,  thick, stealth-stealth] (bl) to (br);
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node (cl) at (-2cm, -5cm) {};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node (cr) at (-3cm, -5cm) {};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node[align=left] () at (0.5cm, -5cm) { GPU-CPU Interconnect, $I_{GC}$};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+draw[orange, dashed,  thick, stealth-stealth] (cl) to (cr);
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node (dl) at (-2cm, -5.5cm) {};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node (dr) at (-3cm, -5.5cm) {};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node[align=left] () at (0.5cm, -5.5cm) { GPU-GPU Interconnect, $I_{GG}$};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+draw[cyan, double,  thick, stealth-stealth] (dl) to (dr);
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+		
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+end{tikzpicture}
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\size small
+We now sketch out various implementation ideas, derive for each a formula to estimate its runtime and finally insert datapoints from our target computing systems. We assume that the data is stored in the CPU memory initially and we define the size of the data as 
+\begin_inset Formula $s$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Subsubsection
+Naive implementation
+\end_layout
+
+\begin_layout Standard
+\align center
+
+\size small
+
+\begin_inset Formula \begin{equation}
+			log(d) \times \left ( p \times \frac{ s }{B_{C}} \right ) = t
+	\end{equation}
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset VSpace 5mm
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\size small
+The Equation 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "eq:gpu"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+ for the GPU is similar, the only difference being that we use the GPU memory bandwidth 
+\begin_inset Formula $B_{GPU}$
+\end_inset
+
+ instead of the CPU bandwidth. Furthermore we have to consider the time it takes to send the data from the CPU to the GPU. This adds the terms size divided by CPU to GPU memory bandwidth denoted as 
+\begin_inset Formula $I_{GC}$
+\end_inset
+
+. Finally we also need to load the data from the CPU memory to the CPU before we are able to send it.
+\end_layout
+
+\begin_layout Standard
+\align center
+
+\size small
+
+\begin_inset Formula \begin{equation}
+			log(d) \times \left ( p \times \frac{s}{B_{G}} + \frac{s}{I_{GC}}  + \frac{s}{B_{C}} \right ) = t
+		\label{eq:gpu}
+	\end{equation}
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset VSpace 5mm
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsubsection
+GPU tree building
+\end_layout
+
+\begin_layout Standard
+
+\size small
+Let us now consider an alternative way of computing binary cuts. We will build part of the tree on the GPU itself. This will allow us to reduce the very costly overheads imposed by transferring data from the CPU to the GPU. The maximum number of cuts we can perform is 
+\begin_inset Formula $p \times 3$
+\end_inset
+
+. After p cuts we have 
+\begin_inset Formula $2^{p \times 3}$
+\end_inset
+
+ leaf cells, and have reached the precision. Note that in this case we also need to send back the information about the built tree from the GPU to the CPU.
+\end_layout
+
+\begin_layout Standard
+\align center
+
+\size small
+
+\begin_inset Formula \begin{equation}
+		log(d) \times \left ( p \times \frac{s}{B_{G}} \right ) + \frac{s}{I_{GC}} + \frac{s}{B_{C}} = t
+		\label{eq:gputree}
+	\end{equation}
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsubsection
+Batch loading
+\end_layout
+
+\begin_layout Standard
+
+\size small
+Finally we can also try to mitigate the overheads introduced by CPU to GPU communication by sending small batches, such that the GPU can already start processing the data, before the data transfer was completed. Lets denote the number of batches by 
+\begin_inset Formula $b$
+\end_inset
+
+. For the sake of simplicity we only make a single cut and thus can reuse Equation 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "eq:cpu"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+ for the CPU version. For the GPU we now omit the term for memory access from the GPU. Because we can already start processing data in parallel when the first batch arrived and 
+\begin_inset Formula $B_{G} > I_{GC}$
+\end_inset
+
+ holds for every modern hardware. Thus the only overhead we still get is 
+\begin_inset Formula $\frac{s \div b}{B_{G}}$
+\end_inset
+
+ for the very last batch, but as we can just increase b in relation to N, this becomes negligible. Note that this only counts for the very first iteration, thus the only difference we have is the constant of 31 and not 32.
+\end_layout
+
+\begin_layout Standard
+\align center
+
+\size small
+
+\begin_inset Formula \begin{equation}
+		(d-1) \times p \times \frac{s}{B_{G}} + 2 \times \frac{s}{I_{GC}} = t
+		\label{eq:gpubatch}
+	\end{equation}
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\size small
+Due to possible overhead and no real improvement over the naive GPU version, we will omit the analysis using this method.
+\end_layout
+
+\begin_layout Subsubsection
+Data compression
+\end_layout
+
+\begin_layout Standard
+
+\size small
+Since for most computer the Interconnect bandwidth is greatly smaller than the Memory Bandwidth, we could potentially also think about compressing the particle data. This would increase computational costs, but would allow us to store a higher amount of particles and reduce the cost which comes from loading the particles from memory as well as sending the data over the Interconnect.
+\end_layout
+
+\begin_layout Itemize
+
+\size small
+Why do we even use floats in the first place? wouldn't integers suit better since precision is uniformly equal? 
+\end_layout
+
+\begin_layout Itemize
+
+\size small
+Reduce transfered number of bits, sacrifice precision? 
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+TODO
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+Add plots?
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\family default
+
+\series default
+
+\shape default
+
+\size default
+
+\end_layout
+
+\begin_layout Subsection
+Piz Daint
+\end_layout
+
+\begin_layout Standard
+
+\size small
+Let us plugin the values from Figure 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "fig:datapoints"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+ into the corresponding formulas 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "eq:cpu"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+, 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "eq:gpu"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+, 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "eq:cputree"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+ and 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "eq:gputree"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Subsubsection
+Naive implementation
+\end_layout
+
+\begin_layout Standard
+
+\size small
+The naive implementation yields the following speeds for the naive CPU implementation:
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+pgfmathsetmacro
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+cpuPiz
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+ln(
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+d{)}
+\end_layout
+
+\end_inset
+
+ / ln(2) * (
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+p
+\end_layout
+
+\end_inset
+
+ * 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+s
+\end_layout
+
+\end_inset
+
+ / 68)
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\align center
+
+\size small
+
+\begin_inset Formula \begin{equation}
+		log(\d) \times \left ( \p \times \frac{ \s GB }{68 GB/s} \right )  = \cpuPiz s
+	\end{equation}
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\size small
+And the corresponding GPU implementation: 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+pgfmathsetmacro
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+gpuPizN
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+ ln(
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+d{)}
+\end_layout
+
+\end_inset
+
+ / ln(2) * (
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+p
+\end_layout
+
+\end_inset
+
+ * 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+s
+\end_layout
+
+\end_inset
+
+ / 732 + 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+s
+\end_layout
+
+\end_inset
+
+ / 32 + 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+s
+\end_layout
+
+\end_inset
+
+ / 68)
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Standard
+\align center
+
+\size small
+
+\begin_inset Formula \begin{equation}
+		log(\d) \times \left ( 32 \times \frac{12 GB}{732 GB/s} + \frac{12 GB}{32 GB/s}  + \frac{12 GB}{68 GB/s} \right )=  \gpuPizN s
+	\end{equation}
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\size small
+This yields in a speed-up of: 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+pgfmathsetmacro
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+speedup
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+cpuPiz
+\end_layout
+
+\end_inset
+
+ / 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+gpuPizN
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Standard
+\align center
+
+\size small
+
+\begin_inset Formula \begin{equation}
+		\frac{\cpuPiz}{\gpuPizN} = \speedup \times
+	\end{equation}
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsubsection
+GPU Tree Building
+\end_layout
+
+\begin_layout Standard
+
+\size small
+And the corresponding GPU implementation: 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+pgfmathsetmacro
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+gpuPizT
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+ ln(
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+d{)}
+\end_layout
+
+\end_inset
+
+/ln(2) * (
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+p
+\end_layout
+
+\end_inset
+
+ * 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+s
+\end_layout
+
+\end_inset
+
+ / 732) + 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+s
+\end_layout
+
+\end_inset
+
+ / 32 + 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+s
+\end_layout
+
+\end_inset
+
+ / 68
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ And the corresponding GPU implementation: 
+\end_layout
+
+\begin_layout Standard
+\align center
+
+\size small
+
+\begin_inset Formula \begin{equation}
+		log(\d) \times \left ( \p \times \frac{\s GB}{732 GB/s} \right ) + \times \frac{\s GB}{32 GB/s}  + \frac{\s GB}{68 GB/s} = \gpuPizT s
+	\end{equation}
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\size small
+This yields in a speed-up of: 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+pgfmathsetmacro
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+speedup
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+cpuPiz
+\end_layout
+
+\end_inset
+
+ / 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+gpuPizT
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Standard
+\align center
+
+\size small
+
+\begin_inset Formula \begin{equation}
+		\frac{\cpuPiz}{\gpuPizT} = \speedup \times
+	\end{equation}
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset VSpace 5mm
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Summit
+\end_layout
+
+\begin_layout Standard
+
+\size small
+Let us plugin the values from Figure 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "fig:datapoints"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+ into the corresponding formulas 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "eq:cpu"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+, 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "eq:gpu"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+, 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "eq:cputree"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+ and 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "eq:gputree"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Subsubsection
+Naive implementation
+\end_layout
+
+\begin_layout Standard
+
+\size small
+The naive implementation yields the following speeds for the naive CPU implementation:
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+pgfmathsetmacro
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+cpuSummit
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+ln(
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+d{)}
+\end_layout
+
+\end_inset
+
+ / ln(2) * (
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+p
+\end_layout
+
+\end_inset
+
+ * 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+s
+\end_layout
+
+\end_inset
+
+ / (170 * 2)
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Standard
+\align center
+
+\size small
+
+\begin_inset Formula \begin{equation}
+		log(\d) \times \left ( \p \times \frac{ \s GB }{170 GB/s \times 2} \right ) = \cpuSummit s
+	\end{equation}
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\size small
+And the corresponding GPU implementation: 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+pgfmathsetmacro
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+gpuSummitN
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+ln(
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+d{)}
+\end_layout
+
+\end_inset
+
+ / ln(2) * ( (
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+p
+\end_layout
+
+\end_inset
+
+ * 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+s
+\end_layout
+
+\end_inset
+
+ / (900 * 6) + 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+s
+\end_layout
+
+\end_inset
+
+ / (50 * 6) + 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+s
+\end_layout
+
+\end_inset
+
+ /(170 * 2) )
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Standard
+\align center
+
+\size small
+
+\begin_inset Formula \begin{equation}
+		log(\d) \times \left ( \p \times \frac{\s GB}{900 GB/s \times 6} + \frac{\s GB}{50 GB/s \times 6}  + \frac{\s GB}{170 GB/s \ \times 2} \right )= \gpuSummitN s
+	\end{equation}
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\size small
+This yields in a speed-up of: 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+pgfmathsetmacro
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+speedup
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+cpuSummit
+\end_layout
+
+\end_inset
+
+ / 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+gpuSummitN
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Standard
+\align center
+
+\size small
+
+\begin_inset Formula \begin{equation}
+		\frac{\cpuSummit s}{\gpuSummitN s} = \speedup \times 
+	\end{equation}
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsubsection
+GPU Tree Building
+\end_layout
+
+\begin_layout Standard
+
+\size small
+And the corresponding GPU implementation: 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+pgfmathsetmacro
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+gpuSummitT
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+ln(
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+d{)}
+\end_layout
+
+\end_inset
+
+ / ln(2) * (
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+p
+\end_layout
+
+\end_inset
+
+ * 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+s
+\end_layout
+
+\end_inset
+
+ / (900 * 6)) + 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+s
+\end_layout
+
+\end_inset
+
+ / (50 * 6) + 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+s
+\end_layout
+
+\end_inset
+
+ /(170 * 2)
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\align center
+
+\size small
+
+\begin_inset Formula \begin{equation}
+		log(\d) \times \left ( \p \times \frac{\s GB}{900 GB/s \times 6} \right ) + \frac{\s GB}{50 GB/s \times 2}  + \frac{\s GB}{170 GB/s \times 2} = \gpuSummitT s
+	\end{equation}
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\size small
+This yields in a speed-up of: 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+pgfmathsetmacro
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+speedup
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+cpuSummit
+\end_layout
+
+\end_inset
+
+ / 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+gpuSummitT
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Standard
+\align center
+
+\size small
+
+\begin_inset Formula \begin{equation}
+		\frac{\cpuSummit s}{\gpuSummitT s} = \speedup \times
+	\end{equation}
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset VSpace 5mm
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Eiger
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+pgfmathsetmacro
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+cpuEiger
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+ln(
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+d{)}
+\end_layout
+
+\end_inset
+
+ / ln(2) * (
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+p
+\end_layout
+
+\end_inset
+
+ * 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+s
+\end_layout
+
+\end_inset
+
+ / (204.8 * 2)
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\align center
+
+\size small
+
+\begin_inset Formula \begin{equation}
+		\log(\d) \times \p \times \frac{ \s GB }{204.8 GB/s \times 2} = \cpuEiger s
+	\end{equation}
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Conclusion
+\end_layout
+
+\begin_layout Standard
+
+\size small
+We conclude that the GPU version with GPU Tree building enabled yields the best speedup and also performs a lot better than the CPU version. Also we can observe that the speedup is bounded by 
+\begin_inset Formula $\frac{B_{GPU}}{B_{CPU}}$
+\end_inset
+
+/ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+TODO
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+Add reasoning
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset Float figure
+placement H
+wide false
+sideways false
+status open
+
+
+\begin_layout Standard
+\align center
+
+\size small
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+begin{tikzpicture}
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+begin{axis} [ybar,height=10cm,width=13cm, 
+\end_layout
+
+\begin_layout Plain Layout
+				bar width=0.8cm,
+\end_layout
+
+\begin_layout Plain Layout
+				enlargelimits=0.2,
+\end_layout
+
+\begin_layout Plain Layout
+				symbolic x coords={Piz, Summit, Eiger},
+\end_layout
+
+\begin_layout Plain Layout
+				legend columns=1,
+\end_layout
+
+\begin_layout Plain Layout
+				legend entries={CPU, Hybrid Naive, Hybrid Tree},
+\end_layout
+
+\begin_layout Plain Layout
+				ylabel={Runtime (s) },
+\end_layout
+
+\begin_layout Plain Layout
+				x tick label style={rotate=45,anchor=east}, 
+\end_layout
+
+\begin_layout Plain Layout
+				xtick=data]
+\end_layout
+
+\begin_layout Plain Layout
+				
+\backslash
+addplot coordinates {
+\end_layout
+
+\begin_layout Plain Layout
+					(Piz,
+\backslash
+cpuPiz ) 
+\end_layout
+
+\begin_layout Plain Layout
+					(Summit,
+\backslash
+cpuSummit) 
+\end_layout
+
+\begin_layout Plain Layout
+					(Eiger,
+\backslash
+cpuEiger) 
+\end_layout
+
+\begin_layout Plain Layout
+				};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+				
+\backslash
+addplot coordinates {
+\end_layout
+
+\begin_layout Plain Layout
+					(Piz,
+\backslash
+gpuPizN ) 
+\end_layout
+
+\begin_layout Plain Layout
+					(Summit,
+\backslash
+gpuSummitN ) 
+\end_layout
+
+\begin_layout Plain Layout
+				};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+				
+\backslash
+addplot coordinates {
+\end_layout
+
+\begin_layout Plain Layout
+					(Piz,
+\backslash
+gpuPizT ) 
+\end_layout
+
+\begin_layout Plain Layout
+					(Summit,
+\backslash
+gpuSummitT  ) 
+\end_layout
+
+\begin_layout Plain Layout
+				};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+end{axis}
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\begin_layout Plain Layout
+		
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+end{tikzpicture}
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Execution times of different strategies
+\end_layout
+
+\end_inset
+
+
+\begin_inset CommandInset label
+LatexCommand label
+name "fig:exectimes"
+
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset Note Comment
+status open
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset Float figure
+wide false
+sideways false
+status open
+
+
+\begin_layout Standard
+\align center
+
+\size small
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+begin{tikzpicture}
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+\backslash
+begin{axis}[xmin = -1, xmax = 13, ymin=-1, ymax=6]
+\end_layout
+
+\begin_layout Plain Layout
+
+\backslash
+addplot[domain = 0:12,blue] {ln(
+\backslash
+d) / ln(2) * 
+\end_layout
+
+\begin_layout Plain Layout
+(
+\backslash
+p * x / (900 * 6))
+\end_layout
+
+\begin_layout Plain Layout
++  x / (50 * 6) + x /(170 * 2)};
+\end_layout
+
+\begin_layout Plain Layout
+
+\backslash
+addplot[domain = 0:12,blue] {ln(
+\backslash
+d * 16) / ln(2) * 
+\end_layout
+
+\begin_layout Plain Layout
+(
+\backslash
+p * x / (900 * 6))
+\end_layout
+
+\begin_layout Plain Layout
++  x / (50 * 6) + x /(170 * 2)};
+\end_layout
+
+\begin_layout Plain Layout
+
+\backslash
+end{axis}
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+end{tikzpicture}
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+??
+\end_layout
+
+\end_inset
+
+
+\begin_inset CommandInset label
+LatexCommand label
+name "fig:exectimes"
+
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset Newpage newpage
+\end_inset
+
+
+\size default
+
+\end_layout
+
+\begin_layout Section
+Stand-alone Implementation
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+TODO
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+Give introduction as to how precise the description is and should be
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\size small
+In this section we will describe the stand-alone implementation of the accelerated ORB algorithm. We will develop this separately from the PKDGrav codebase in order to have smaller and easily understandable codebase, furthermore we aim to use this platform for extensive empirical testing of different strategies. We aim to implement the CPU version in the most efficient method as possible. Only when we achieve that, we can make a fair comparison between the CPU and GPU implementation.
+\end_layout
+
+\begin_layout Standard
+
+\size small
+A brief overview of the core classes and function is as follows:
+\end_layout
+
+\begin_layout Itemize
+
+\size small
+
+\series bold
+particles
+\series default
+: The particles array has ownership over all particles. It has the shape of a multidimensional array, where the first three axes are occupied by positional data and the rest can be filled with meta data. 
+\end_layout
+
+\begin_layout Itemize
+
+\size small
+
+\series bold
+Cell
+\series default
+: The cell class is a structure keeping track of the fundamental cell information. In essence it is the analogue to the concept of the 
+\begin_inset Formula $cell$
+\end_inset
+
+ which we have already introduced in section 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "section:orb"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+. 
+\end_layout
+
+\begin_layout Itemize
+
+\size small
+
+\series bold
+ORB
+\series default
+: The orb class keeps track of the all particles and maintains a data-structure which maps between particles and cells. 
+\end_layout
+
+\begin_layout Itemize
+
+\size small
+
+\series bold
+Services
+\series default
+: The services are a set of function, which together form the building block of the ORB algorithm. This abstraction layer allows us to dynamically distribute and collect tasks from different processors. Furthermore individual services can be interchanged by GPU enabled implementations. 
+\end_layout
+
+\begin_layout Itemize
+
+\size small
+
+\series bold
+Messaging
+\series default
+: The messaging class is responsible for building the interface between different processors, which essentially is dispatching services. Its can be implemented using a wide set of tools. In our case we will solely focus on an MPI implementation.
+\end_layout
+
+\begin_layout Standard
+
+\size small
+For this project we will use C++ 17 along with CUDA 11.3, OpenMPI 4.1.0 and Blitz++ 1.0.2 
+\begin_inset CommandInset citation
+LatexCommand cite
+after ""
+key "blitzcpp"
+literal "false"
+
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Subsection
+Particles
+\end_layout
+
+\begin_layout Standard
+
+\size small
+To implement the particles array, we use C-style arrays interchangeably with blitz++ arrays. The blitz++ array is a wrapper class around C-style arrays, which helps with pointer management and can speed up the debugging process by keeping track of the array size and checking access indexes. Furthermore, we can easily create slices and make borrowed copies. Blitz++ allows us to easily access the C-style array with the command 
+\begin_inset Formula $array.data()$
+\end_inset
+
+, enabling us to
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+TODO
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+Add example with and without AVX in assembly
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ 
+\size default
+
+\end_layout
+
+\begin_layout Subsection
+Cell
+\end_layout
+
+\begin_layout Standard
+
+\size small
+As our tree consists of multiple cells, which are to be stored in a tree data-structure. As seen in section 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "section:orb-example"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+ the conditions for a balanced tree hold, allowing us to use a heap to store the tree. This 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+TODO
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+hint
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+ reduces the runtime of the tree, and since we need to store the cells in an array for communication purposes anyways (
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+TODO
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+Why exactly?
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+), this makes a lot of sense.
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+TODO
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+Either copy cell into buffer. You have to linearize. Add arguments with leaf cells.
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\size small
+When using a parallization schema using local reshuffling we will have to send all cells on a single level using the messaging interface. Using the heap datastructure, cells which corresponds to single level in the tree, can be accessed using a simple range.
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset Float figure
+placement H
+wide false
+sideways false
+status open
+
+
+\begin_layout Standard
+\align center
+
+\size small
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+begin{tikzpicture}[
+\end_layout
+
+\begin_layout Plain Layout
+						start chain = going right,
+\end_layout
+
+\begin_layout Plain Layout
+			node distance = 0pt,
+\end_layout
+
+\begin_layout Plain Layout
+			MyStyle/.style=draw, minimum width=2em, minimum height=2em, 
+\end_layout
+
+\begin_layout Plain Layout
+				outer sep=0pt, on chain,
+\end_layout
+
+\begin_layout Plain Layout
+			]
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node [MyStyle] (1) {$cell_1$};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node [MyStyle] (2) {$cell_2$};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node [MyStyle] (3) {$cell_3$};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node [MyStyle] (4) {$cell_4$};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+node [MyStyle] (5) {$cell_5$};
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+begin{scope}[-{Stealth[length = 2.5pt]}]
+\end_layout
+
+\begin_layout Plain Layout
+				
+\backslash
+draw (1.north) [out=25, in=155] to (2.north);
+\end_layout
+
+\begin_layout Plain Layout
+				
+\backslash
+draw (1.north) [out=30, in=155] to (3.north);
+\end_layout
+
+\begin_layout Plain Layout
+				
+\backslash
+draw (2.north) [out=35, in=155] to (4.north);
+\end_layout
+
+\begin_layout Plain Layout
+				
+\backslash
+draw (2.north) [out=40, in=155] to (5.north);
+\end_layout
+
+\begin_layout Plain Layout
+			
+\backslash
+end{scope}
+\end_layout
+
+\begin_layout Plain Layout
+		
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+end{tikzpicture}
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset space \qquad{}
+
+\end_inset
+
+
+\begin_inset Float figure
+wide false
+sideways false
+status open
+
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+Tree
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+[
+\end_layout
+
+\end_inset
+
+.cell1 [.cell2 [.cell4 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+]
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+[
+\end_layout
+
+\end_inset
+
+[.cell5 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+]
+\end_layout
+
+\end_inset
+
+ ] [.cell3 ]] 
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Tree as heap
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\size small
+Note that due to the property of always assigning the larger desired number of leaf cells to the left child cell, there will never be gaps in the lowest level of the tree, i.e. all consecutive indices in the array are filled with a cell until the last element.
+\end_layout
+
+\begin_layout Subsubsection
+Heap Conditions
+\end_layout
+
+\begin_layout Standard
+
+\size small
+As with all heap data-structures we have the following conditions:
+\end_layout
+
+\begin_layout Itemize
+
+\size small
+The root cell has index 1 
+\end_layout
+
+\begin_layout Itemize
+
+\size small
+The left child of cell at index 
+\begin_inset Formula $i$
+\end_inset
+
+ can be accessed at the index 
+\begin_inset Formula $i\times2$
+\end_inset
+
+. 
+\end_layout
+
+\begin_layout Itemize
+
+\size small
+The left child of cell at index 
+\begin_inset Formula $i$
+\end_inset
+
+ can be accessed at the index 
+\begin_inset Formula $i\times2 + 1$
+\end_inset
+
+. 
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset VSpace 0.5cm
+\end_inset
+
+ Furthermore we can derive the following constraints given the number of leaf cells 
+\begin_inset Formula $d$
+\end_inset
+
+:
+\end_layout
+
+\begin_layout Itemize
+
+\size small
+We can compute the depth of the tree with: 
+\begin_inset Formula $\lceil log_2(d) \rceil$
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Itemize
+
+\size small
+The number of cells on the second last level (which must all be leaf cells) is given by 
+\begin_inset Formula $2^{depth} - d$
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Itemize
+
+\size small
+There are exactly 
+\begin_inset Formula $2 \times d - 2^{depth}$
+\end_inset
+
+ items on the last level. 
+\end_layout
+
+\begin_layout Itemize
+
+\size small
+The total number of cells are 
+\begin_inset Formula $2\times d - 1$
+\end_inset
+
+. 
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+TODO
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+{
+\end_layout
+
+\end_inset
+
+Should I add the proofs here?
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsubsection
+Class
+\end_layout
+
+\begin_layout Standard
+
+\size small
+The cell class consists of the following variables:
+\end_layout
+
+\begin_layout Itemize
+
+\size small
+
+\begin_inset Formula $id$
+\end_inset
+
+: The id is a unique identification of the cell instance. 
+\end_layout
+
+\begin_layout Itemize
+
+\size small
+
+\begin_inset Formula $nLeafCells$
+\end_inset
+
+: this variable is equal to 
+\begin_inset Formula $d_{cell}$
+\end_inset
+
+ and depicts the number of leaf cells which can be found when walking all possible child cells of this cell. 
+\end_layout
+
+\begin_layout Itemize
+
+\size small
+
+\begin_inset Formula $lower$
+\end_inset
+
+: The lower is 3D point coordinate which represents the lower boundary corner of the 3D volume 
+\begin_inset Formula $V_{cell}$
+\end_inset
+
+ which is encompassed by this cells domain. 
+\end_layout
+
+\begin_layout Itemize
+
+\size small
+
+\begin_inset Formula $upper$
+\end_inset
+
+: The represents the upper boundary corner of the volume. 
+\end_layout
+
+\begin_layout Itemize
+
+\size small
+
+\begin_inset Formula $tmp$
+\end_inset
+
+: The cell has room for additional data, which may be stored during executions of algorithms. 
+\end_layout
+
+\begin_layout Standard
+
+\size small
+The cells could be stored as binary tree or as we have already mentioned we could make use of a heap datastructure which allows for greater flexibility. Due to performance improvements, we will opt for the second variant.
+\end_layout
+
+\begin_layout Subsection
+ORB
+\end_layout
+
+\begin_layout Itemize
+
+\size small
+
+\begin_inset Formula $particles$
+\end_inset
+
+: The cell class has ownership over the particles array. 
+\end_layout
+
+\begin_layout Itemize
+
+\size small
+
+\begin_inset Formula $cellToParticles$
+\end_inset
+
+: This array maps from a 
+\begin_inset Formula $cell.id$
+\end_inset
+
+ to a tuple with entries 
+\begin_inset Formula $a$
+\end_inset
+
+ and 
+\begin_inset Formula $b$
+\end_inset
+
+ where a marks the index of the first particle in the particles array which is contained in this cell. Consequently 
+\begin_inset Formula $b$
+\end_inset
+
+ marks the index after the last particle contained in the volume of the cell. Note that this is possible due to the constant reshuffling. 
+\end_layout
+
+\begin_layout Standard
+
+\size small
+The orb class comes with helper functions, which improve abstraction and understandability of the code. For example it introduces a swap function, which can swap two particles in the particles array.
+\end_layout
+
+\begin_layout Subsection
+Services
+\end_layout
+
+\begin_layout Standard
+
+\size small
+Similarly as in PKDGrav we introduce the concept of services, which essentially is a collection of functions which can be sent to any set of processors in the computing system. We abstract the ORB algorithm into such services, such that we can experiment with different workload distribution schemas and easily interchange subroutines with GPU enables ones.
+\end_layout
+
+\begin_layout Standard
+
+\size small
+The services we have implemented are:
+\end_layout
+
+\begin_layout Itemize
+
+\size small
+
+\begin_inset Formula $countLeftService$
+\end_inset
+
+ : Counts the number of particles left of a provided cut position for each of the cells. 
+\end_layout
+
+\begin_layout Itemize
+
+\size small
+
+\begin_inset Formula $countServiceService$
+\end_inset
+
+ : Counts the number particles inside the domain for each of the provided cells. 
+\end_layout
+
+\begin_layout Itemize
+
+\size small
+
+\begin_inset Formula $localReshuffleService$
+\end_inset
+
+ : Reshuffles the particles locally, such that their memory locality corresponds to a cell. 
+\end_layout
+
+\begin_layout Itemize
+
+\size small
+
+\begin_inset Formula $buildTreeService$
+\end_inset
+
+ : This is the operative service, which distributes and coordinates other services. Its comparable to the ORB main routine. 
+\end_layout
+
+\begin_layout Standard
+
+\size small
+Each service function is associated with an unique ID.
+\end_layout
+
+\begin_layout Standard
+
+\size small
+With this system, a processor simply needs to wait for new services and fetch their corresponding parameters. The fetching and distribution of such services happens over the Messaging interface.
+\end_layout
+
+\begin_layout Subsection
+CUDA Services
+\end_layout
+
+\begin_layout Standard
+
+\size small
+In this section we describe the services which were implemented using CUDA. In this section we may also add some theory about how exactly CUDA works.
+\end_layout
+
+\begin_layout Subsection
+Messaging
+\end_layout
+
+\begin_layout Standard
+
+\size small
+The messsaging class has one main function called 
+\begin_inset Formula $dispatchService$
+\end_inset
+
+. It takes a service ID and distributes the necessary data to the target processors. Furthermore it collects the results of the services and returns them to the source processor.
+\end_layout
+
+\begin_layout Standard
+
+\size small
+In this section we will take an in depth look at the MPI calls which have to be made in order to make this function work.
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset Newpage newpage
+\end_inset
+
+
+\size default
+
+\end_layout
+
+\begin_layout Section
+Empirical Analysis of ORB
+\end_layout
+
+\begin_layout Subsection
+Methodology
+\end_layout
+
+\begin_layout Subsection
+Results
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset Note Comment
+status open
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset Float figure
+placement H
+wide false
+sideways false
+status open
+
+
+\begin_layout Standard
+\align center
+
+\size small
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+begin{tikzpicture}
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+				
+\backslash
+begin{axis}[
+\end_layout
+
+\begin_layout Plain Layout
+					height=10cm,width=13cm, 
+\end_layout
+
+\begin_layout Plain Layout
+					title={Measured Performance with $d = 1024$},
+\end_layout
+
+\begin_layout Plain Layout
+					xlabel={Particle Count},
+\end_layout
+
+\begin_layout Plain Layout
+					ylabel={Execution Time (ms)},
+\end_layout
+
+\begin_layout Plain Layout
+					]
+\end_layout
+
+\begin_layout Plain Layout
+					
+\end_layout
+
+\begin_layout Plain Layout
+					
+\backslash
+foreach 
+\backslash
+i in {0,...,3}{
+\end_layout
+
+\begin_layout Plain Layout
+						
+\backslash
+pgfmathsetmacro
+\backslash
+suffix{int(pow(2,
+\backslash
+i))};
+\end_layout
+
+\begin_layout Plain Layout
+						
+\end_layout
+
+\begin_layout Plain Layout
+						
+\backslash
+addplot +[] 
+\end_layout
+
+\begin_layout Plain Layout
+						table [col sep=comma, x=N, y=time] 
+\end_layout
+
+\begin_layout Plain Layout
+						{../../code/out/measurements
+\backslash
+suffix.csv};
+\end_layout
+
+\begin_layout Plain Layout
+						
+\end_layout
+
+\begin_layout Plain Layout
+						
+\backslash
+addlegendentryexpanded{
+\backslash
+# $
+\backslash
+suffix$};
+\end_layout
+
+\begin_layout Plain Layout
+						
+\end_layout
+
+\begin_layout Plain Layout
+					}	
+\end_layout
+
+\begin_layout Plain Layout
+				
+\backslash
+end{axis}
+\end_layout
+
+\begin_layout Plain Layout
+			
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+\backslash
+end{tikzpicture}
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Comparison to Theoretical Model
+\end_layout
+
+\begin_layout Subsection
+Conclusion
+\end_layout
+
+\begin_layout Standard
+
+\size small
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+% Use for reduction explanation https://texample.net/tikz/examples/database-decimation-process/
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+
+ 
+\begin_inset CommandInset bibtex
+LatexCommand bibtex
+bibfiles "reference"
+options "apa"
+
+\end_inset
+
+
+\end_layout
+
+\end_body
+\end_document

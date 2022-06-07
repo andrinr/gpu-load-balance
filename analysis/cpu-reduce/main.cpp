@@ -6,7 +6,7 @@
 #include <chrono>
 #include <iostream>
 
-void versionOne(blitz::Array<float, 2> particles, int n, int k) {
+int versionOne(blitz::Array<float, 2> particles, int n, int k) {
 
     int nLeft = 0;
     float cut = 0.5;
@@ -22,7 +22,7 @@ void versionOne(blitz::Array<float, 2> particles, int n, int k) {
     auto end = std::chrono::high_resolution_clock::now();
 
     std::cout << "cost in microseconds with c style pointer iteration " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << "\n";
-
+    return nLeft;
 }
 
 void versionTwo(blitz::Array<float, 2> particles, int n, int k) {
