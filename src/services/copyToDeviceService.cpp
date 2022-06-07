@@ -32,43 +32,20 @@ int ServiceCopyToDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
         int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
         int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
 
-        const int nThreads = 256;
-        // Can increase speed by another factor of around two
-        const int elementsPerThread = 16;
-        const int nBlocks = ceil(endInd - beginInd / (nThreads * elementsPerThread) / 2 );
-
-        cudaStream_t stream;
-        cudaError_t result;
-        streams.push_back(stream);
-        result = cudaStreamCreate(&stream);
+        cudaStream_t stream = pst->lcl->streams(i);
 
         float * d_particles;
-        int * d_counts;
-        int * h_counts = (int*)calloc(nBlocks, sizeof(int));
+
+        pst->lcl->d_particles(i) = d_particles;
 
         blitz::Array<float,1> particles = pst->lcl->particles(blitz::Range(beginInd, endInd), cell.cutAxis);
 
         cudaMalloc(&d_particles, sizeof (float) * n);
-        cudaMalloc(&d_counts, sizeof (int) * nBlocks);
         result = cudaMemcpyAsync(d_particles, particles.data(), endInd - beginInd, cudaMemcpyHostToDevice, stream);
-
-        float cut = (cell.cutMarginRight + cell.cutMarginLeft) / 2.0;
-        reduce<nThreads><<<nBlocks, nThreads, nThreads * sizeof (int), stream>>>(
-                d_particles, d_counts, cut, endInd - beginInd);
-
-        cudaMemcpyAsync(h_sums, d_sums, sizeof (int ) * nBlocks, cudaMemcpyDeviceToHost, stream);
-
-        for (int i = 0; i < nBlocks; ++i) {
-            out[cellPtrOffset] += h_sums[i];
-        }
     }
 
     // Wait till all streams have finished
     cudaDeviceSynchronize();
-
-    for (auto stream : streams) {
-        cudaStreamDestroy(stream);
-    }
 
     return nCells * sizeof(output);
 }

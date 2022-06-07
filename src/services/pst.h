@@ -5,9 +5,9 @@
 class LocalData {
     blitz::Array<float, 2> particles;
     blitz::Array<int, 2> cellToRangeMap;
+    blitz::Array<cudaStream_t, 1> streams;
+    blitz::Array<float *, 1> d_particles;
 };
-
-
 
 //#include "bound.h"
 class pstNode {
