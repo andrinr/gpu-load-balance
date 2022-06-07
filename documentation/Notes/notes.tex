@@ -657,7 +657,7 @@ The nature of the ORB algorithm and its application with very large data-sizes, 
 When creating such a model, the performance is either bound by the number of floating point operations per minute, or in some cases its bound by the memory access speed. In our case, we assume that we are generally bound by memory access times, and not tflops. If we investigate the operations which are needed for the binary cut algorithm, we notice that the actual operations completed inside the loop, are only very few. When comparing the CPU implementation with GPU one, we need to not only consider benefits from increased parallelism in GPU hardware, which will lead to a higher tflops, but also possible speed-ups reached by higher bandwidths in GPU memory than CPU memory. On the other hand we need to mitigate the very low bandwidths between the GPU and CPU, which cannot be avoided altogether, as the data needs to be sent from the CPU to GPU before we can process it on the graphics processor.
 
 
-\subsection{Datapoints of supercomputers}
+\subsection{Datapoints of Supercomputers}
 
 We will compare the performance with the datapoints of Piz Daint, Summit and Alps which is a part of Eiger. We choose Piz Daint because we have the possibility to test the Code on its systems. We choose Eiger because we can also access its systems and it will give us a good reference values, due to it being a non hybrid supercomputer, meaning the nodes to not have GPU. Finally we analyse its performance on Summit, as its at the time of writing this thesis, one of the most capable supercomputers in the world.
 
@@ -704,74 +704,88 @@ In order to estimate the runtime of the algorithms we denote the number of parti
 In order to prove or disprove our assumption, about the performance of the ORB algorithm being memory bound, we introduce a theoretical model and also make a few measurements to support the claim. 
 To make a proper model for the CPU version, we also need to consider AVX. With AVX enabled, the compare and 
 
-We consider a minimal C++ code to investigate this issue. We use the -S flag along with the g++ compiler to generate and read the generated assembly code. In this case startPtr is a pointer which indicated the first adress where we want to start out iteration process. Consequently endPtr is the memory of the last entry we want to access. For testing purposes all entries in the array are set to random values between 0 and 1, and cut is set to 0.5. 
+We consider a minimal C++ code to investigate this issue. We use the -S flag along with the g++ compiler to generate and read the generated assembly code. In this case startPtr is a pointer which indicated the first address where we want to start out iteration process. Consequently endPtr is the memory of the last entry we want to access. For testing purposes all entries in the array are set to random values between 0 and 1, and cut is set to 0.5. 
 
 \begin{lstlisting}
 for(auto p= startPtr; p<endPtr; ++p) nLeft += *p < cut;
 \end{lstlisting}
 
-\TODO{Add assembler code with actual avx in it?}
-
-Without AVX:
+We not compile our program, once with the g++ compiler and the optimizer set to -O3. 
+When compiling to assembly instructions we can identify the loop and see the following instructions:
 \begin{lstlisting}
-.L7:
-	movq	-32(%rbp), %rax
-	cmpq	-56(%rbp), %rax
-	jnb	.L6
-	movq	-32(%rbp), %rax
-	movss	(%rax), %xmm1
-	movss	-36(%rbp), %xmm0
-	comiss	%xmm1, %xmm0
-	seta	%al
-	movzbl	%al, %eax
-	addl	%eax, -20(%rbp)
-	addq	$4, -32(%rbp)
-	jmp	.L7
-.L6:
+.L18:
+	movups	(%rax), %xmm0
+	addq	$16, %rax
+	cmpltps	%xmm2, %xmm0
+	psubd	%xmm0, %xmm1
+	cmpq	%rdx, %rax
+	jne	.L18
+	movdqa	%xmm1, %xmm0
+	movq	%rcx, %rax
+	psrldq	$8, %xmm0
+	andq	$-4, %rax
+	paddd	%xmm0, %xmm1
+	leaq	(%rbx,%rax,4), %rbx
+	movdqa	%xmm1, %xmm0
+	psrldq	$4, %xmm0
+	paddd	%xmm0, %xmm1
+	movd	%xmm1, %r12d
+	cmpq	%rax, %rcx
+	je	.L15
+.L16:
 \end{lstlisting}
 
-With AVX:
+If we additionally set the flag -march=native we can enable AVX. This yields the following assembly instructions, where we can identify the vcmplpts and vsubd commands, which are both packaged AVX instructions. This means we have a code which can be compiled to leverage hardware in an optimal way.
+
 \begin{lstlisting}
 	
-.L7:
-	movq	-32(%rbp), %rax
-	cmpq	-56(%rbp), %rax
-	jnb	.L6
-	movq	-32(%rbp), %rax
-	vmovss	(%rax), %xmm1
-	vmovss	-36(%rbp), %xmm0
-	vcomiss	%xmm1, %xmm0
-	seta	%al
-	movzbl	%al, %eax
-	addl	%eax, -20(%rbp)
-	addq	$4, -32(%rbp)
-	jmp	.L7
-.L6:	
+.L19:
+	vmovups	(%rax), %ymm3
+	addq	$32, %rax
+	vcmpltps	%ymm2, %ymm3, %ymm0
+	vpsubd	%ymm0, %ymm1, %ymm1
+	cmpq	%rdx, %rax
+	jne	.L19
+	vmovdqa	%xmm1, %xmm0
+	vextracti128	$0x1, %ymm1, %xmm1
+	vpaddd	%xmm1, %xmm0, %xmm1
+	vpsrldq	$8, %xmm1, %xmm0
+	vpaddd	%xmm0, %xmm1, %xmm1
+	vpsrldq	$4, %xmm1, %xmm0
+	movq	%rsi, %rax
+	vpaddd	%xmm0, %xmm1, %xmm1
+	andq	$-8, %rax
+	vmovd	%xmm1, %r12d
+	leaq	(%rbx,%rax,4), %rbx
+	cmpq	%rax, %rsi
+	je	.L27
+	vzeroupper
+.L17:	
 
 \end{lstlisting}
 
-Note how the commands movss were replaced by the AVX enabled commands vmovss. Furthemore comiss was also replaced with vcomiss. 
+In theory we can estimate the number of tflops with the following formula:
 
-We also performed some testing on CPU with AVX2 enabled. We summed up $2^{26}$ particles. 
-The version with AVX enabled took 0.25 seconds, meanwhile the non AVX version took 1.2 seconds. This yields in a speed improvement of almost a factor of 6, which is not to expect considering some overhead. 
+\begin{center}
+	\begin{equation}
+		tflops = GHZ * AVX * CPI * np / 1000
+	\end{equation}
+\end{center}
 
-We can see that the actual operations are mainly a compare and an add operation. Both of which can be done using AVX. 
-Depending on the AVX standard which is enabled, this means that the CPU can perform between 128 and 512 bits. For single precision floating point numbers, this means it can process between four and sixteen floating point numbers in a single cycle. In the case of AVX2 we can process eight floats per cycle. 
+Where GHZ are the gigahertz which can be reached by the CPU, the AVX is the number of floats which can be packaged by AVX2. CPI is the cycles per instructions, which is equal to 2 for the AVX commands. Finally we have np which is the number of processors. Note that we assume a perfect parallelization, which is reasonable in this case.
+
+The following test results were achieved from a Intel(R) Core(TM) i9-10885H CPU @ 2.40GHz
+processor. We perform the conditional reduction on  $2^{27}$. The reduction takes 244420 microseconds. This means we have a throughput of $2^{27} / 10^{12} * 10^6 / 24420 = 0.00549 tflops$. This of course does not lie anywhere near the theoretical maximum, which even for a single processor ($np = 1$) is $2.4 * 8 * 2 * 1 / 1000 = 0.0384 tflops.$. This is a strong indication, that already now we are in the realm of bandwidth limited algorithms. This effect becomes even stronger when considering parallelism. 
+
+\TODO{If there is time, build simple MPI version to backup model with data.}
+
+\TODO{Try to integrate: https://zsmith.co/bandwidth.php}
 	
 \def\N{1}
 \def\Bytes{12}
 \def\s{12}
 \def\d{8096}
 \def\p{32}
-
-
-\begin{center}
-	\begin{equation}
-		GHZ * 8 * np / 1000
-	\end{equation}
-\end{center}
-
-\TODO{Consider having multiple CPUs}
 
 \begin{figure}[H]
 	\begin{center}
@@ -780,32 +794,32 @@ Depending on the AVX standard which is enabled, this means that the CPU can perf
 				height=10cm,width=10cm, 
 				xlabel={\# Processors},
 				ylabel={tflops},
-				xmin = -1, xmax = 71, ymin= -0.5, ymax=3,
+				xmin = 0.5, xmax = 16, ymin= -0.1, ymax=0.6,
 				legend style={at={(0.03,0.8)},anchor=west}]
 				
-				\addplot+[domain = 1:70, mark=none] {
+				\addplot+[domain = 1:16, mark=none] {
 					4.5 * 8 * \x / 1000
 				};	
 				\addlegendentryexpanded{4.5 GHZ};
 
-				\addplot+[domain = 1:70, mark=none] {
+				\addplot+[domain = 1:16, mark=none] {
 					3.5 * 8 * \x / 1000
 				};	
 				\addlegendentryexpanded{3.5 GHZ};
 				
 		
-				\addplot+[domain = 1:70, mark=none] {
+				\addplot+[domain = 1:16, mark=none] {
 					2.5 * 8 * \x / 1000
 				};	
 				\addlegendentryexpanded{2.5 GHZ};
 				
-				\addplot+[mark=none] coordinates {(0,0.002) (70,0.002)};
+				\addplot+[mark=none] coordinates {(0,0.002) (16,0.002)};
 				\addlegendentry{$B_{C}$ Intel}
 				
-				\addplot+[mark=none] coordinates {(0,0.005) (70,0.005)};
+				\addplot+[mark=none] coordinates {(0,0.005) (16,0.005)};
 				\addlegendentry{$B_{C}$ IBM}
 				
-				\addplot+[mark=none] coordinates {(0,0.0062) (70,0.0062)};
+				\addplot+[mark=none] coordinates {(0,0.0062) (16,0.0062)};
 				\addlegendentry{$B_{C}$ AMD}
 
 				%\node[label={Intel E5-2690 v3},circle,fill,inner sep=2pt] at (axis cs:12,45.6) {};

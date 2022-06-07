@@ -1,4 +1,4 @@
-#include "countLeftGPUService.h"
+#include "copyToDeviceService.h"
 #include <blitz/array.h>
 #inlcude <vector>
 
@@ -7,54 +7,7 @@
 static_assert(std::is_void<ServiceCountLeft::input>()  || std::is_trivial<ServiceCountLeft::input>());
 static_assert(std::is_void<ServiceCountLeft::output>() || std::is_trivial<ServiceCountLeft::output>());
 
-template <unsigned int blockSize>
-__device__ void warpReduce(volatile int *sdata, unsigned int tid) {
-    if (blockSize >= 64) sdata[tid] += sdata[tid + 32];
-    if (blockSize >= 32) sdata[tid] += sdata[tid + 16];
-    if (blockSize >= 16) sdata[tid] += sdata[tid + 8];
-    if (blockSize >= 8) sdata[tid] += sdata[tid + 4];
-    if (blockSize >= 4) sdata[tid] += sdata[tid + 2];
-    if (blockSize >= 2) sdata[tid] += sdata[tid + 1];
-}
-
-template <unsigned int blockSize>
-__global__ void reduce(float *g_idata, int *g_odata, float cut, int n) {
-    extern __shared__ int sdata[];
-
-    unsigned int tid = threadIdx.x;
-    unsigned int i = blockIdx.x*(blockSize*2) + threadIdx.x;
-    unsigned int gridSize = blockSize*2*gridDim.x;
-    sdata[tid] = 0;
-    while (i < n) {
-        sdata[tid] += g_idata[i] + g_idata[i+blockSize];
-        i += gridSize;
-    }
-    __syncthreads();
-
-    if (blockSize >= 512) {
-        if (tid < 256) {
-            sdata[tid] += sdata[tid + 256];
-        } __syncthreads();
-    }
-    if (blockSize >= 256)https://developer.nvidia.com/blog/how-overlap-data-transfers-cuda-cc/ {
-        if (tid < 128) {
-            sdata[tid] += sdata[tid + 128];
-        } __syncthreads();
-    }
-    if (blockSize >= 128) {
-        if (tid < 64) {
-            sdata[tid] += sdata[tid + 64];
-        } __syncthreads();
-    }
-    if (tid < 32) {
-        warpReduce<blockSize>(sdata, tid);
-    }
-    if (tid == 0) {
-        g_odata[blockIdx.x] = sdata[0];
-    }
-}
-
-int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
+int ServiceCopyToDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     // store streams / initialize in local data
     //
     auto lcl = pst->lcl;
@@ -62,7 +15,7 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     auto out = static_cast<output *>(vout);
     auto nCells = nIn / sizeof(input);
     assert(nOut / sizeof(output) >= nCells);
-    printf("ServiceCountLeft invoked on thread %d\n",pst->idSelf);
+    printf("ServiceCopyToDevice invoked on thread %d\n",pst->idSelf);
 
     cudaMalloc(&d_particles, sizeof (float) * n);
     cudaMemcpy(d_particles, pos, sizeof (float ) * n, cudaMemcpyHostToDevice);
@@ -120,7 +73,7 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     return nCells * sizeof(output);
 }
 
-int ServiceCountLeftGPU::Combine(void *vout,void *vout2,int nIn,int nOut1,int nOut2) {
+int ServiceCopyToDevice::Combine(void *vout,void *vout2,int nIn,int nOut1,int nOut2) {
     auto out  = static_cast<output *>(vout);
     auto out2 = static_cast<output *>(vout2);
     int nCounts = nIn / sizeof(input);

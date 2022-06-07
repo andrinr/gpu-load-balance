@@ -33,12 +33,5 @@ int ServiceInitParticles::Service(PST pst,void *vin,int nIn,void *vout, int nOut
 }
 
 int ServiceInitParticles::Combine(void *vout,void *vout2,int nIn,int nOut1,int nOut2) {
-    auto out  = static_cast<output *>(vout);
-    auto out2 = static_cast<output *>(vout2);
-    int nCounts = nIn / sizeof(input);
-    assert(nOut1 >= nCounts*sizeof(output));
-    assert(nOut2 >= nCounts*sizeof(output));
-    for(auto i=0; i<nCounts; ++i)
-	    out[i] += out2[i];
     return 0;
 }

@@ -6,7 +6,7 @@
 #include <chrono>
 #include <iostream>
 
-int versionOne(blitz::Array<float, 2> particles, int n, int k) {
+int sum(blitz::Array<float, 2> particles, int n, int k) {
 
     int nLeft = 0;
     float cut = 0.5;
@@ -23,22 +23,6 @@ int versionOne(blitz::Array<float, 2> particles, int n, int k) {
 
     std::cout << "cost in microseconds with c style pointer iteration " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << "\n";
     return nLeft;
-}
-
-void versionTwo(blitz::Array<float, 2> particles, int n, int k) {
-
-    int nLeft = 0;
-    float cut = 0.5;
-
-    auto start = std::chrono::high_resolution_clock::now();
-
-    // In this case we use the accessor provided by blitz
-    for(int i = 0; i < n; i++) nLeft += particles(i, 0);
-
-    auto end = std::chrono::high_resolution_clock::now();
-
-    std::cout << "cost in microseconds with blitz iterator: " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << "\n";
-
 }
 
 int main(int argc, char** argv) {
@@ -59,8 +43,7 @@ int main(int argc, char** argv) {
 
     for(auto p= startPtr; p<endPtr; ++p) *p = (float)(rand())/(float)(RAND_MAX);;
 
-    versionOne(particles, n , k);
-    versionTwo(particles, n , k);
+    sum(particles, n , k);
 
     return 0;
 }

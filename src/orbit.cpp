@@ -38,7 +38,6 @@ void *worker_init(MDL vmdl) {
     // Count Left
     // Reshuffle
 
-
     mdl->AddService(std::make_unique<ServiceSetAdd>(pst));
     mdl->AddService(std::make_unique<ServiceCountLeft>(pst));
 
