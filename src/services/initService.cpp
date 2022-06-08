@@ -36,7 +36,7 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     printf("ServiceInit generated random numbers %d\n",pst->idSelf);
 
 
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < 32; i++) {
         cudaStream_t stream;
         result = cudaStreamCreate(&stream);
         cudaStreams(i) = stream;

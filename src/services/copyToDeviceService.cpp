@@ -22,7 +22,6 @@ int ServiceCopyToDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
 
     cudaMalloc(&d_sums, sizeof (int) * n);
 
-    std::vector<cudaStream_t> streams;
     // https://developer.nvidia.com/blog/how-overlap-data-transfers-cuda-cc/
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset){
 
@@ -32,7 +31,8 @@ int ServiceCopyToDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
         int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
         int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
 
-        cudaStream_t stream = pst->lcl->streams(i);
+        int streamId = cellPtrOffset % 32;
+        //cudaStreamSynchronize(lcl->streams(streamId));
 
         float * d_particles;
 
@@ -41,7 +41,14 @@ int ServiceCopyToDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
         blitz::Array<float,1> particles = pst->lcl->particles(blitz::Range(beginInd, endInd), cell.cutAxis);
 
         cudaMalloc(&d_particles, sizeof (float) * n);
-        result = cudaMemcpyAsync(d_particles, particles.data(), endInd - beginInd, cudaMemcpyHostToDevice, stream);
+        cudaMalloc(&d_counts, sizeof (int) * nBlocks);
+        result = cudaMemcpyAsync(
+                d_particles,
+                particles.data(),
+                endInd - beginInd,
+                cudaMemcpyHostToDevice,
+                pst->lcl->streams(streamId)
+        );
     }
 
     // Wait till all streams have finished
