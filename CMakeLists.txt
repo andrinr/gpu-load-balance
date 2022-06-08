@@ -66,7 +66,8 @@ add_executable(
         src/services/setadd.cpp
         src/services/TraversePST.cpp
         src/services/countLeftService.cpp
-        src/services/countLeftGPUService.cpp
+        src/services/initService.cpp
+        #src/services/countLeftGPUService.cpp
 )
 
 target_include_directories(orbit PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)

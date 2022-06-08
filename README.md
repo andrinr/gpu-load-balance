@@ -41,8 +41,7 @@ Using Nvidia Nsight:
 Insert instructions here
 
 ## Open questions
-- cannot generate cmake file, due to dependency issue, fftw not fftw3 required??
-- AVX commands yes for vmovss etc but not add, speedup improvement very minor
-- Why are tflops so immensely much higher than flops?
-- Do I put pointers and streams in local data from pst when trying to preserve data in device memory?
-- Nvidia Nsight not wokring
+- How are number of threads defined?
+- How can I pass header data?
+- Why cant I cast to input data?
+- 

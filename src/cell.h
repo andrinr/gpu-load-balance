@@ -1,7 +1,6 @@
 #ifndef CELL_H // include guard
 #define CELL_H
 
-#include "constants.h"
 #include <cstdint>
 #include "tuple"
 #include <iostream>
@@ -98,9 +97,10 @@ namespace CellHelpers {
     }
 
     static void setCutAxis(Cell &cell) {
-        uint8_t maxD = DIMENSIONS;
+        int maxD = -1;
+
         float maxSize = 0.0;
-        for (int d = 0; d < DIMENSIONS; d++) {
+        for (int d = 0; d < 3; d++) {
             float size = cell.upper[d] - cell.lower[d];
 
 #if DEBUG

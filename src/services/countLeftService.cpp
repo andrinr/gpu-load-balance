@@ -12,9 +12,9 @@ int ServiceCountLeft::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     auto nCells = nIn / sizeof(input);
     assert(nOut / sizeof(output) >= nCells);
     printf("ServiceCountLeft invoked on thread %d\n",pst->idSelf);
-
+    printf("cells %d\n", nCells);
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset){
-        auto cell = static_cast<Cell>*(in + cellPtrOffset);
+        auto cell = static_cast<Cell>(*(in + cellPtrOffset));
         // -1 axis signals no need to count
         if (cell.cutAxis == -1) continue;
         int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);

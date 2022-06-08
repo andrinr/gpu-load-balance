@@ -1,8 +1,11 @@
 #include <stdio.h>
+#include <blitz/array.h>
+#include "cell.h"
 #include "mdl.h"
 #include "services/pst.h"
 #include "services/setadd.h"
 #include "services/countLeftService.h"
+#include "services/initService.h"
 
 int master(MDL vmdl,void *vpst) {
     auto mdl = static_cast<mdl::mdlClass *>(vmdl);
@@ -12,16 +15,43 @@ int master(MDL vmdl,void *vpst) {
     ServiceSetAdd::input inAdd(mdl->Threads());
     mdl->RunService(PST_SETADD,sizeof(inAdd),&inAdd);
 
-    int N = 1 << 25;
-    // user code
+    int n = 1 << 25;
+    int d = 1 << 10;
 
-    //IO::generateData(N, )
+    const float lowerInit = -0.5;
+    const float upperInit = 0.5;
+
+    float lower[3] = {lowerInit, lowerInit, lowerInit};
+    float upper[3] = {upperInit, upperInit, upperInit};
+
+    // root cell is at index 1
+    blitz::Array<Cell, 1> cells(d);
+
+    // user code
+    Cell root(0, d, lower, upper);
+    CellHelpers::setCutAxis(root);
+    CellHelpers::setCutMargin(root);
+    cells(0) = root;
+
+    /*for (int l = 1; l < CellHelpers::getNLevels(*inputData.root); ++l) {
+
+        int a = std::pow(2, (l-1)) - 1;
+        int b = std::min(
+                CellHelpers::getNCellsOnLastLevel(*inputData.root),
+                inputData.root->nLeafCells) - 1;
+
+        int nCells = 1;*/
+
+
+    ServiceInit::input iNParticles[1];
+    ServiceInit::output oNParticles[1];
+    mdl->RunService(PST_INIT, sizeof (int), iNParticles, oNParticles);
 
     int nCells = 1;
-    ServiceCountLeft::input incl[nCells];
-    ServiceCountLeft::output counts[nCells];
-    mdl->RunService(PST_COUNTLEFT,nCells*sizeof(incl[0]),incl,counts);
-    printf("ServiceCountLeft returned: %lu\n",counts[0]);
+    ServiceCountLeft::input * iCountLeft = cells.data();
+    ServiceCountLeft::output oCountLeft[nCells];
+    mdl->RunService(PST_COUNTLEFT,nCells*sizeof(ServiceCountLeft::input),iCountLeft,oCountLeft);
+    printf("ServiceCountLeft returned: %lu\n",oCountLeft[0]);
     return 0;
 }
 
@@ -40,6 +70,7 @@ void *worker_init(MDL vmdl) {
 
     mdl->AddService(std::make_unique<ServiceSetAdd>(pst));
     mdl->AddService(std::make_unique<ServiceCountLeft>(pst));
+    mdl->AddService(std::make_unique<ServiceInit>(pst));
 
     return pst;
 }

@@ -154,15 +154,15 @@ Our main objective in this work is to improve the runtime of astrophysical simul
 \subsubsection{By example} 
 For the purpose of explaining the algorithm both visualy and by a numveric example, we consider the following minimal dataset:
 
-\begin{filecontents*}{particles4.csv}
-x,y,id
-0.4,0.3,0
-0.2,0.6,1
-0.8,0.9,2
-0.6,0.5,3
-0.3,0.8,4
-0.7,0.1,5
-0.9,0.8,6
+\begin{filecontents*}{particles9.csv}
+x,y,id,o1,o2
+0.4,0.3,0,0,0
+0.2,0.6,1,2,1
+0.8,0.9,2,1,2
+0.6,0.5,3,0,0
+0.3,0.8,4,1,1
+0.7,0.1,5,2,2
+0.9,0.3,6,2,2
 \end{filecontents*}
 
 \begin{figure}[H]
@@ -172,7 +172,7 @@ x,y,id
             tabular=ccc,
             table head=\hline \bfseries{x} & \bfseries{y} & \bfseries{id} \\\hline,
             late after last line=\\\hline % horizontal line at the end of the table
-            ]{particles4.csv}{}{\csvlinetotablerow}
+            ]{particles6.csv}{}{\csvcoli & \csvcolii & \csvcoliii}
         \end{minipage}
         \begin{minipage}[c]{0.7\linewidth}
             \begin{tikzpicture}
@@ -192,7 +192,7 @@ x,y,id
                     y=y, 
                     meta=id, 
                     col sep=comma] 
-                {particles4.csv};
+                {particles6.csv};
                 \end{axis}
 
             \end{tikzpicture}
@@ -293,7 +293,7 @@ In this non general case, where $d$ is a power of two, we are able to construct 
                     y=y, 
                     meta=id, 
                     col sep=comma] 
-                {particles4.csv};
+                {particles6.csv};
                 \draw [fill=red!20](0.0,0.0) rectangle (1, 1);
                 \node[below] at (0.5, 1){$cell_1$};
                 \end{axis}
@@ -331,7 +331,7 @@ In this non general case, where $d$ is a power of two, we are able to construct 
                     y=y, 
                     meta=id, 
                     col sep=comma] 
-                {particles4.csv};
+                {particles6.csv};
                 \draw [fill=green!20](0.0,0.0) rectangle (0.65, 1);
                 \draw [fill=blue!20](0.65,0.0) rectangle (1, 1);
                 \node[below] at (0.2, 1){$cell_2$};
@@ -372,7 +372,7 @@ In this non general case, where $d$ is a power of two, we are able to construct 
                     y=y, 
                     meta=id, 
                     col sep=comma] 
-                {particles4.csv};
+                {particles6.csv};
                 \draw [fill=pink!20](0.0,0.0) rectangle (0.65, 0.55);
                 \draw [fill=yellow!20](0.0,0.55) rectangle (0.65, 1);
                 \draw [fill=blue!20](0.65,0.0) rectangle (1, 1);
@@ -571,13 +571,71 @@ The reshuffle algorithm has a clearly observable runtime of $O(N)$ since we iter
 In the context of parallelization schemas we assume a computing model, where the number of processors is $np$. When the goal of the algorithm is workload balancing, we will want to set $d = np$ to end up with exactly as many leaf cells as we have processors. In the context of a supercomputing system $np$ could also be set no the number of nodes in the system, but the algorithms and also the messaging interfaces are usually the same. 
 When we have a cell for each processor, we can distribute the workload equally in the system and avoid idle time.
 
-Initially we assume that each processor has a subset of all the particles stored in its memory. There exists several strategies on how to parallelize the ORB algorithm. 
+Initially we assume that each processor has a subset of all the particles stored in its memory. If we apply this concept to the particles from our numeric example, we have a distribution as depicted below. Note that the particles are distributed among processor randomly.
+
+
+\begin{figure}[ht]
+	
+	\centering
+	\begin{tikzpicture}
+		\begin{axis}
+			[
+			nodes near coords,
+			xmin=-0.,
+			xmax=1.,
+			ymin=-0.,
+			ymax=1.,
+			title=Recursion depth 0,
+			legend cell align=left
+			]
+			
+			\addplot    +[
+			only marks,
+			point meta=explicit symbolic,
+			restrict expr to domain={\thisrow{o1}}{0:0}, 
+			] table [
+			x=x, 
+			y=y, 
+			meta=id, 
+			col sep=comma] 
+			{particles8.csv};
+			
+			\addplot    +[
+			only marks,
+			point meta=explicit symbolic,
+			restrict expr to domain={\thisrow{o1}}{1:1}, 
+			] table [
+			x=x, 
+			y=y, 
+			meta=id, 
+			col sep=comma] 
+			{particles8.csv};
+			
+			\addplot    +[
+			only marks,
+			point meta=explicit symbolic,
+			restrict expr to domain={\thisrow{o1}}{2:2}, 
+			] table [
+			x=x, 
+			y=y, 
+			meta=id, 
+			col sep=comma] 
+			{particles8.csv};
+			
+			\legend{$p0$,$p1$,$p3$}
+			
+			%\draw [fill=red!20](0.0,0.0) rectangle (1, 1);
+			%\node[below] at (0.5, 1){$cell_1$};
+		\end{axis}
+	\end{tikzpicture}
+	
+\end{figure}
 
 \subsubsection{Local Reshuffling}
 
-When performing a local reshuffle, each processor sorts its particles according to the cell information available. The cell information is however being held by a single processor. This processor supervises the ORB algorithm and broadcast the data to the workers.  
+When performing a local reshuffle, each processor sorts its particles according to the cell information available. The cell information is however being held by a single processor. This processor supervises the ORB algorithm and broadcast the data to the workers. The distribution of the particles among the processors does not change when performing a local reshuffle.
 
-\begin{figure}
+\begin{figure}[H]
 	\begin{center}
 		\begin{tikzpicture}
 			
@@ -617,6 +675,128 @@ When performing a local reshuffle, each processor sorts its particles according 
 \end{figure}
 
 \subsubsection{Global Reshuffling}
+
+In the case of global reshuffling, we reshuffle the particle in such a way, that we can designate a new operator for the second half of the particles, each time we perform a split. When looking at the numeric example this might look as follows:
+
+
+\begin{figure}[ht]
+	
+	\centering
+	\begin{tikzpicture}
+		\begin{axis}
+			[
+			nodes near coords,
+			xmin=-0.,
+			xmax=1.,
+			ymin=-0.,
+			ymax=1.,
+			title=Recursion depth 0,
+			legend cell align=left
+			]
+			
+			\addplot    +[
+			only marks,
+			point meta=explicit symbolic,
+			restrict expr to domain={\thisrow{o1}}{0:0}, 
+			] table [
+			x=x, 
+			y=y, 
+			meta=id, 
+			col sep=comma] 
+			{particles8.csv};
+			
+			\addplot    +[
+			only marks,
+			point meta=explicit symbolic,
+			restrict expr to domain={\thisrow{o1}}{1:1}, 
+			] table [
+			x=x, 
+			y=y, 
+			meta=id, 
+			col sep=comma] 
+			{particles8.csv};
+			
+			\addplot    +[
+			only marks,
+			point meta=explicit symbolic,
+			restrict expr to domain={\thisrow{o1}}{2:2}, 
+			] table [
+			x=x, 
+			y=y, 
+			meta=id, 
+			col sep=comma] 
+			{particles8.csv};
+			
+			\legend{$p0$,$p1$,$p2$}
+			
+			\draw [fill=red!20](0.0,0.0) rectangle (1, 1);
+			\node[above] at (0.5, 0.0){$cell_1$};
+		\end{axis}
+	\end{tikzpicture}
+	
+\end{figure}
+
+
+\begin{figure}[ht]
+	
+	\centering
+	\begin{tikzpicture}
+		\begin{axis}
+			[
+			nodes near coords,
+			xmin=-0.,
+			xmax=1.,
+			ymin=-0.,
+			ymax=1.,
+			title=Recursion depth 1,
+			legend cell align=left
+			]
+			
+			\addplot    +[
+			only marks,
+			point meta=explicit symbolic,
+			restrict expr to domain={\thisrow{o2}}{0:0}, 
+			] table [
+			x=x, 
+			y=y, 
+			meta=id, 
+			col sep=comma] 
+			{particles9.csv};
+			
+			\addplot    +[
+			only marks,
+			point meta=explicit symbolic,
+			restrict expr to domain={\thisrow{o2}}{1:1}, 
+			] table [
+			x=x, 
+			y=y, 
+			meta=id, 
+			col sep=comma] 
+			{particles9.csv};
+			
+			\addplot    +[
+			only marks,
+			point meta=explicit symbolic,
+			restrict expr to domain={\thisrow{o2}}{2:2}, 
+			] table [
+			x=x, 
+			y=y, 
+			meta=id, 
+			col sep=comma] 
+			{particles9.csv};
+			
+			\legend{$p0$,$p1$,$p2$}
+			
+			\draw [fill=green!20](0.0,0.0) rectangle (0.65, 1);
+			\draw [fill=blue!20](0.65,0.0) rectangle (1, 1);
+			\node[above] at (0.3, 0){$cell_2$};
+			\node[above] at (0.8, 0){$cell_3$};
+		\end{axis}
+	\end{tikzpicture}
+	
+\end{figure}
+
+We can see how the ownership of particle 2 and particle 1 are being switched. After this is done, $p_2$ can perform further steps of the orb algorithm completely independent of the other processors. This has the advantage, that no further synchronization has to be performed, but comes with some considerable communication costs which are due to the global reshuffling. 
 
 As soon as we have finished the first iteration of the  two domains, rank 0 can process one domain and rank 1 can process the other domain. This has the advantage that not only the counting part, but also the costly reshuffling part of the ORB algorithm can be parallelized. Furthermore the amount of data which needs to be communicated between the different threads is smaller. This is due to the fact that as soon as we found our first cut, only half the array of particles 
 
@@ -1267,17 +1447,14 @@ We conclude that the GPU version with GPU Tree building enabled yields the best 
 
 \TODO{Give introduction as to how precise the description is and should be}
 
-In this section we will describe the stand-alone implementation of the accelerated ORB algorithm. We will develop this separately from the PKDGrav codebase in order to have smaller and easily understandable codebase, furthermore we aim to use this platform for extensive empirical testing of different strategies.
-We aim to implement the CPU version in the most efficient method as possible. Only when we achieve that, we can make a fair comparison between the CPU and GPU implementation. 
+In this section we will describe the stand-alone implementation of the accelerated ORB algorithm. We will develop this somewhat separately from the PKDGrav codebase in order to have smaller and easily understandable codebase. We will however use mdl2 from PKDGrav, which is used to distribute can schedule the workload among the processors in the system. We aim to use this platform for extensive empirical testing of different strategies.
 
 A brief overview of the core classes and function is as follows:
 
 \begin{itemize}
-	\item \textbf{particles}: The particles array has ownership over all particles. It has the shape of a multidimensional array, where the first three axes are occupied by positional data and the rest can be filled with meta data.
+	\item \textbf{particles}: The particles array has ownership over all particle objects. It has the shape of a multidimensional array, where the first three axes are occupied by positional data and the rest can be filled with meta data.
 	\item \textbf{Cell}: The cell class is a structure keeping track of the fundamental cell information. In essence it is the analogue to the concept of the $cell$ which we have already introduced in section \ref{section:orb}.
-	\item \textbf{ORB}: The orb class keeps track of the all particles and maintains a data-structure which maps between particles and cells. 
-	\item \textbf{Services}: The services are a set of function, which together form the building block of the ORB algorithm. This abstraction layer allows us to dynamically distribute and collect tasks from different processors. Furthermore individual services can be interchanged by GPU enabled implementations.
-	\item \textbf{Messaging}: The messaging class is responsible for building the interface between different processors, which essentially is dispatching services. Its can be implemented using a wide set of tools. In our case we will solely focus on an MPI implementation.
+	\item \textbf{Services}: The services are a set of functions, which together form the building block of the ORB algorithm. This abstraction layer allows us to dynamically distribute and collect tasks from different processors. Each service builds on top of a PST class which is introduced by mdl2.
 	
 \end{itemize}
 
@@ -1365,15 +1542,6 @@ The cell class consists of the following variables:
 The cells could be stored as binary tree or as we have already mentioned we could make use of a heap datastructure which allows for greater flexibility. Due to performance improvements, we will opt for the second variant.
 
 
-\subsection{ORB}
-
-\begin{itemize}
-	\item $particles$: The cell class has ownership over the particles array.
-	\item $cellToParticles$: This array maps from a $cell.id$ to a tuple with entries $a$ and $b$ where a marks the index of the first particle in the particles array which is contained in this cell. Consequently $b$ marks the index after the last particle contained in the volume of the cell. Note that this is possible due to the constant reshuffling.
-\end{itemize}
-
-The orb class comes with helper functions, which improve abstraction and understandability of the code. For example it introduces a swap function, which can swap two particles in the particles array.
-
 \subsection{Services}
 
 Similarly as in PKDGrav we introduce the concept of services, which essentially is a collection of functions which can be sent to any set of processors in the computing system. We abstract the ORB algorithm into such services, such that we can experiment with different workload distribution schemas and easily interchange subroutines with GPU enables ones.
@@ -1395,12 +1563,6 @@ With this system, a processor simply needs to wait for new services and fetch th
 
 In this section we describe the services which were implemented using CUDA. In this section we may also add some theory about how exactly CUDA works.
 
-
-\subsection{Messaging}
-
-The messsaging class has one main function called $dispatchService$. It takes a service ID and distributes the necessary data to the target processors. Furthermore it collects the results of the services and returns them to the source processor.
-
-In this section we will take an in depth look at the MPI calls which have to be made in order to make this function work.
 
 \newpage
 \section{Empirical Analysis of ORB}

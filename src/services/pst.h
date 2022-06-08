@@ -1,8 +1,10 @@
 #ifndef PST_H
 #define PST_H
 #include "mdl.h"
+#include <blitz/array.h>
 
 class LocalData {
+public:
     blitz::Array<float, 2> particles;
     blitz::Array<int, 2> cellToRangeMap;
     blitz::Array<cudaStream_t, 1> streams;
@@ -35,6 +37,10 @@ typedef pstNode *PST;
 enum pst_service {
     PST_SRV_STOP=0, /* service 0 is always STOP and handled by MDL */
     PST_SETADD,
+    PST_INIT,
+    PST_COPYTODEVICE,
+    PST_COUNTLEFTGPU,
     PST_COUNTLEFT,
+    PST_COUNT
 };
 #endif
