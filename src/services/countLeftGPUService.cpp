@@ -81,7 +81,6 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
         const int elementsPerThread = 16;
         const int nBlocks = ceil(endInd - beginInd / (nThreads * elementsPerThread) / 2 );
 
-
         int * h_counts = (int*)calloc(nBlocks, sizeof(int));
 
         float cut = (cell.cutMarginRight + cell.cutMarginLeft) / 2.0;

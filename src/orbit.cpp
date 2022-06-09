@@ -2,6 +2,7 @@
 #include <blitz/array.h>
 #include "cell.h"
 #include "mdl.h"
+#include "services/countService.h"
 #include "services/pst.h"
 #include "services/setadd.h"
 #include "services/countLeftService.h"
@@ -33,25 +34,52 @@ int master(MDL vmdl,void *vpst) {
     CellHelpers::setCutMargin(root);
     cells(0) = root;
 
-    /*for (int l = 1; l < CellHelpers::getNLevels(*inputData.root); ++l) {
-
-        int a = std::pow(2, (l-1)) - 1;
-        int b = std::min(
-                CellHelpers::getNCellsOnLastLevel(*inputData.root),
-                inputData.root->nLeafCells) - 1;
-
-        int nCells = 1;*/
-
-
     ServiceInit::input iNParticles[1];
     ServiceInit::output oNParticles[1];
     mdl->RunService(PST_INIT, sizeof (int), iNParticles, oNParticles);
 
-    int nCells = 1;
-    ServiceCountLeft::input * iCountLeft = cells.data();
-    ServiceCountLeft::output oCountLeft[nCells];
-    mdl->RunService(PST_COUNTLEFT,nCells*sizeof(ServiceCountLeft::input),iCountLeft,oCountLeft);
-    printf("ServiceCountLeft returned: %lu\n",oCountLeft[0]);
+    for (int l = 1; l < CellHelpers::getNLevels(root); ++l) {
+
+        int a = std::pow(2, (l - 1)) - 1;
+        int b = std::min(
+                CellHelpers::getNCellsOnLastLevel(root),
+                root.nLeafCells) - 1;
+
+        int nCells = 1;
+
+        ServiceCount::input *iCount = cells.data();
+        ServiceCount::output oCount[nCells];
+        mdl->RunService(PST_COUNT, nCells * sizeof(ServiceCount::input), iCount, oCount);
+        printf("ServiceCount returned: %lu\n", oCount[0]);
+
+        // Loop
+        bool foundAll = true;
+
+        while(foundAll) {
+            int *sumLeft;
+            foundAll = true;
+
+            ServiceCountLeft::input *iCountLeft = cells.data();
+            ServiceCountLeft::output oCountLeft[nCells];
+            mdl->RunService(PST_COUNTLEFT, nCells * sizeof(ServiceCountLeft::input), iCountLeft, oCountLeft);
+            printf("ServiceCountLeft returned: %lu\n", oCountLeft[0]);
+
+            for (int i = a; i < b; ++i) {
+
+                if (abs(oCountLeft[i] - oCount[i] / 2.0) < 1) {
+                    cells(i).cutAxis = -1;
+                } else if (oCountLeft[i] - oCount[i] / 2.0 > 0) {
+                    cells(i).cutMarginRight = (cells(i).cutMarginLeft + cells(i).cutMarginRight) / 2.0;
+                    foundAll = false;
+                } else {
+                    cells(i).cutMarginLeft = (cells(i).cutMarginLeft + cells(i).cutMarginRight) / 2.0;
+                    foundAll = false;
+                }
+            }
+        }
+
+        break;
+    }
     return 0;
 }
 
@@ -59,6 +87,8 @@ void *worker_init(MDL vmdl) {
     auto mdl = static_cast<mdl::mdlClass *>(vmdl);
     // Construct a PST node for this thread. The SetAdd service will be called in "master" to contruct a tree of them.
     auto pst = new pstNode(mdl);
+
+    pst->lcl = new LocalData();
 
     // Put that in a service
 
@@ -71,6 +101,7 @@ void *worker_init(MDL vmdl) {
     mdl->AddService(std::make_unique<ServiceSetAdd>(pst));
     mdl->AddService(std::make_unique<ServiceCountLeft>(pst));
     mdl->AddService(std::make_unique<ServiceInit>(pst));
+    mdl->AddService(std::make_unique<ServiceCount>(pst));
 
     return pst;
 }

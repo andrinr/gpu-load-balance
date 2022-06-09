@@ -1,13 +1,11 @@
 //
 // Created by andrin on 19/05/22.
 //
-
 #include "iostream"
 #include "buildTreeService.h"
 #include "countLeftService.h"
 #include "countService.h"
 #include "localReshuffleService.h"
-
 
 void BuildTreeService::run(void *inputBuffer, int inputBufferLength, void *outputBuffer, int outputBufferLength) {
 

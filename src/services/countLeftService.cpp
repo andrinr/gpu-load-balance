@@ -13,15 +13,15 @@ int ServiceCountLeft::Service(PST pst, void *vin, int nIn, void *vout, int nOut)
     assert(nOut / sizeof(output) >= nCells);
     printf("ServiceCountLeft invoked on thread %d\n",pst->idSelf);
 
-    std::cout << lcl->streams(0) << "\n";
+
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset){
         auto cell = static_cast<Cell>(*(in + cellPtrOffset));
-        //CellHelpers::log(cell);
-        // -1 axis signals no need to count
+
         if (cell.cutAxis == -1) continue;
         int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
         int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
-        std::cout << "begin end " << beginInd << " " << endInd << "\n";
+        //std::cout << "begin end " << beginInd << " " << endInd << "\n";
+        std::cout << pst->lcl->cellToRangeMap.data()[0] << "\n";
         blitz::Array<float,1> particles = pst->lcl->particles(blitz::Range(beginInd, endInd), cell.cutAxis);
         float * startPtr = particles.data();
         float * endPtr = startPtr + (endInd - beginInd);
@@ -29,11 +29,9 @@ int ServiceCountLeft::Service(PST pst, void *vin, int nIn, void *vout, int nOut)
         int nLeft = 0;
 
         float cut = (cell.cutMarginRight + cell.cutMarginLeft) / 2.0;
+
         for(auto p= startPtr; p<endPtr; ++p) nLeft += *p < cut;
 
-        std::cout << nLeft;
-
-        std::cout << nLeft << " ";
         out[cellPtrOffset] = nLeft;
     }
 

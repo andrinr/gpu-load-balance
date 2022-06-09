@@ -66,6 +66,7 @@ add_executable(
         src/services/setadd.cpp
         src/services/TraversePST.cpp
         src/services/countLeftService.cpp
+        src/services/countService.cpp
         src/services/initService.cpp
         #src/services/countLeftGPUService.cpp
 )

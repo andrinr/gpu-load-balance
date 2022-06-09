@@ -23,7 +23,7 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     srand(pst->idSelf);
     for (int i = 0; i < n; i++) {
         for (int d = 0; d < 3; d++) {
-            particles(i,d) = (float)(rand())/(float)(RAND_MAX);
+            particles(i,d) = (float)(rand())/(float)(RAND_MAX) - 0.5;
         }
     }
 
@@ -39,7 +39,13 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     cellToRangeMap(0, 1) = n;
 
     auto lcl = pst->lcl;
-    pst->lcl = new LocalData(particles, cellToRangeMap, streams, d_particles, d_counts);
+    lcl->particles.reference(particles);
+    lcl->d_particles.reference(d_particles);
+    lcl->cellToRangeMap.reference(cellToRangeMap);
+    lcl->streams.reference(streams);
+    lcl->d_counts.reference(d_counts);
+
+    //pst->lcl = new LocalData(particles, cellToRangeMap, streams, d_particles, d_counts);
 
     printf("ServiceInit finished on thread %d\n",pst->idSelf);
 

@@ -2,8 +2,8 @@
 
 // Make sure that the communication structure is "trivial" so that it
 // can be moved around with "memcpy" which is required for MDL.
-static_assert(std::is_void<ServiceCountLeft::input>()  || std::is_trivial<ServiceCountLeft::input>());
-static_assert(std::is_void<ServiceCountLeft::output>() || std::is_trivial<ServiceCountLeft::output>());
+static_assert(std::is_void<ServiceCount::input>()  || std::is_trivial<ServiceCount::input>());
+static_assert(std::is_void<ServiceCount::output>() || std::is_trivial<ServiceCount::output>());
 
 int ServiceCount::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     auto lcl = pst->lcl;
@@ -11,9 +11,9 @@ int ServiceCount::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     auto out = static_cast<output *>(vout);
     auto nCells = nIn / sizeof(input);
 
-    vout[0] = lcl->cellToRangeMap(in[nCells - 1].id, 1) - lcl->cellToRangeMap(in[0].id, 0);
+    out[0] = lcl->cellToRangeMap(in[nCells - 1].id, 1) - lcl->cellToRangeMap(in[0].id, 0);
 
-    return sizeof(output);
+    return nCells * sizeof (output);
 }
 
 int ServiceCount::Combine(void *vout,void *vout2,int nIn,int nOut1,int nOut2) {

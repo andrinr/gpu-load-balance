@@ -21,8 +21,9 @@ public:
             streams(streams),
             d_particles(d_particles),
             d_counts(d_counts){
-
     }
+
+    LocalData() = default;
 };
 
 //#include "bound.h"
