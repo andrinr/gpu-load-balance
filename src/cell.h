@@ -124,12 +124,13 @@ namespace CellHelpers {
     }
 
     static void log(Cell &cell) {
-        std::cout << "------" << std::endl;
-        std::cout << cell.id << " cell id" << std::endl;
-        std::cout << cell.lower[0] << " " << cell.lower[1] << " " << cell.lower[2] << " lower " << std::endl;
-        std::cout << cell.upper[0] << " " << cell.upper[1] << " " << cell.upper[2] << " upper " << std::endl;
-        std::cout << cell.nLeafCells << " nCells " << cell.cutAxis << " cutAxis " << std::endl;
-        std::cout << "------" << std::endl;
+        std::cout << "------" << "\n";
+        std::cout << cell.id << " cell id" << "\n";
+        std::cout << cell.lower[0] << " " << cell.lower[1] << " " << cell.lower[2] << " lower " << "\n";
+        std::cout << cell.upper[0] << " " << cell.upper[1] << " " << cell.upper[2] << " upper " <<"\n";
+        std::cout << cell.nLeafCells << " nCells " << cell.cutAxis << " cutAxis " << "\n";
+        std::cout << cell.cutMarginLeft << " " << cell.cutMarginRight << " cutMargin" <<"\n";
+        std::cout << "------" << "\n";
     }
 
 }

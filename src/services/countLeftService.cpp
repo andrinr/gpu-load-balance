@@ -5,18 +5,18 @@
 static_assert(std::is_void<ServiceCountLeft::input>()  || std::is_trivial<ServiceCountLeft::input>());
 static_assert(std::is_void<ServiceCountLeft::output>() || std::is_trivial<ServiceCountLeft::output>());
 
-int ServiceCountLeft::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
+int ServiceCountLeft::Service(PST pst, void *vin, int nIn, void *vout, int nOut) {
     auto lcl = pst->lcl;
     auto in  = static_cast<input *>(vin);
     auto out = static_cast<output *>(vout);
     auto nCells = nIn / sizeof(input);
     assert(nOut / sizeof(output) >= nCells);
     printf("ServiceCountLeft invoked on thread %d\n",pst->idSelf);
-    printf("cells %d\n", nCells);
+
     std::cout << lcl->streams(0) << "\n";
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset){
         auto cell = static_cast<Cell>(*(in + cellPtrOffset));
-        CellHelpers::log(cell);
+        //CellHelpers::log(cell);
         // -1 axis signals no need to count
         if (cell.cutAxis == -1) continue;
         int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
@@ -30,6 +30,8 @@ int ServiceCountLeft::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
 
         float cut = (cell.cutMarginRight + cell.cutMarginLeft) / 2.0;
         for(auto p= startPtr; p<endPtr; ++p) nLeft += *p < cut;
+
+        std::cout << nLeft;
 
         std::cout << nLeft << " ";
         out[cellPtrOffset] = nLeft;

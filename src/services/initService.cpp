@@ -13,7 +13,7 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     int nStreams = 32;
     int n = 1 << 13;
     int k = 4;
-    
+
     auto particles = blitz::Array<float, 2>(n, k);
     auto cellToRangeMap = blitz::Array<int, 2>(max_cells, 2);
     auto streams = blitz::Array<cudaStream_t, 1>(nStreams);
@@ -36,11 +36,10 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     }
 
     cellToRangeMap(0, 0) = 0;
-    cellToRangeMap(0, 1) = n - 1;
+    cellToRangeMap(0, 1) = n;
 
     auto lcl = pst->lcl;
     pst->lcl = new LocalData(particles, cellToRangeMap, streams, d_particles, d_counts);
-
 
     printf("ServiceInit finished on thread %d\n",pst->idSelf);
 
