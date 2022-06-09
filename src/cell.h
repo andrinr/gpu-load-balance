@@ -21,7 +21,7 @@ struct Cell {
             float *upper_) : id(id_), nLeafCells(nLeafCells_) {
 
 #if DEBUG
-        if (nLeafCells < 1) {
+    if (nLeafCells < 1) {
         throw std::invalid_argument("Cell.Cell: nLeafCells is less than one.");
     }
 #endif // DEBUG

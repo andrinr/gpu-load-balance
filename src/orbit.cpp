@@ -43,9 +43,9 @@ int master(MDL vmdl,void *vpst) {
         int a = std::pow(2, (l - 1)) - 1;
         int b = std::min(
                 CellHelpers::getNCellsOnLastLevel(root),
-                root.nLeafCells) - 1;
+                (int) std::pow(2, l)) - 1;
 
-        int nCells = 1;
+        int nCells = b - a;
 
         ServiceCount::input *iCount = cells.data();
         ServiceCount::output oCount[nCells];
@@ -53,9 +53,11 @@ int master(MDL vmdl,void *vpst) {
         printf("ServiceCount returned: %lu\n", oCount[0]);
 
         // Loop
-        bool foundAll = true;
+        bool foundAll = false;
 
-        while(foundAll) {
+        int j = 0;
+        while(!foundAll && j < 32) {
+            j++;
             int *sumLeft;
             foundAll = true;
 
@@ -64,21 +66,39 @@ int master(MDL vmdl,void *vpst) {
             mdl->RunService(PST_COUNTLEFT, nCells * sizeof(ServiceCountLeft::input), iCountLeft, oCountLeft);
             printf("ServiceCountLeft returned: %lu\n", oCountLeft[0]);
 
+            std::cout << a << " " << b << std::endl;
             for (int i = a; i < b; ++i) {
-
+                std::cout << oCountLeft[i] << " " << oCount[i] / 2.0 << std::endl;
+                //std::cout << " i " << i << "\n";
                 if (abs(oCountLeft[i] - oCount[i] / 2.0) < 1) {
                     cells(i).cutAxis = -1;
                 } else if (oCountLeft[i] - oCount[i] / 2.0 > 0) {
                     cells(i).cutMarginRight = (cells(i).cutMarginLeft + cells(i).cutMarginRight) / 2.0;
+                    //std::cout << " i " << cells(i).cutMarginRight << "\n";
                     foundAll = false;
                 } else {
                     cells(i).cutMarginLeft = (cells(i).cutMarginLeft + cells(i).cutMarginRight) / 2.0;
                     foundAll = false;
                 }
             }
+            std::cout << foundAll << std::endl;
         }
 
-        break;
+        // Split and store all cells on current heap level
+        for (int i = a; i < b; ++i) {
+            Cell cellLeft;
+            Cell cellRight;
+            std::tie(cellLeft, cellRight) = CellHelpers::cut(cells(i));
+
+            CellHelpers::setCutAxis(cellRight);
+            CellHelpers::setCutAxis(cellLeft);
+            CellHelpers::setCutMargin(cellLeft);
+            CellHelpers::setCutMargin(cellRight);
+
+            cells(CellHelpers::getLeftChildId(cells(i))) = cellLeft;
+            cells(CellHelpers::getRightChildId(cells(i))) = cellRight;
+        }
+        
     }
     return 0;
 }
