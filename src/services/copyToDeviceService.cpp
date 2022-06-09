@@ -22,6 +22,10 @@ int ServiceCopyToDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
 
     cudaMalloc(&d_sums, sizeof (int) * n);
 
+    const int nThreads = 256;
+    // Can increase speed by another factor of around two
+    const int elementsPerThread = 16;
+
     // https://developer.nvidia.com/blog/how-overlap-data-transfers-cuda-cc/
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset){
 
@@ -31,18 +35,22 @@ int ServiceCopyToDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
         int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
         int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
 
+        const int nBlocks = ceil(endInd - beginInd / (nThreads * elementsPerThread) / 2 );
+
         int streamId = cellPtrOffset % 32;
         //cudaStreamSynchronize(lcl->streams(streamId));
 
         float * d_particles;
-
         pst->lcl->d_particles(i) = d_particles;
+
+        int * d_counts;
+        pst->lcl->d_counts(i) = d_counts;
 
         blitz::Array<float,1> particles = pst->lcl->particles(blitz::Range(beginInd, endInd), cell.cutAxis);
 
-        cudaMalloc(&d_particles, sizeof (float) * n);
-        cudaMalloc(&d_counts, sizeof (int) * nBlocks);
-        result = cudaMemcpyAsync(
+        cudaMalloc(&lcl->d_particles(cellPtrOffset), sizeof (float) * n);
+        cudaMalloc(&lcl->d_counts(cellPtrOffset), sizeof (int) * nBlocks);
+        cudaMemcpyAsync(
                 d_particles,
                 particles.data(),
                 endInd - beginInd,
@@ -58,12 +66,6 @@ int ServiceCopyToDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
 }
 
 int ServiceCopyToDevice::Combine(void *vout,void *vout2,int nIn,int nOut1,int nOut2) {
-    auto out  = static_cast<output *>(vout);
-    auto out2 = static_cast<output *>(vout2);
-    int nCounts = nIn / sizeof(input);
-    assert(nOut1 >= nCounts*sizeof(output));
-    assert(nOut2 >= nCounts*sizeof(output));
-    for(auto i=0; i<nCounts; ++i)
-	    out[i] += out2[i];
-    return nCounts * sizeof(output);
+
+    return 0;
 }

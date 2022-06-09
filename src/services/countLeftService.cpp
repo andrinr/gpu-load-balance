@@ -1,5 +1,5 @@
 #include "countLeftService.h"
-
+#include "../cell.h"
 // Make sure that the communication structure is "trivial" so that it
 // can be moved around with "memcpy" which is required for MDL.
 static_assert(std::is_void<ServiceCountLeft::input>()  || std::is_trivial<ServiceCountLeft::input>());
@@ -13,13 +13,15 @@ int ServiceCountLeft::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     assert(nOut / sizeof(output) >= nCells);
     printf("ServiceCountLeft invoked on thread %d\n",pst->idSelf);
     printf("cells %d\n", nCells);
+    std::cout << lcl->streams(0) << "\n";
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset){
         auto cell = static_cast<Cell>(*(in + cellPtrOffset));
+        CellHelpers::log(cell);
         // -1 axis signals no need to count
         if (cell.cutAxis == -1) continue;
         int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
         int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
-
+        std::cout << "begin end " << beginInd << " " << endInd << "\n";
         blitz::Array<float,1> particles = pst->lcl->particles(blitz::Range(beginInd, endInd), cell.cutAxis);
         float * startPtr = particles.data();
         float * endPtr = startPtr + (endInd - beginInd);

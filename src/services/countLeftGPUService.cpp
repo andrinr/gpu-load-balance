@@ -64,11 +64,6 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     assert(nOut / sizeof(output) >= nCells);
     printf("ServiceCountLeft invoked on thread %d\n",pst->idSelf);
 
-    cudaMalloc(&d_particles, sizeof (float) * n);
-    cudaMemcpy(d_particles, pos, sizeof (float ) * n, cudaMemcpyHostToDevice);
-
-    cudaMalloc(&d_sums, sizeof (int) * n);
-
     // https://developer.nvidia.com/blog/how-overlap-data-transfers-cuda-cc/
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset){
 
@@ -86,24 +81,29 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
         const int elementsPerThread = 16;
         const int nBlocks = ceil(endInd - beginInd / (nThreads * elementsPerThread) / 2 );
 
-        cudaStream_t stream;
-        cudaError_t result;
-        streams.push_back(stream);
-        result = cudaStreamCreate(&stream);
 
-        float * d_particles;
-        int * d_counts;
         int * h_counts = (int*)calloc(nBlocks, sizeof(int));
 
-        blitz::Array<float,1> particles = pst->lcl->particles(blitz::Range(beginInd, endInd), cell.cutAxis);
-        
-        result = cudaMemcpyAsync(d_particles, particles.data(), endInd - beginInd, cudaMemcpyHostToDevice, stream);
-
         float cut = (cell.cutMarginRight + cell.cutMarginLeft) / 2.0;
-        reduce<nThreads><<<nBlocks, nThreads, nThreads * sizeof (int), stream>>>(
-                d_particles, d_counts, cut, endInd - beginInd);
+        reduce<nThreads>
+                <<<
+                nBlocks,
+                nThreads,
+                nThreads * sizeof (int),
+                lcl->streams(streamId)
+                >>>
+                (
+                d_particles,
+                d_counts,
+                cut,
+                endInd - beginInd);
 
-        cudaMemcpyAsync(h_sums, d_sums, sizeof (int ) * nBlocks, cudaMemcpyDeviceToHost, stream);
+        cudaMemcpyAsync(
+                h_sums,
+                d_sums,
+                sizeof (int ) * nBlocks,
+                cudaMemcpyDeviceToHost,
+                lcl->streams(streamId));
 
         for (int i = 0; i < nBlocks; ++i) {
             out[cellPtrOffset] += h_sums[i];
