@@ -70,7 +70,7 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
         int streamId = cellPtrOffset % 32;
         //cudaStreamSynchronize(lcl->streams(streamId));
 
-        auto cell = static_cast<Cell>*(in + cellPtrOffset);
+        auto cell = static_cast<Cell>(*(in + cellPtrOffset));
         // -1 axis signals no need to count
         if (cell.cutAxis == -1) continue;
         int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);

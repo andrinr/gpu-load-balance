@@ -1,11 +1,11 @@
 #include "copyToDeviceService.h"
 #include <blitz/array.h>
-#inlcude <vector>
+#include <vector>
 
 // Make sure that the communication structure is "trivial" so that it
 // can be moved around with "memcpy" which is required for MDL.
-static_assert(std::is_void<ServiceCountLeft::input>()  || std::is_trivial<ServiceCountLeft::input>());
-static_assert(std::is_void<ServiceCountLeft::output>() || std::is_trivial<ServiceCountLeft::output>());
+static_assert(std::is_void<ServiceCopyToDevice::input>()  || std::is_trivial<ServiceCopyToDevice::input>());
+static_assert(std::is_void<ServiceCopyToDevice::output>() || std::is_trivial<ServiceCopyToDevice::output>());
 
 int ServiceCopyToDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     // store streams / initialize in local data
@@ -17,11 +17,6 @@ int ServiceCopyToDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     assert(nOut / sizeof(output) >= nCells);
     printf("ServiceCopyToDevice invoked on thread %d\n",pst->idSelf);
 
-    cudaMalloc(&d_particles, sizeof (float) * n);
-    cudaMemcpy(d_particles, pos, sizeof (float ) * n, cudaMemcpyHostToDevice);
-
-    cudaMalloc(&d_sums, sizeof (int) * n);
-
     const int nThreads = 256;
     // Can increase speed by another factor of around two
     const int elementsPerThread = 16;
@@ -29,7 +24,9 @@ int ServiceCopyToDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     // https://developer.nvidia.com/blog/how-overlap-data-transfers-cuda-cc/
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset){
 
-        auto cell = static_cast<Cell>*(in + cellPtrOffset);
+        auto cell = static_cast<Cell>(*(in + cellPtrOffset));
+
+        int nParticles = lcl->cellToRangeMap(cellPtrOffset, 1) - lcl->cellToRangeMap(cellPtrOffset, 0);
         // -1 axis signals no need to count
         if (cell.cutAxis == -1) continue;
         int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
@@ -41,14 +38,14 @@ int ServiceCopyToDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
         //cudaStreamSynchronize(lcl->streams(streamId));
 
         float * d_particles;
-        pst->lcl->d_particles(i) = d_particles;
+        pst->lcl->d_particles(cellPtrOffset) = d_particles;
 
         int * d_counts;
-        pst->lcl->d_counts(i) = d_counts;
+        pst->lcl->d_counts(cellPtrOffset) = d_counts;
 
         blitz::Array<float,1> particles = pst->lcl->particles(blitz::Range(beginInd, endInd), cell.cutAxis);
 
-        cudaMalloc(&lcl->d_particles(cellPtrOffset), sizeof (float) * n);
+        cudaMalloc(&lcl->d_particles(cellPtrOffset), sizeof (float) * nParticles);
         cudaMalloc(&lcl->d_counts(cellPtrOffset), sizeof (int) * nBlocks);
         cudaMemcpyAsync(
                 d_particles,

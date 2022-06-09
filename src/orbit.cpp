@@ -98,7 +98,7 @@ int master(MDL vmdl,void *vpst) {
             cells(CellHelpers::getLeftChildId(cells(i))) = cellLeft;
             cells(CellHelpers::getRightChildId(cells(i))) = cellRight;
         }
-        
+
     }
     return 0;
 }
@@ -109,14 +109,6 @@ void *worker_init(MDL vmdl) {
     auto pst = new pstNode(mdl);
 
     pst->lcl = new LocalData();
-
-    // Put that in a service
-
-    // Services:
-    // Initialize particles
-    // Copy to device
-    // Count Left
-    // Reshuffle
 
     mdl->AddService(std::make_unique<ServiceSetAdd>(pst));
     mdl->AddService(std::make_unique<ServiceCountLeft>(pst));
