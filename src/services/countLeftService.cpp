@@ -24,15 +24,16 @@ int ServiceCountLeft::Service(PST pst, void *vin, int nIn, void *vout, int nOut)
         float * startPtr = particles.data();
         float * endPtr = startPtr + (endInd - beginInd);
 
-        printf("Length: %u\n", endInd);
-
         int nLeft = 0;
-
+        int n = 0;
         float cut = (cell.cutMarginRight + cell.cutMarginLeft) / 2.0;
 
-        printf("Cut: %f\n", cut);
 
-        for(auto p= startPtr; p<endPtr; ++p) nLeft += *p < cut;
+        for(auto p= startPtr; p<endPtr; ++p)
+        {
+            n++;
+            nLeft += *p < cut;
+        }
 
         out[cellPtrOffset] = nLeft;
     }

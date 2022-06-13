@@ -10,20 +10,28 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
 
     printf("ServiceInit invoked on thread %d\n",pst->idSelf);
 
+    // Init positions
+    blitz::GeneralArrayStorage<2> storage;
+    storage.ordering() = 0,1;
+    storage.base() = 0, 0;
+    storage.ascendingFlag() = true, true;
+
     int nStreams = 32;
-    int n = 1 << 13;
+    int n = 1 << 20;
     int k = 4;
 
-    auto particles = blitz::Array<float, 2>(n, k);
+    auto particles = blitz::Array<float, 2>(n, k, storage);
     auto cellToRangeMap = blitz::Array<int, 2>(max_cells, 2);
     auto streams = blitz::Array<cudaStream_t, 1>(nStreams);
     auto d_particles = blitz::Array<float *, 1>(max_cells);
     auto d_counts = blitz::Array<int *, 1>(max_cells);
 
     srand(pst->idSelf);
+    int c = 0;
     for (int i = 0; i < n; i++) {
         for (int d = 0; d < 3; d++) {
             particles(i,d) = (float)(rand())/(float)(RAND_MAX) - 0.5;
+            if (particles(i,d) < 0.0) c++;
         }
     }
 

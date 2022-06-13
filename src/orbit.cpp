@@ -32,6 +32,8 @@ int master(MDL vmdl,void *vpst) {
     Cell root(0, d, lower, upper);
     CellHelpers::setCutAxis(root);
     CellHelpers::setCutMargin(root);
+
+    CellHelpers::log(root);
     cells(0) = root;
 
     ServiceInit::input iNParticles[1];
@@ -50,7 +52,6 @@ int master(MDL vmdl,void *vpst) {
         ServiceCount::input *iCount = cells.data();
         ServiceCount::output oCount[nCells];
         mdl->RunService(PST_COUNT, nCells * sizeof(ServiceCount::input), iCount, oCount);
-        printf("ServiceCount returned: %lu\n", oCount[0]);
 
         // Loop
         bool foundAll = false;
@@ -64,24 +65,19 @@ int master(MDL vmdl,void *vpst) {
             ServiceCountLeft::input *iCountLeft = cells.data();
             ServiceCountLeft::output oCountLeft[nCells];
             mdl->RunService(PST_COUNTLEFT, nCells * sizeof(ServiceCountLeft::input), iCountLeft, oCountLeft);
-            printf("ServiceCountLeft returned: %lu\n", oCountLeft[0]);
 
-            std::cout << a << " " << b << std::endl;
             for (int i = a; i < b; ++i) {
-                std::cout << oCountLeft[i] << " " << oCount[i] / 2.0 << std::endl;
-                //std::cout << " i " << i << "\n";
+
                 if (abs(oCountLeft[i] - oCount[i] / 2.0) < 1) {
                     cells(i).cutAxis = -1;
                 } else if (oCountLeft[i] - oCount[i] / 2.0 > 0) {
                     cells(i).cutMarginRight = (cells(i).cutMarginLeft + cells(i).cutMarginRight) / 2.0;
-                    //std::cout << " i " << cells(i).cutMarginRight << "\n";
                     foundAll = false;
                 } else {
                     cells(i).cutMarginLeft = (cells(i).cutMarginLeft + cells(i).cutMarginRight) / 2.0;
                     foundAll = false;
                 }
             }
-            std::cout << foundAll << std::endl;
         }
 
         // Split and store all cells on current heap level
