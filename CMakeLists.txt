@@ -70,6 +70,7 @@ add_executable(
         src/services/initService.cpp
         src/services/copyToDeviceService.cu
         src/services/countLeftGPUService.cu
+        src/services/reshuffleService.cpp
         #src/services/countLeftGPUService.cpp
 )
 

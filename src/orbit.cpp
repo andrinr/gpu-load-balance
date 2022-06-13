@@ -8,6 +8,7 @@
 #include "services/countLeftService.h"
 #include "services/countLeftGPUService.h"
 #include "services/copyToDeviceService.h"
+#include "services/reshuffleService.h"
 #include "services/initService.h"
 
 int master(MDL vmdl,void *vpst) {
@@ -50,8 +51,8 @@ int master(MDL vmdl,void *vpst) {
                 (int) std::pow(2, l)) - 1;
 
         int nCells = b - a;
-
-        ServiceCount::input *iCells = cells.data();
+        printf("from %u to %u \n", a, b);
+        ServiceCount::input *iCells = cells(blitz::Range(a, b)).data();
         ServiceCount::output oCount[nCells];
 
         mdl->RunService(PST_COUNT, nCells * sizeof(ServiceCount::input), iCells, oCount);
@@ -69,23 +70,24 @@ int master(MDL vmdl,void *vpst) {
             int *sumLeft;
             foundAll = true;
 
-            ServiceCountLeft::input *iCountLeft = cells.data();
+            //ServiceCountLeft::input *iCountLeft = cells(blitz::Range(a, b)).data();
             ServiceCountLeft::output oCountLeft[nCells];
-            mdl->RunService(PST_COUNTLEFT, nCells * sizeof(ServiceCountLeft::input), iCountLeft, oCountLeft);
+            mdl->RunService(PST_COUNTLEFT, nCells * sizeof(ServiceCountLeft::input), iCells, oCountLeft);
             //mdl->RunService(PST_COUNTLEFT, nCells * sizeof(ServiceCountLeft::input), iCountLeft, oCountLeft);
 
             for (int i = a; i < b; ++i) {
                 printf(
-                        "counted left: %u, of %u. cut %f, level %u, cell %u \n",
-                       oCountLeft[i],
-                       oCount[i] /2,
+                        "counted left: %u, of %u. cut %f, axis %d, level %u, cell %u \n",
+                       oCountLeft[i-a],
+                       oCount[i-a] /2,
                        (cells(i).cutMarginLeft + cells(i).cutMarginRight) / 2.0,
+                       cells(i).cutAxis,
                        l,
                        i);
 
-                if (abs(oCountLeft[i] - oCount[i] / 2.0) < 32) {
+                if (abs(oCountLeft[i-a] - oCount[i-a] / 2.0) < 32) {
                     cells(i).cutAxis = -1;
-                } else if (oCountLeft[i] - oCount[i] / 2.0 > 0) {
+                } else if (oCountLeft[i-a] - oCount[i-a] / 2.0 > 0) {
                     cells(i).cutMarginRight = (cells(i).cutMarginLeft + cells(i).cutMarginRight) / 2.0;
                     foundAll = false;
                 } else {
@@ -110,6 +112,9 @@ int master(MDL vmdl,void *vpst) {
             cells(CellHelpers::getRightChildId(cells(i))) = cellRight;
         }
 
+        ServiceCountLeft::output oCutIndices[nCells];
+        mdl->RunService(PST_RESHUFFLE, nCells * sizeof(ServiceCountLeft::input), iCells, oCutIndices);
+
     }
     return 0;
 }
@@ -127,6 +132,7 @@ void *worker_init(MDL vmdl) {
     mdl->AddService(std::make_unique<ServiceCount>(pst));
     mdl->AddService(std::make_unique<ServiceCopyToDevice>(pst));
     mdl->AddService(std::make_unique<ServiceCountLeftGPU>(pst));
+    mdl->AddService(std::make_unique<ServiceReshuffle>(pst));
 
     return pst;
 }

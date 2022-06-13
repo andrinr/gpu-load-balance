@@ -56,6 +56,7 @@ enum pst_service {
     PST_COPYTODEVICE,
     PST_COUNTLEFTGPU,
     PST_COUNTLEFT,
+    PST_RESHUFFLE,
     PST_COUNT
 };
 #endif
