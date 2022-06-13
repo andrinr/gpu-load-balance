@@ -45,7 +45,7 @@ int ServiceCopyToDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
 
         blitz::Array<float,1> particles = pst->lcl->particles(blitz::Range(beginInd, endInd), cell.cutAxis);
 
-        cudaMalloc(&lcl->d_particles(cellPtrOffset), sizeof (float) * nParticles);
+        cudaMalloc(&d_particles, sizeof (float) * nParticles);
         cudaMalloc(&lcl->d_counts(cellPtrOffset), sizeof (int) * nBlocks);
         cudaMemcpyAsync(
                 d_particles,

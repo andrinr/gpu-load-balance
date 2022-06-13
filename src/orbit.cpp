@@ -6,6 +6,8 @@
 #include "services/pst.h"
 #include "services/setadd.h"
 #include "services/countLeftService.h"
+#include "services/countLeftGPUService.h"
+#include "services/copyToDeviceService.h"
 #include "services/initService.h"
 
 int master(MDL vmdl,void *vpst) {
@@ -16,8 +18,8 @@ int master(MDL vmdl,void *vpst) {
     ServiceSetAdd::input inAdd(mdl->Threads());
     mdl->RunService(PST_SETADD,sizeof(inAdd),&inAdd);
 
-    int n = 1 << 25;
-    int d = 1 << 10;
+    int n = 1 << 10;
+    int d = 1 << 4;
 
     const float lowerInit = -0.5;
     const float upperInit = 0.5;
@@ -49,9 +51,14 @@ int master(MDL vmdl,void *vpst) {
 
         int nCells = b - a;
 
-        ServiceCount::input *iCount = cells.data();
+        ServiceCount::input *iCells = cells.data();
         ServiceCount::output oCount[nCells];
-        mdl->RunService(PST_COUNT, nCells * sizeof(ServiceCount::input), iCount, oCount);
+
+        mdl->RunService(PST_COUNT, nCells * sizeof(ServiceCount::input), iCells, oCount);
+
+        //ServiceCopyToDevice::input iNParticles[1];
+        //ServiceCopyToDevice::output oCopy[1];
+        //mdl->RunService(PST_COPYTODEVICE, sizeof (int), iCells, oCopy);
 
         // Loop
         bool foundAll = false;
@@ -65,10 +72,18 @@ int master(MDL vmdl,void *vpst) {
             ServiceCountLeft::input *iCountLeft = cells.data();
             ServiceCountLeft::output oCountLeft[nCells];
             mdl->RunService(PST_COUNTLEFT, nCells * sizeof(ServiceCountLeft::input), iCountLeft, oCountLeft);
+            //mdl->RunService(PST_COUNTLEFT, nCells * sizeof(ServiceCountLeft::input), iCountLeft, oCountLeft);
 
             for (int i = a; i < b; ++i) {
+                printf(
+                        "counted left: %u, of %u. cut %f, level %u, cell %u \n",
+                       oCountLeft[i],
+                       oCount[i] /2,
+                       (cells(i).cutMarginLeft + cells(i).cutMarginRight) / 2.0,
+                       l,
+                       i);
 
-                if (abs(oCountLeft[i] - oCount[i] / 2.0) < 1) {
+                if (abs(oCountLeft[i] - oCount[i] / 2.0) < 32) {
                     cells(i).cutAxis = -1;
                 } else if (oCountLeft[i] - oCount[i] / 2.0 > 0) {
                     cells(i).cutMarginRight = (cells(i).cutMarginLeft + cells(i).cutMarginRight) / 2.0;
@@ -110,6 +125,8 @@ void *worker_init(MDL vmdl) {
     mdl->AddService(std::make_unique<ServiceCountLeft>(pst));
     mdl->AddService(std::make_unique<ServiceInit>(pst));
     mdl->AddService(std::make_unique<ServiceCount>(pst));
+    mdl->AddService(std::make_unique<ServiceCopyToDevice>(pst));
+    mdl->AddService(std::make_unique<ServiceCountLeftGPU>(pst));
 
     return pst;
 }

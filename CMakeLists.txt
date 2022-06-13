@@ -68,7 +68,8 @@ add_executable(
         src/services/countLeftService.cpp
         src/services/countService.cpp
         src/services/initService.cpp
-        #src/services/copyToDeviceService.cpp
+        src/services/copyToDeviceService.cu
+        src/services/countLeftGPUService.cu
         #src/services/countLeftGPUService.cpp
 )
 

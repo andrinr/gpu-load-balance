@@ -1,11 +1,11 @@
 #include "countLeftGPUService.h"
 #include <blitz/array.h>
-#inlcude <vector>
+#include <vector>
 
 // Make sure that the communication structure is "trivial" so that it
 // can be moved around with "memcpy" which is required for MDL.
-static_assert(std::is_void<ServiceCountLeft::input>()  || std::is_trivial<ServiceCountLeft::input>());
-static_assert(std::is_void<ServiceCountLeft::output>() || std::is_trivial<ServiceCountLeft::output>());
+static_assert(std::is_void<ServiceCountLeftGPU::input>()  || std::is_trivial<ServiceCountLeftGPU::input>());
+static_assert(std::is_void<ServiceCountLeftGPU::output>() || std::is_trivial<ServiceCountLeftGPU::output>());
 
 template <unsigned int blockSize>
 __device__ void warpReduce(volatile int *sdata, unsigned int tid) {
@@ -36,7 +36,7 @@ __global__ void reduce(float *g_idata, int *g_odata, float cut, int n) {
             sdata[tid] += sdata[tid + 256];
         } __syncthreads();
     }
-    if (blockSize >= 256)https://developer.nvidia.com/blog/how-overlap-data-transfers-cuda-cc/ {
+    if (blockSize >= 256){
         if (tid < 128) {
             sdata[tid] += sdata[tid + 128];
         } __syncthreads();
@@ -91,30 +91,26 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
                 nThreads * sizeof (int),
                 lcl->streams(streamId)
                 >>>
-                (
-                d_particles,
-                d_counts,
+                (lcl->d_particles(cellPtrOffset),
+                 lcl->d_counts(cellPtrOffset),
                 cut,
                 endInd - beginInd);
 
         cudaMemcpyAsync(
-                h_sums,
-                d_sums,
+                h_counts,
+                lcl->d_counts(cellPtrOffset),
                 sizeof (int ) * nBlocks,
                 cudaMemcpyDeviceToHost,
                 lcl->streams(streamId));
 
         for (int i = 0; i < nBlocks; ++i) {
-            out[cellPtrOffset] += h_sums[i];
+            out[cellPtrOffset] += h_counts[i];
         }
     }
 
     // Wait till all streams have finished
     cudaDeviceSynchronize();
 
-    for (auto stream : streams) {
-        cudaStreamDestroy(stream);
-    }
 
     return nCells * sizeof(output);
 }
