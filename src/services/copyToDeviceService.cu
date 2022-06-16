@@ -15,7 +15,7 @@ int ServiceCopyToDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     auto out = static_cast<output *>(vout);
     auto nCells = nIn / sizeof(input);
     assert(nOut / sizeof(output) >= nCells);
-    printf("ServiceCopyToDevice invoked on thread %d\n",pst->idSelf);
+    //printf("ServiceCopyToDevice invoked on thread %d\n",pst->idSelf);
 
     const int nThreads = 256;
     // Can increase speed by another factor of around two

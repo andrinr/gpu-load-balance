@@ -96,7 +96,7 @@ The target data consists of $N$ particles where each particle has several data p
 \begin{itemize}
 	\item We define a particle as $p_i$  where $i \in \{0,...,N\}$. 
 	\item We define the space of binary numbers with a precision of $p$ as $\mathbb{B}_p$ where we have $a \in \mathbb{B}_p \Leftrightarrow a \in \{0,1\}^{p}$
-	\item We define the corner coordinates of root domain with $\vec{lower}, \vec{upper}$ where we have $\vec{b} \in \mathbb{B}_p^3$. 
+	\item We define the corner coordinates of root domain with $\vec{lower}, \vec{upper}$ where we have $\vec{lower}, \vec{upper} \in \mathbb{B}_p^3$. 
 	\item We define the coordinates of a particle $p_i$ as $\vec{x_i}$ for which holds $\{\vec{x} | \vec{lower} \leq \vec{x} \leq \vec{upper}, \vec{x} \in \mathbb{B}_p^3 \}$.
 
 \end{itemize}
@@ -113,7 +113,7 @@ The target data consists of $N$ particles where each particle has several data p
 			\node[yshift=0.3cm, xshift=-0.3cm] at (10,5) {$\frac{b}{2}$};
 		\end{tikzpicture}
 	\end{center}
-\caption{Unfiorm random distribution of 3D coordinates in square domain projected onto a 2d plane}
+\caption{Unfiorm random distribution of 3D coordinates in cube domain projected onto a 2d plane}
 \end{figure}
 
 \Q{Ask Doug}
@@ -139,20 +139,18 @@ Non equal weighting functions for different particles are due to higher accelera
 
 %https://de.overleaf.com/learn/latex/TikZ_package
 %https://texample.net/tikz/examples/
-In this section we will introduce the ORB algorithm along with its subroutines.
-In principle the ORB Algorithm is used to partition a multi dimensional domain into subdomains based on spatial proximity. It does so by splitting a $k$ dimensional domain containing $N$ particles into $d$ subdomains each of $k$ dimensions. This is most efficiently achieved using a recursive algorithm. During the recursive process, we can store all intermediate domains a binary tree. We commonly refer to a node of this tree as $cell$. A $cell$ is a datastructure which keeps track of the domain information and also keeps pointers to its left and right child cells. When regarding the final tree, we will notice that the number of leaf nodes, or in our case leaf cells must be exactly equal to $d$. 
+This section will introduce the ORB algorithm along with its subroutines.
 
-When we have built the binary tree successfully, we can leverage it in two ways:
-
+The ORB algorithm partitions a multi-dimensional domain into subdomains based on spatial proximity, by splitting a $k$-dimensional domain containing $N$ particles into $d$ subdomains each of $k$ dimensions. This is most efficiently achieved using a recursive algorithm. During the recursive process, all intermediate domains are stored in a binary tree. A node of this tree is referred to as a $cell$. A $cell$ is a datastructure which keeps track of the domain information and also keeps pointers to its left and right child cells. When the final tree is examined, the number of leaf nodes (or leaf cells) must be equal to $d$. The tree can be leveraged in two ways:
 \begin{enumerate}
-	\item For simulation code and more specifically for the Fast Multipole Method the tree can be leveraged to greatly accelerate the simulation time. \TODO{expand}
+	\item For simulation code, and more specifically for the Fast Multipole Method, the tree can be used to greatly accelerate the simulation time. \TODO{expand}
 	\item The tree can be used to equally distribute memory and/or workload among nodes or processors in a computing system. 
-\end{enumerate} 
+\end{enumerate}
 
 Our main objective in this work is to improve the runtime of astrophysical simulations, or more specifically PKDGrav. At the same time we want to minimize penalties in regards to $N$, the total number of particles, such that we can leverage a high $N$ to increase the precision of the simulation. Furthermore we want to adapt and optimize the algorithms with regards to the target data as introduced in \ref{section:target-data} and target computing systems (\ref{section:target-systems}).
 
 \subsubsection{By example} 
-For the purpose of explaining the algorithm both visualy and by a numveric example, we consider the following minimal dataset:
+For the purpose of explaining the algorithm both visually and by a numeric example, we consider the following minimal dataset:
 
 \begin{filecontents*}{particles9.csv}
 x,y,id,o1,o2
@@ -203,19 +201,20 @@ x,y,id,o1,o2
 
 
 \subsection{Memory and Workload Balancing}\label{balancing}
-We have now formulated our main objectives for improving ORB, which are to improve the runtime but at the same time keeping $N$ as large as possible. In this section we will explain how the two cannot be maximized at the same time, as there will we averse effects when disregarding interactions. 
+We have now formulated our main objectives for improving ORB, which are to improve the runtime, which is done with workload balancing, but at the same time keeping $N$ as large as possible. In this section we will explain the averse effects when disregarding interactions between maximizing runtime and maximizing N.
 
-As described in section \ref{section:force-integration} if we want to mitigate the error across all particles, we need to introduce more discrete time steps for certain particles than for others. The need for non constant simulations steps across the simulation, is caused by the vastly variant forces which are exercised on different particles. It is possible that certain particles follow a straight path with an almost constant velocity, whereas others are influences by strong gravitational poles. We denote the workload for a particle $p_i$ as the weighting function $w(p_i)$. In an optimally parallelized system the workload should be very similar among computing units, thus it would make sense to distribute the particles regarding the weighting function. This in turn implies an unqeual distribution of the particles with regards to memory.  
 
-Let us consider a simple example to illustrate the point. Given the set of particles $A = {p_1, p_2, .., p_{2N/3}}$ and respectively $B = {p_{2N/3 + 1}, p_2, .., p_{N}}$. Let us now consider the that $\forall p \in A : w(p) = 1$ and $\forall p \in B : w(p) = 2$. If we assign all particles from set $A$ to process with rank 0 and the particles from B to rank 1. It is clear that $\sum_{p\in A}^{} w(p) = \sum_{p\in B}^{} w(p)$. Thus the two processors are balanced in terms of computing costs, but clearly they are not balanced in terms of memory size. In fact process with rank 0 has $2N/3$ elements and rank 1 has $N/3$ elements. Thus there will be processes with free memory capacity which are not taken advantage of. This in turn means that we need to reduce the total number of particles $N$. 
+As described in section \ref{section:force-integration}, if we want to mitigate the error across all particles, we need to introduce more discrete time steps for certain particles than for others. The need for non-constant simulations steps across the simulation is caused by the vastly variant forces which are exercised on different particles. It is possible that certain particles follow a straight path with an almost constant velocity, whereas others are influenced by strong gravitational poles. We denote the workload for a particle $p_i$ as the weighting function $w(p_i)$. The workload correlates with the number of simulations steps, that need to be computed for a single particle. In an optimally parallelized system, the workload should be very similar among computing units, thus it would make sense to distribute the particles regarding the weighting function. This in turn implies an unequal distribution of the particles with regards to memory.
 
-To which degree we decide to favour memory over workload balancing is difficult to answer. But as for now we will parametrize the workload using the weighting function, which allows us to optimize and decide at a later stage. If we decide to completely ignore the workload balancing and solely focus on memory balancing, we can simply set the $w(p_i) = 1$ for all particles.
+Let us consider a simple example to illustrate the point. Given the set of particles $A = \{p_1, p_2, .., p_{2m/3}\}$ and respectively $B = \{p_{2m/3 + 1}, p_2, .., p_{m}\}$. This gives us a total number of particles equivalent to $N = m$. Let us now consider that $\forall p \in A : w(p) = 1$ and $\forall p \in B : w(p) = 2$. If we assign all particles from set $A$ to process with rank 0 and the particles from B to rank 1. It is clear that $\sum_{p\in A} w(p) = \sum_{p\in B} w(p)$. Thus the two processors are balanced in terms of computing costs, but clearly they are not balanced in terms of memory size. In fact, process with rank 0 has $2m/3$ elements and rank 1 has $m/3$ elements. Assuming each process has a memory size of $2m/3$, then clearly this configuration is not optimal. If we were to favor memory balancing, we could assign $2m/3$ to each processor and have $(4/3) \times m$ particles in total. 
+
+To which degree we decide to favor memory over workload balancing is difficult to answer. But as for now we will parametrize the workload using the weighting function, which allows us to optimize and decide at a later stage. If we decide to completely ignore the workload balancing and solely focus on memory balancing, we can simply set the $w(p_i) = 1$ for all particles.
 
 
 \subsection{ORB}
 
 
-In each recursive call of the ORB algorithm, we are given a $cell$ along with a number of desired leaf cells $d_{cell}$, which of course corresponds to $d$ for the root cell. Furthermore each cell has information about the volume it encompasses (also refereed to its domain) stored as $V_{cell}$. We then split this $cell$, into two child cells $leftCell$ and $rightCell$. For the domains of $leftCell$ and $rightCell$ we have the following properties: 
+In each recursive call of the ORB algorithm, we are given a $cell$ along with a number of desired leaf cells $d_{cell}$, which corresponds to $d$ for the root cell. Furthermore each cell has information about the volume it encompasses (also refereed to its domain) stored as $V_{cell}$. We then split this $cell$, into two child cells $leftCell$ and $rightCell$. For the domains of $leftCell$ and $rightCell$ we have the following properties: 
 
 \begin{center}
 	\begin{equation}
@@ -231,7 +230,7 @@ In each recursive call of the ORB algorithm, we are given a $cell$ along with a 
 
 How the domains of the child cells are exactly defined, will be explained in later stages of this section. Primarily we need to define the variable $d$ for the child cells.
 
-Given a cell with we recursively define $nLeafCells$ for its children as follows:
+Given a cell, we recursively define $nLeafCells$ for its children as follows:
 
 \begin{center}
 	\begin{equation}
