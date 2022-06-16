@@ -80,12 +80,12 @@ The computational effort required in modern N-Body simulations can thus be split
 \begin{itemize}
 	\item \textbf{Load Balancing:} Distribute particles equally among nodes with regards to memory.
 	\item \textbf{Tree Building:} Build tree on each node for accelerated force calculation and integration.
-	\item \textbf{Force calculation and integration:} Calculate forces between particles and apply them.
+	\item \textbf{Force calculation and integration:} Leverage the tree and FFM to calculate forces between particles and apply them.
 \end{itemize}
 
 Before the implementation of FMM into codes, and particularly before the era of modern accelerated computing (e.g., SIMD vectorization and GPU computing) the forces calculations dominated the computational cost. In more recent simulations, each category is about one third of the total calculation time\cite{2017ComAC...4....2P}. This makes the tree building and load balancing subjects to great performance gains, since GPU acceleration is usually not exploited. 
 
-This project proposes to implement Tree Building with the GPU using CUDA to accelerate load balancing.
+This project proposes to implement Tree Building with the GPU using CUDA to accelerate load balancing. We will however consider, implementing the same method for tree building as well. Thus some considerations, which are important for FFM also apply to this work.
 
 \subsection{Target Data}\label{section:target-data}
 
@@ -244,11 +244,11 @@ Given a cell, we recursively define $nLeafCells$ for its children as follows:
 	\end{equation}
 \end{center}
 
-Finally we need to determine the number of particles, which should be encompassed in $V_{leftCell}$ and $V_{rigtCell}$. We define the number of particles as $N_{cell}$.
+Finally we need to determine the number of particles, which should be encompassed in $V_{leftCell}$ and $V_{rigtCell}$. We define the number of particles in the current cell as $N_{cell}$, respectively the left and right child cells are defined as follows:
 
 \begin{center}
 	\begin{equation}
-		N_{leftCell} = min \left \{ x \in \{0,...,N_{cell} \} : \sum_{i=0}^{x} w(p_i) \geq 0.5 \times \sum_{i=0}^{N_{cell}} w(p_i) \right \} 
+		N_{leftCell} = min \left \{ x \in \{0,...,N_{cell} \} : \sum_{i=0}^{x} w(p_i) \geq \frac{d_{leftCell}}{d_{cell}} \times \sum_{i=0}^{N_{cell}} w(p_i) \right \} 
 	\end{equation}
 \end{center}
 
@@ -258,6 +258,8 @@ Finally we need to determine the number of particles, which should be encompasse
 	\end{equation}
 \end{center}
 
+With this formula we make sure, that for any given $d$, we can subdivide the domain accordingly and end up with leaf cells, who encompass an almost equal amount of particles. \TODO{Insert better explanation and example here.}
+
 
 To simplify the visual and numeric explanation of the ORB algorithm, we assume $\forall i \in \{0,..,N\} : w(p_i) = 1$.
 
@@ -265,13 +267,11 @@ The ORB algorithm is initiated by considering the volume $V_{cell}$ which encomp
 
 The ideal cut plane is defined such that exactly $N_{leftChild}$ particles are located to its left side. This cut plane allows us to split the volume $V_{cell}$ in two subdomain, where the $V_{leftCell}$ is constrained by our original domain boundaries and the cut plane on its right side. The same can be done for the right cell, where the cut plane determines the left side boundaries of the volume $V_{rightCell}$. We repeat this process until we have segmented our initial domain into $d$ leaf cells.
 
-The reason to choose the cut axis using the mentioned method, is that it reduces thin and non square shapes and converges to squares. 
-In this non general case, where $d$ is a power of two, we are able to construct a binary tree wit exactly $d$ leaf nodes and a height of $log(d)$.
-
-
+As described in \cite{Stadel2001}, "the opening radius of a cell is given by some constant factor times $r_{max}$". $r_{max}$ is the distance between the center of mass of a cell and its most distant corner. The opening radius influences the error ratio, which in turn influences how many calculations have to be performed. Trivially, a square is the rectangle where the distance between any point and its most distant corner point is the smallest. Thus, we will want to approach more square-like shapes.
+The most straight forward way to avoid high ratios between the length and height of such a rectangle is to always split it along its longest axis.
 
     
-\begin{figure}[ht]
+\begin{figure}[H]
 
         \centering
             \begin{tikzpicture}
@@ -282,7 +282,6 @@ In this non general case, where $d$ is a power of two, we are able to construct 
                     xmax=1.,
                     ymin=-0.,
                     ymax=1.,
-                    title=Recursion depth 0
                 ]
                 \addplot    +[
                     only marks,
@@ -297,7 +296,7 @@ In this non general case, where $d$ is a power of two, we are able to construct 
                 \node[below] at (0.5, 1){$cell_1$};
                 \end{axis}
             \end{tikzpicture}
-
+\caption{Example particles with ORB at recursion depth 0}
 \end{figure}
 
 \begin{figure}[H]
@@ -307,6 +306,7 @@ In this non general case, where $d$ is a power of two, we are able to construct 
         []  
         ]
     \end{forest}    
+\caption{Tree with ORB at recursion depth 0}
 \end{figure}
 
 \begin{figure}[H]
@@ -320,7 +320,6 @@ In this non general case, where $d$ is a power of two, we are able to construct 
                     xmax=1.,
                     ymin=-0.,
                     ymax=1.,
-                    title=Recursion depth 1
                 ]
                 \addplot+[
                     only marks,
@@ -339,6 +338,7 @@ In this non general case, where $d$ is a power of two, we are able to construct 
             
 		\end{tikzpicture}
     \end{center}
+\caption{Example particles with ORB at recursion depth 1}
 \end{figure}
 
 \begin{figure}[H]
@@ -348,6 +348,7 @@ In this non general case, where $d$ is a power of two, we are able to construct 
 		[$cell_2$][$cell_3$]  
 		]
 	\end{forest}    
+\caption{Tree with ORB at recursion depth 1}
 \end{figure}
 
 \begin{figure}[H]
@@ -382,6 +383,7 @@ In this non general case, where $d$ is a power of two, we are able to construct 
             
 		\end{tikzpicture}
     \end{center}
+\caption{Example particles with ORB at recursion depth 2}
 \end{figure}
 
 \begin{figure}[H]
@@ -390,11 +392,12 @@ In this non general case, where $d$ is a power of two, we are able to construct 
 		[$cell_1$
 		[$cell_2$ [$cell_4$] [$cell_5$]][$cell_3$]  
 		]
-	\end{forest}    
+	\end{forest}
+ \caption{Tree with ORB at recursion depth 2}
 \end{figure}
 
 
-Since $d_{cellLeft} - d_{cellRight}$ must always be $\leq 1$, it must hold that the tree is a balanced binary tree. Therefore we can conclude that the height of the tree is equal to $\lceil log(d) \rceil$ and the total number of nodes (not only leaf nodes) is $log(d) \times d$. Since we have a balanced tree, we also have the possibility of storing it in a heap data-structure, which can in turn greatly increase the performance, since we will not have to perform a tree walk to access individual cells in the tree.
+Since $d_{cellLeft} - d_{cellRight}$ must always be $\leq 1$, it must hold that the tree is a balanced binary tree. Therefore we can conclude that the height of the tree is equal to $\lceil log(d) \rceil$ and the total number of nodes (not only leaf nodes) is $log(d) \times d$. Since we have a balanced binary tree, we also have the possibility of storing it in a heap data-structure, which can in turn greatly increase the performance, since we will not have to perform a tree walk to access individual cells in the tree.
 
 \begin{algorithm}[H]
 	\caption{The ORB main routine}\label{euclid}
@@ -418,6 +421,9 @@ Since $d_{cellLeft} - d_{cellRight}$ must always be $\leq 1$, it must hold that 
 	\end{algorithmic}
 \end{algorithm}
 
+Let not apply the algorithm to our running example:
+
+\TODO{Insert step by step algorithm here}
 
 \subsection{Binary Search}
 
@@ -458,7 +464,7 @@ The first step is to make an estimation for a cut. In our case we simply assume 
 	\end{algorithmic}
 \end{algorithm}
 
-We analyse the runtime of the cut algorithm as follows: Inside the loop we count the number of particles on the left side of the cut and since the array is unordered, we need to sweep over elements once which results in a runtime of $O(N)$. Next we estimate the maximum number of iterations our loop needs to repeated. With each iteration we cut in half the domain size.  \TODO{ Thus after the first iteration the domain size is $2^{31}$. It is therefore where easy to verify that a maximum of 32 repetitions can be performed before our domain reaches a size of $2^0$. In this case the cut cannot be improved as it has already reached the maximum precision. We conclude a worst case performance of $O(N \times 32)$. }
+We analyse the runtime of the cut algorithm as follows: Inside the loop we count the number of particles on the left side of the cut and since the array is unordered, we need to sweep over elements once which results in a runtime of $O(N)$. Next we determine the maximum number of iterations our loop needs to repeated. With each iteration we cut in half the domain size.  \TODO{ Thus after the first iteration the domain size is $2^{31}$. It is therefore where easy to verify that a maximum of 32 repetitions can be performed before our domain reaches a size of $2^0$. In this case the cut cannot be improved as it has already reached the maximum precision. We conclude a worst case performance of $O(N \times 32)$. }
 
 \subsubsection{Improved Binary Search}
 
@@ -1446,9 +1452,9 @@ We conclude that the GPU version with GPU Tree building enabled yields the best 
 
 \TODO{Give introduction as to how precise the description is and should be}
 
-In this section we will describe the stand-alone implementation of the accelerated ORB algorithm. We will develop this somewhat separately from the PKDGrav codebase in order to have smaller and easily understandable codebase. We will however use mdl2 from PKDGrav, which is used to distribute can schedule the workload among the processors in the system. We aim to use this platform for extensive empirical testing of different strategies.
+In this section we will describe the stand-alone implementation of the accelerated ORB algorithm. We will develop this somewhat separately from the PKDGrav codebase in order to have smaller and easily understandable codebase. We will however use mdl2 from PKDGrav, which is used to distribute the workload among the processors in the system. We aim to use this platform for extensive empirical testing of different strategies and evaluate weather our the proposed method indeed outperforms the CPU version.
 
-A brief overview of the core classes and function is as follows:
+A brief overview of the core elements:
 
 \begin{itemize}
 	\item \textbf{particles}: The particles array has ownership over all particle objects. It has the shape of a multidimensional array, where the first three axes are occupied by positional data and the rest can be filled with meta data.
@@ -1462,16 +1468,16 @@ For this project we will use C++ 17 along with CUDA 11.3, OpenMPI 4.1.0 and Blit
 \subsection{Particles}
 
 To implement the particles array, we use C-style arrays interchangeably with blitz++ arrays. The blitz++ array is a wrapper class around C-style arrays, which helps with pointer management and can speed up the debugging process by keeping track of the array size and checking access indexes. Furthermore, we can easily create slices and make borrowed copies. 
-Blitz++ allows us to easily access the C-style array with the command $array.data()$, enabling us to 
+Blitz++ allows us to easily access the C-style array with the command $array.data()$, enabling us to switch to C-style arrays, whenever its deemed necessarily. We have observed cases where iterating over a blitz array does not enable AVX, however iterating over the underlying C-style array did enable AVX.
 
-\TODO{Add example with and without AVX in assembly}
+
 \subsection{Cell}
 
 As our tree consists of multiple cells, which are to be stored in a tree data-structure. As seen in section \ref{section:orb-example} the conditions for a balanced tree hold, allowing us to use a heap to store the tree. This \TODO{hint} reduces the runtime of the tree, and since we need to store the cells in an array for communication purposes anyways (\TODO{Why exactly?}), this makes a lot of sense.
 
 \TODO{Either copy cell into buffer. You have to linearize. Add arguments with leaf cells.}
 
-When using a parallization schema using local reshuffling we will have to send all cells on a single level using the messaging interface. Using the heap datastructure, cells which corresponds to single level in the tree, can be accessed using a simple range.
+When using a parallelization schema using local reshuffling we will have to send all cells on a single level using the messaging interface. Using the heap datastructure, cells which corresponds to single level in the tree, can be accessed using a simple range.
 
 \begin{figure}[H]
 	\begin{center}
@@ -1538,30 +1544,37 @@ The cell class consists of the following variables:
 \end{itemize}
 
 
-The cells could be stored as binary tree or as we have already mentioned we could make use of a heap datastructure which allows for greater flexibility. Due to performance improvements, we will opt for the second variant.
+The cells could be stored as binary tree or as we have already mentioned we could make use of a heap data-structure which allows for greater flexibility. Due to performance improvements, we will opt for the second variant.
 
 
 \subsection{Services}
 
-Similarly as in PKDGrav we introduce the concept of services, which essentially is a collection of functions which can be sent to any set of processors in the computing system. We abstract the ORB algorithm into such services, such that we can experiment with different workload distribution schemas and easily interchange subroutines with GPU enables ones.
+As required by mdl, we make use of services, which essentially is a collection of functions which can be sent to any set of processors in the computing system. We abstract every performance critical part of the orb main runtime, which can parallelized into such a service.
 
 The services we have implemented are:
 
 \begin{itemize}
 	\item $countLeftService$ : Counts the number of particles left of a provided cut position for each of the cells.
-	\item $countServiceService$ : Counts the number particles inside the domain for each of the provided cells.
+	\item $countService$ : Counts the number particles inside the domain for each of the provided cells.
 	\item $localReshuffleService$ : Reshuffles the particles locally, such that their memory locality corresponds to a cell. 
-	\item $buildTreeService$ : This is the operative service, which distributes and coordinates other services. Its comparable to the ORB main routine. 
 \end{itemize}
 
-Each service function is associated with an unique ID.
 
-With this system, a processor simply needs to wait for new services and fetch their corresponding parameters. The fetching and distribution of such services happens over the Messaging interface.
-
-\subsection{CUDA Services}
+\subsection{CUDA Implementations}
 
 In this section we describe the services which were implemented using CUDA. In this section we may also add some theory about how exactly CUDA works.
 
+\subsubsection{CUDA Reductions}
+
+Reductions in CUDA are a common theme and we were able to reuse highly optimized kernels, proposed in a CUDA webinar as the basis for the counting algorithms, which is part of the binary cut algorithm. The only thing which needs to change, is that we don`t simply sum up the values in an array, but we count the number of elements which are smaller than the proposed cut value. Other than that we can essentially copy the mentioned reduction code.
+
+\subsubsection{Send to device}
+
+In order to prepare the data and send it to a device... 
+
+\subsubsection{CUDA streams}
+
+Describe our analysis weather it makes sense to use streams and why.
 
 \newpage
 \section{Empirical Analysis of ORB}
@@ -1606,7 +1619,7 @@ In this section we describe the services which were implemented using CUDA. In t
 
 
 % Use for reduction explanation https://texample.net/tikz/examples/database-decimation-process/
-\bibliographystyle{apa}
+%\bibliographystyle{apa}
 \bibliography{reference}
 
 \end{document}
