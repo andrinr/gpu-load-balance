@@ -10,6 +10,7 @@ struct Cell {
     int id;
     int nLeafCells;
     int cutAxis;
+    bool foundCut;
     float cutMarginLeft;
     float cutMarginRight;
     float lower[3], upper[3];
@@ -25,7 +26,7 @@ struct Cell {
         throw std::invalid_argument("Cell.Cell: nLeafCells is less than one.");
     }
 #endif // DEBUG
-
+        foundCut = false;
         cutAxis = -1;
         cutMarginLeft = 0.0;
         cutMarginRight = 0.0;
@@ -63,11 +64,11 @@ namespace CellHelpers {
     }
 
     static int getLeftChildId(Cell &cell) {
-        return cell.id * 2 - 1;
+        return (cell.id + 1) * 2 - 1;
     }
 
     static int getRightChildId(Cell &cell) {
-        return cell.id * 2;
+        return (cell.id + 1) * 2;
     }
 
     static int getParentId(Cell &cell) {
@@ -124,15 +125,12 @@ namespace CellHelpers {
     }
 
     static void log(Cell &cell) {
-        std::cout << "------" << "\n";
-        std::cout << cell.id << " cell id" << "\n";
-        std::cout << cell.lower[0] << " " << cell.lower[1] << " " << cell.lower[2] << " lower " << "\n";
-        std::cout << cell.upper[0] << " " << cell.upper[1] << " " << cell.upper[2] << " upper " <<"\n";
-        std::cout << cell.nLeafCells << " nCells " << cell.cutAxis << " cutAxis " << "\n";
-        std::cout << cell.cutMarginLeft << " " << cell.cutMarginRight << " cutMargin" <<"\n";
-        std::cout << "------" << "\n";
+        printf("Cell ID: %u \n", cell.id);
+        printf("lower: %f, %f, %f \n", cell.lower[0], cell.lower[1], cell.lower[2]);
+        printf("upper: %f, %f, %f \n", cell.upper[0], cell.upper[1], cell.upper[2]);
+        printf("NLeafCells: %u, axis: %i , found: %u\n", cell.nLeafCells, cell.cutAxis, cell.foundCut);
+        printf("Margin left %f, right: %f \n", cell.cutMarginLeft, cell.cutMarginRight);
     }
-
 }
 
 #endif // CELL_H

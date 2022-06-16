@@ -17,7 +17,7 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     storage.ascendingFlag() = true, true;
 
     int nStreams = 32;
-    int n = 1 << 16;
+    int n = 1 << 17;
     int k = 4;
 
     auto particles = blitz::Array<float, 2>(n, k, storage);

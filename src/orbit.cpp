@@ -20,7 +20,7 @@ int master(MDL vmdl,void *vpst) {
     mdl->RunService(PST_SETADD,sizeof(inAdd),&inAdd);
 
     int n = 1 << 10;
-    int d = 1 << 4;
+    int d = 1 << 8;
 
     const float lowerInit = -0.5;
     const float upperInit = 0.5;
@@ -29,7 +29,7 @@ int master(MDL vmdl,void *vpst) {
     float upper[3] = {upperInit, upperInit, upperInit};
 
     // root cell is at index 1
-    blitz::Array<Cell, 1> cells(d);
+    blitz::Array<Cell, 1> cellHeap(d);
 
     // user code
     Cell root(0, d, lower, upper);
@@ -37,7 +37,7 @@ int master(MDL vmdl,void *vpst) {
     CellHelpers::setCutMargin(root);
 
     CellHelpers::log(root);
-    cells(0) = root;
+    cellHeap(0) = root;
 
     ServiceInit::input iNParticles[1];
     ServiceInit::output oNParticles[1];
@@ -51,8 +51,10 @@ int master(MDL vmdl,void *vpst) {
                 (int) std::pow(2, l)) - 1;
 
         int nCells = b - a;
-        printf("from %u to %u \n", a, b);
-        ServiceCount::input *iCells = cells(blitz::Range(a, b)).data();
+        //printf("\n from %u to %u \n \n", a, b);
+        blitz::Array<Cell, 1> cells = cellHeap(blitz::Range(a, b));
+
+        ServiceCount::input *iCells = cells.data();
         ServiceCount::output oCount[nCells];
 
         mdl->RunService(PST_COUNT, nCells * sizeof(ServiceCount::input), iCells, oCount);
@@ -75,19 +77,21 @@ int master(MDL vmdl,void *vpst) {
             mdl->RunService(PST_COUNTLEFT, nCells * sizeof(ServiceCountLeft::input), iCells, oCountLeft);
             //mdl->RunService(PST_COUNTLEFT, nCells * sizeof(ServiceCountLeft::input), iCountLeft, oCountLeft);
 
-            for (int i = a; i < b; ++i) {
-                printf(
+            for (int i = 0; i < nCells; ++i) {
+                if (cells(i).foundCut) continue;
+                /*printf(
                         "counted left: %u, of %u. cut %f, axis %d, level %u, cell %u \n",
-                       oCountLeft[i-a],
-                       oCount[i-a] /2,
+                       oCountLeft[i],
+                       oCount[i] /2,
                        (cells(i).cutMarginLeft + cells(i).cutMarginRight) / 2.0,
                        cells(i).cutAxis,
                        l,
-                       i);
+                        cells(i).id);
+                CellHelpers::log(cells(i));*/
 
-                if (abs(oCountLeft[i-a] - oCount[i-a] / 2.0) < 32) {
-                    cells(i).cutAxis = -1;
-                } else if (oCountLeft[i-a] - oCount[i-a] / 2.0 > 0) {
+                if (abs(oCountLeft[i] - oCount[i] / 2.0) < 32) {
+                    cells(i).foundCut = true;
+                } else if (oCountLeft[i] - oCount[i] / 2.0 > 0) {
                     cells(i).cutMarginRight = (cells(i).cutMarginLeft + cells(i).cutMarginRight) / 2.0;
                     foundAll = false;
                 } else {
@@ -98,7 +102,7 @@ int master(MDL vmdl,void *vpst) {
         }
 
         // Split and store all cells on current heap level
-        for (int i = a; i < b; ++i) {
+        for (int i = 0; i < nCells; ++i) {
             Cell cellLeft;
             Cell cellRight;
             std::tie(cellLeft, cellRight) = CellHelpers::cut(cells(i));
@@ -107,13 +111,15 @@ int master(MDL vmdl,void *vpst) {
             CellHelpers::setCutAxis(cellLeft);
             CellHelpers::setCutMargin(cellLeft);
             CellHelpers::setCutMargin(cellRight);
+            cellHeap(CellHelpers::getLeftChildId(cells(i))) = cellLeft;
+            cellHeap(CellHelpers::getRightChildId(cells(i))) = cellRight;
 
-            cells(CellHelpers::getLeftChildId(cells(i))) = cellLeft;
-            cells(CellHelpers::getRightChildId(cells(i))) = cellRight;
+            CellHelpers::log(cellLeft);
+            CellHelpers::log(cellRight);
         }
 
-        ServiceCountLeft::output oCutIndices[nCells];
-        mdl->RunService(PST_RESHUFFLE, nCells * sizeof(ServiceCountLeft::input), iCells, oCutIndices);
+        ServiceReshuffle::output oCutIndices[nCells];
+        mdl->RunService(PST_RESHUFFLE, nCells * sizeof(ServiceReshuffle::input), iCells, oCutIndices);
 
     }
     return 0;

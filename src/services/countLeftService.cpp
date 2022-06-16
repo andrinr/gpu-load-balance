@@ -12,14 +12,15 @@ int ServiceCountLeft::Service(PST pst, void *vin, int nIn, void *vout, int nOut)
     auto nCells = nIn / sizeof(input);
     assert(nOut / sizeof(output) >= nCells);
 
-
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset){
         auto cell = static_cast<Cell>(*(in + cellPtrOffset));
 
-        if (cell.cutAxis == -1) continue;
+        if (cell.foundCut) {
+            continue;
+        }
         int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
         int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
-
+        //printf("cell id %u, count from %u, to %u \n", cell.id, beginInd, endInd);
         blitz::Array<float,1> particles =
                 pst->lcl->particles(blitz::Range(beginInd, endInd), cell.cutAxis);
 
@@ -27,13 +28,10 @@ int ServiceCountLeft::Service(PST pst, void *vin, int nIn, void *vout, int nOut)
         float * endPtr = startPtr + (endInd - beginInd);
 
         int nLeft = 0;
-        int n = 0;
         float cut = (cell.cutMarginRight + cell.cutMarginLeft) / 2.0;
-
 
         for(auto p= startPtr; p<endPtr; ++p)
         {
-            n++;
             nLeft += *p < cut;
         }
 
