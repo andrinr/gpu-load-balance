@@ -85,14 +85,14 @@ namespace CellHelpers {
                 nCellsLeft,
                 cell.lower,
                 cell.upper);
-        leftChild.upper[cell.cutAxis] = (cell.cutMarginRight - cell.cutMarginLeft) / 2.0;
+        leftChild.upper[cell.cutAxis] = (cell.cutMarginRight + cell.cutMarginLeft) / 2.0;
 
         Cell rightChild(
                 CellHelpers::getRightChildId(cell),
                 nCellsRight,
                 cell.lower,
                 cell.upper);
-        rightChild.lower[cell.cutAxis] = (cell.cutMarginRight - cell.cutMarginLeft) / 2.0;
+        rightChild.lower[cell.cutAxis] = (cell.cutMarginRight + cell.cutMarginLeft) / 2.0;
 
         return std::make_tuple(leftChild, rightChild);
     }

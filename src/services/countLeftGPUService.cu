@@ -67,8 +67,7 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     // https://developer.nvidia.com/blog/how-overlap-data-transfers-cuda-cc/
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset){
 
-        int streamId = cellPtrOffset % 32;
-        //cudaStreamSynchronize(lcl->streams(streamId));
+        cudaStreamSynchronize(lcl->streams(pst->idSelf));
 
         auto cell = static_cast<Cell>(*(in + cellPtrOffset));
         // -1 axis signals no need to count
@@ -91,7 +90,7 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
                 nBlocks,
                 nThreads,
                 nThreads * sizeof (int),
-                lcl->streams(streamId)
+                lcl->streams(pst->idSelf)
                 >>>
                 (lcl->d_particles(cellPtrOffset),
                  lcl->d_counts(cellPtrOffset),
@@ -103,7 +102,7 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
                 lcl->d_counts(cellPtrOffset),
                 sizeof (int ) * nBlocks,
                 cudaMemcpyDeviceToHost,
-                lcl->streams(streamId));
+                lcl->streams(pst->idSelf));
 
         for (int i = 0; i < nBlocks; ++i) {
             out[cellPtrOffset] += h_counts[i];

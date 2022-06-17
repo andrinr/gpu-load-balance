@@ -20,13 +20,10 @@ int master(MDL vmdl,void *vpst) {
     mdl->RunService(PST_SETADD,sizeof(inAdd),&inAdd);
 
     int n = 1 << 10;
-    int d = 1 << 4;
+    int d = 1 << 12;
 
-    const float lowerInit = -0.5;
-    const float upperInit = 0.5;
-
-    float lower[3] = {lowerInit, lowerInit, lowerInit};
-    float upper[3] = {upperInit, upperInit, upperInit};
+    float lower[3] = {-0.5, -30, -0.5};
+    float upper[3] = {0.5, 30, 0.5};
 
     // root cell is at index 1
     blitz::Array<Cell, 1> cellHeap(d);
@@ -59,9 +56,9 @@ int master(MDL vmdl,void *vpst) {
 
         mdl->RunService(PST_COUNT, nCells * sizeof(ServiceCount::input), iCells, oCount);
 
-        ServiceCopyToDevice::input iNParticles[1];
-        ServiceCopyToDevice::output oCopy[1];
-        mdl->RunService(PST_COPYTODEVICE, sizeof (int), iCells, oCopy);
+        //ServiceCopyToDevice::input iNParticles[1];
+        //ServiceCopyToDevice::output oCopy[1];
+        //mdl->RunService(PST_COPYTODEVICE, sizeof (int), iCells, oCopy);
 
         // Loop
         bool foundAll = false;
@@ -74,8 +71,8 @@ int master(MDL vmdl,void *vpst) {
 
             //ServiceCountLeft::input *iCountLeft = cells(blitz::Range(a, b)).data();
             ServiceCountLeft::output oCountLeft[nCells];
-            //mdl->RunService(PST_COUNTLEFT, nCells * sizeof(ServiceCountLeft::input), iCells, oCountLeft);
-            mdl->RunService(PST_COUNTLEFTGPU, nCells * sizeof(ServiceCountLeft::input), iCells, oCountLeft);
+            mdl->RunService(PST_COUNTLEFT, nCells * sizeof(ServiceCountLeft::input), iCells, oCountLeft);
+            //mdl->RunService(PST_COUNTLEFTGPU, nCells * sizeof(ServiceCountLeft::input), iCells, oCountLeft);
 
             for (int i = 0; i < nCells; ++i) {
                 if (cells(i).foundCut) continue;
@@ -87,7 +84,7 @@ int master(MDL vmdl,void *vpst) {
                        cells(i).cutAxis,
                        l,
                         cells(i).id);
-                CellHelpers::log(cells(i));
+                //CellHelpers::log(cells(i));
 
                 if (abs(oCountLeft[i] - oCount[i] / 2.0) < 32) {
                     cells(i).foundCut = true;

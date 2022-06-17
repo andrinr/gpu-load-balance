@@ -16,13 +16,12 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     storage.base() = 0, 0;
     storage.ascendingFlag() = true, true;
 
-    int nStreams = 32;
-    int n = 1 << 17;
+    int n = 1 << 19;
     int k = 4;
 
     auto particles = blitz::Array<float, 2>(n, k, storage);
     auto cellToRangeMap = blitz::Array<int, 2>(max_cells, 2);
-    auto streams = blitz::Array<cudaStream_t, 1>(nStreams);
+    auto streams = blitz::Array<cudaStream_t, 1>(pst->nLeaves);
     auto d_particles = blitz::Array<float *, 1>(max_cells);
     auto d_counts = blitz::Array<int *, 1>(max_cells);
 
@@ -37,7 +36,7 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
 
     printf("ServiceInit generated random numbers %d\n",pst->idSelf);
 
-    for (int i = 0; i < nStreams; i++) {
+    for (int i = 0; i < pst->nLeaves; i++) {
         cudaStream_t stream;
         cudaStreamCreate(&stream);
         streams(i) = stream;
