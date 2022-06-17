@@ -56,13 +56,14 @@ __global__ void reduce(float *g_idata, int *g_odata, float cut, int n) {
 
 int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     // store streams / initialize in local data
-    //
+    printf("ServiceCountLeft invoked on thread %d\n",pst->idSelf);
+
     auto lcl = pst->lcl;
     auto in  = static_cast<input *>(vin);
     auto out = static_cast<output *>(vout);
     auto nCells = nIn / sizeof(input);
     assert(nOut / sizeof(output) >= nCells);
-    //printf("ServiceCountLeft invoked on thread %d\n",pst->idSelf);
+    printf("ServiceCountLeft initialized on thread %d\n",pst->idSelf);
 
     // https://developer.nvidia.com/blog/how-overlap-data-transfers-cuda-cc/
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset){
@@ -111,7 +112,6 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
 
     // Wait till all streams have finished
     cudaDeviceSynchronize();
-
 
     return nCells * sizeof(output);
 }

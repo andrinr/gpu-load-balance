@@ -9,6 +9,7 @@
 struct Cell {
     int id;
     int nLeafCells;
+    int prevCutAxis;
     int cutAxis;
     bool foundCut;
     float cutMarginLeft;
@@ -27,6 +28,7 @@ struct Cell {
     }
 #endif // DEBUG
         foundCut = false;
+        prevCutAxis = -1;
         cutAxis = -1;
         cutMarginLeft = 0.0;
         cutMarginRight = 0.0;
@@ -40,73 +42,63 @@ struct Cell {
 
     Cell() = default; // Trivial structs need a default constructor
 
-    // todo: do this
-    int getLeftChildId() const {// does not modify{
-        return id * 2 - 1;
-    }
-};
-
-
-
-namespace CellHelpers {
-
-    static int getTotalNumberOfCells(Cell &cell) {
-        return 2 * cell.nLeafCells - 1;
+    int getLeftChildId() const {
+        return (id + 1) * 2 - 1;
     }
 
-    static int getNLevels(Cell &cell) {
-        return ceil(log2(cell.nLeafCells));
+    int getRightChildId() const {
+        return (id + 1) * 2;
     }
 
-    static int getNCellsOnLastLevel(Cell &cell) {
-        int depth = getNLevels(cell);
-        return 2 * cell.nLeafCells - pow(2, depth);
+    int getTotalNumberOfCells() const {
+        return 2 * nLeafCells - 1;
     }
 
-    static int getLeftChildId(Cell &cell) {
-        return (cell.id + 1) * 2 - 1;
+    int getNLevels() const {
+        return ceil(log2(nLeafCells));
     }
 
-    static int getRightChildId(Cell &cell) {
-        return (cell.id + 1) * 2;
+    int getNCellsOnLastLevel() const {
+        int depth = getNLevels();
+        return 2 * nLeafCells - pow(2, depth);
     }
 
-    static int getParentId(Cell &cell) {
-        //todo
-        return cell.id;
+    float getCut() const {
+        return (cutMarginRight + cutMarginLeft) / 2.0;
     }
 
-    static std::tuple <Cell, Cell> cut(Cell &cell) {
-        int nCellsLeft = ceil(cell.nLeafCells / 2.0);
-        int nCellsRight = cell.nLeafCells - nCellsLeft;
+    std::tuple <Cell, Cell> cut() {
+        int nCellsLeft = ceil(nLeafCells / 2.0);
+        int nCellsRight = nLeafCells - nCellsLeft;
 
+        float cut = getCut();
         Cell leftChild(
-                CellHelpers::getLeftChildId(cell),
+                getLeftChildId(),
                 nCellsLeft,
-                cell.lower,
-                cell.upper);
-        leftChild.upper[cell.cutAxis] = (cell.cutMarginRight + cell.cutMarginLeft) / 2.0;
+                lower,
+                upper);
+        leftChild.upper[cutAxis] = cut;
 
         Cell rightChild(
-                CellHelpers::getRightChildId(cell),
+                getRightChildId(),
                 nCellsRight,
-                cell.lower,
-                cell.upper);
-        rightChild.lower[cell.cutAxis] = (cell.cutMarginRight + cell.cutMarginLeft) / 2.0;
+                lower,
+                upper);
+        rightChild.lower[cutAxis] = cut;
 
         return std::make_tuple(leftChild, rightChild);
     }
 
-    static void setCutAxis(Cell &cell) {
+    void setCutAxis() {
         int maxD = -1;
 
         float maxSize = 0.0;
         for (int d = 0; d < 3; d++) {
-            float size = cell.upper[d] - cell.lower[d];
+            float size = upper[d] - lower[d];
 
 #if DEBUG
-            if (size == 0.0) {
-                throw std::invalid_argument("Cell.SetCutAxis: size is zero.");
+            if (size < 0.0) {
+                throw std::invalid_argument("Cell.SetCutAxis: size is zero or negative.");
             }
 #endif // DEBUG
 
@@ -116,21 +108,23 @@ namespace CellHelpers {
             }
         }
 
-        cell.cutAxis = int(maxD);
+        // keep track of history
+        prevCutAxis = cutAxis;
+        cutAxis = int(maxD);
     }
 
-    static void setCutMargin(Cell &cell) {
-        cell.cutMarginLeft = cell.lower[cell.cutAxis];
-        cell.cutMarginRight = cell.upper[cell.cutAxis];
+    void setCutMargin() {
+        cutMarginLeft = lower[cutAxis];
+        cutMarginRight = upper[cutAxis];
     }
 
-    static void log(Cell &cell) {
-        printf("Cell ID: %u \n", cell.id);
-        printf("lower: %f, %f, %f \n", cell.lower[0], cell.lower[1], cell.lower[2]);
-        printf("upper: %f, %f, %f \n", cell.upper[0], cell.upper[1], cell.upper[2]);
-        printf("NLeafCells: %u, axis: %i , found: %u\n", cell.nLeafCells, cell.cutAxis, cell.foundCut);
-        printf("Margin left %f, right: %f \n", cell.cutMarginLeft, cell.cutMarginRight);
+    void log() const {
+        printf("Cell ID: %u \n", id);
+        printf("lower: %f, %f, %f \n", lower[0], lower[1], lower[2]);
+        printf("upper: %f, %f, %f \n", upper[0], upper[1], upper[2]);
+        printf("NLeafCells: %u, axis: %i , found: %u\n", nLeafCells, cutAxis, foundCut);
+        printf("Margin left %f, right: %f \n", cutMarginLeft, cutMarginRight);
     }
-}
+};
 
 #endif // CELL_H

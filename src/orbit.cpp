@@ -20,7 +20,7 @@ int master(MDL vmdl,void *vpst) {
     mdl->RunService(PST_SETADD,sizeof(inAdd),&inAdd);
 
     int n = 1 << 10;
-    int d = 1 << 12;
+    int d = 1 << 4;
 
     float lower[3] = {-0.5, -30, -0.5};
     float upper[3] = {0.5, 30, 0.5};
@@ -30,21 +30,21 @@ int master(MDL vmdl,void *vpst) {
 
     // user code
     Cell root(0, d, lower, upper);
-    CellHelpers::setCutAxis(root);
-    CellHelpers::setCutMargin(root);
+    root.setCutAxis();
+    root.setCutMargin();
 
-    CellHelpers::log(root);
+    root.log();
     cellHeap(0) = root;
 
     ServiceInit::input iNParticles[1];
     ServiceInit::output oNParticles[1];
     mdl->RunService(PST_INIT, sizeof (int), iNParticles, oNParticles);
 
-    for (int l = 1; l < CellHelpers::getNLevels(root); ++l) {
+    for (int l = 1; l < root.getNLevels(); ++l) {
 
         int a = std::pow(2, (l - 1)) - 1;
         int b = std::min(
-                CellHelpers::getNCellsOnLastLevel(root),
+               root.getNCellsOnLastLevel(),
                 (int) std::pow(2, l)) - 1;
 
         int nCells = b - a;
@@ -56,9 +56,9 @@ int master(MDL vmdl,void *vpst) {
 
         mdl->RunService(PST_COUNT, nCells * sizeof(ServiceCount::input), iCells, oCount);
 
-        //ServiceCopyToDevice::input iNParticles[1];
-        //ServiceCopyToDevice::output oCopy[1];
-        //mdl->RunService(PST_COPYTODEVICE, sizeof (int), iCells, oCopy);
+        ServiceCopyToDevice::input iNParticles[1];
+        ServiceCopyToDevice::output oCopy[1];
+        mdl->RunService(PST_COPYTODEVICE, sizeof (int), iCells, oCopy);
 
         // Loop
         bool foundAll = false;
@@ -71,8 +71,8 @@ int master(MDL vmdl,void *vpst) {
 
             //ServiceCountLeft::input *iCountLeft = cells(blitz::Range(a, b)).data();
             ServiceCountLeft::output oCountLeft[nCells];
-            mdl->RunService(PST_COUNTLEFT, nCells * sizeof(ServiceCountLeft::input), iCells, oCountLeft);
-            //mdl->RunService(PST_COUNTLEFTGPU, nCells * sizeof(ServiceCountLeft::input), iCells, oCountLeft);
+            //mdl->RunService(PST_COUNTLEFT, nCells * sizeof(ServiceCountLeft::input), iCells, oCountLeft);
+            mdl->RunService(PST_COUNTLEFTGPU, nCells * sizeof(ServiceCountLeft::input), iCells, oCountLeft);
 
             for (int i = 0; i < nCells; ++i) {
                 if (cells(i).foundCut) continue;
@@ -102,17 +102,18 @@ int master(MDL vmdl,void *vpst) {
         for (int i = 0; i < nCells; ++i) {
             Cell cellLeft;
             Cell cellRight;
-            std::tie(cellLeft, cellRight) = CellHelpers::cut(cells(i));
+            std::tie(cellLeft, cellRight) = cells(i).cut();
 
-            CellHelpers::setCutAxis(cellRight);
-            CellHelpers::setCutAxis(cellLeft);
-            CellHelpers::setCutMargin(cellLeft);
-            CellHelpers::setCutMargin(cellRight);
-            cellHeap(CellHelpers::getLeftChildId(cells(i))) = cellLeft;
-            cellHeap(CellHelpers::getRightChildId(cells(i))) = cellRight;
+            cellRight.setCutAxis();
+            cellRight.setCutMargin();
+            cellLeft.setCutAxis();
+            cellLeft.setCutMargin();
 
-            CellHelpers::log(cellLeft);
-            CellHelpers::log(cellRight);
+            cellHeap(cells(i).getLeftChildId()) = cellLeft;
+            cellHeap(cells(i).getRightChildId()) = cellRight;
+
+            cellLeft.log();
+            cellRight.log();
         }
 
         ServiceReshuffle::output oCutIndices[nCells];

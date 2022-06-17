@@ -18,6 +18,8 @@ int ServiceReshuffle::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     auto in  = static_cast<input *>(vin);
     auto out = static_cast<output *>(vout);
     auto nCells = nIn / sizeof(input);
+
+    // todo: either make x-y-z swaps directly in loop or do it after and perform memcpy
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset){
         auto cell = static_cast<Cell>(*(in + cellPtrOffset));
 
@@ -26,8 +28,6 @@ int ServiceReshuffle::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
 
         int i = beginInd-1, j = endInd;
         float cut =  (cell.cutMarginLeft + cell.cutMarginRight) / 2.0;
-
-        //printf("cut %f \n", cut);
 
         while(true)
         {
@@ -48,20 +48,49 @@ int ServiceReshuffle::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
             swap(lcl->particles, i, j);
         }
 
-        //printf("reshuffle %u, %u, %i, %i\n", beginInd, endInd, i, j);
-
+        // todo: check if true ,might be +- 1
         swap(lcl->particles, i, endInd -1);
 
-        lcl->cellToRangeMap(CellHelpers::getLeftChildId(cell), 0) =
+        lcl->cellToRangeMap(cell.getLeftChildId(), 0) =
                 lcl->cellToRangeMap(cell.id, 0);
-        lcl->cellToRangeMap(CellHelpers::getLeftChildId(cell), 1) = i;
+        lcl->cellToRangeMap(cell.getLeftChildId(), 1) = i;
 
-        lcl->cellToRangeMap(CellHelpers::getRightChildId(cell), 0) = i;
-        lcl->cellToRangeMap(CellHelpers::getRightChildId(cell), 1) =
+        lcl->cellToRangeMap(cell.getRightChildId(), 0) = i;
+        lcl->cellToRangeMap(cell.getRightChildId(), 1) =
                 lcl->cellToRangeMap(cell.id, 1);
 
         out[cellPtrOffset] = i;
+
+        if (cell.prevCutAxis == cell.cutAxis) continue;
+
+        // Restore default
+        if (cell.prevCutAxis != 0) {
+            blitz::Array<float, 1> a =
+                    lcl->particles(blitz::Range(beginInd, endInd), cell.prevCutAxis);
+            blitz::Array<float, 1> b =
+                    lcl->particles(blitz::Range(beginInd, endInd), 0);
+            blitz::Array<float, 1> tmp =
+                    lcl->particles(blitz::Range(beginInd, endInd), 4);
+
+            std::memcpy(&tmp.data(), &a.data(), sizeof (float ) *  a.rows());
+            std::memcpy(&a.data(), &b.data(), sizeof (float ) *  a.rows());
+            std::memcpy(&b.data(), &tmp.data(), sizeof (float ) *  a.rows());
+        }
+
+        if (cell.cutAxis != 0) {
+            blitz::Array<float, 1> a =
+                    lcl->particles(blitz::Range(beginInd, endInd), cell.cutAxis);
+            blitz::Array<float, 1> b =
+                    lcl->particles(blitz::Range(beginInd, endInd), 0);
+            blitz::Array<float, 1> tmp =
+                    lcl->particles(blitz::Range(beginInd, endInd), 4);
+
+            std::memcpy(&tmp.data(), &a.data(), sizeof (float ) *  a.rows());
+            std::memcpy(&a.data(), &b.data(), sizeof (float ) *  a.rows());
+            std::memcpy(&b.data(), &tmp.data(), sizeof (float ) *  a.rows());
+        }
     }
+
     return nCells * sizeof (output);
 }
 

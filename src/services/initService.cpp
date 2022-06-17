@@ -17,7 +17,8 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     storage.ascendingFlag() = true, true;
 
     int n = 1 << 19;
-    int k = 4;
+    // x, y, z, cellId, tmp
+    int k = 5;
 
     auto particles = blitz::Array<float, 2>(n, k, storage);
     auto cellToRangeMap = blitz::Array<int, 2>(max_cells, 2);
