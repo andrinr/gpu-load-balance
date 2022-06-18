@@ -22,8 +22,8 @@ int master(MDL vmdl,void *vpst) {
     int n = 1 << 10;
     int d = 1 << 4;
 
-    float lower[3] = {-0.5, -30, -0.5};
-    float upper[3] = {0.5, 30, 0.5};
+    float lower[3] = {-0.5, -0.5, -0.5};
+    float upper[3] = {0.5, 0.5, 0.5};
 
     // root cell is at index 1
     blitz::Array<Cell, 1> cellHeap(d);
@@ -36,9 +36,11 @@ int master(MDL vmdl,void *vpst) {
     root.log();
     cellHeap(0) = root;
 
-    ServiceInit::input iNParticles[1];
-    ServiceInit::output oNParticles[1];
-    mdl->RunService(PST_INIT, sizeof (int), iNParticles, oNParticles);
+    ServiceInit::input iInit {
+        n
+    };
+    ServiceInit::output oInit[1];
+    mdl->RunService(PST_INIT, sizeof (ServiceInit::input), &iInit, oInit);
 
     for (int l = 1; l < root.getNLevels(); ++l) {
 
@@ -52,13 +54,16 @@ int master(MDL vmdl,void *vpst) {
         blitz::Array<Cell, 1> cells = cellHeap(blitz::Range(a, b));
 
         ServiceCount::input *iCells = cells.data();
-        ServiceCount::output oCount[nCells];
 
+        ServiceReshuffle::output oCutIndices[nCells];
+        mdl->RunService(PST_RESHUFFLE, nCells * sizeof(ServiceReshuffle::input), iCells, oCutIndices);
+        
+        ServiceCount::output oCount[nCells];
         mdl->RunService(PST_COUNT, nCells * sizeof(ServiceCount::input), iCells, oCount);
 
-        ServiceCopyToDevice::input iNParticles[1];
-        ServiceCopyToDevice::output oCopy[1];
-        mdl->RunService(PST_COPYTODEVICE, sizeof (int), iCells, oCopy);
+        //ServiceCopyToDevice::input iNParticles[1];
+        //ServiceCopyToDevice::output oCopy[1];
+        //mdl->RunService(PST_COPYTODEVICE, sizeof (int), iCells, oCopy);
 
         // Loop
         bool foundAll = false;
@@ -71,8 +76,8 @@ int master(MDL vmdl,void *vpst) {
 
             //ServiceCountLeft::input *iCountLeft = cells(blitz::Range(a, b)).data();
             ServiceCountLeft::output oCountLeft[nCells];
-            //mdl->RunService(PST_COUNTLEFT, nCells * sizeof(ServiceCountLeft::input), iCells, oCountLeft);
-            mdl->RunService(PST_COUNTLEFTGPU, nCells * sizeof(ServiceCountLeft::input), iCells, oCountLeft);
+            mdl->RunService(PST_COUNTLEFT, nCells * sizeof(ServiceCountLeft::input), iCells, oCountLeft);
+            //mdl->RunService(PST_COUNTLEFTGPU, nCells * sizeof(ServiceCountLeft::input), iCells, oCountLeft);
 
             for (int i = 0; i < nCells; ++i) {
                 if (cells(i).foundCut) continue;
@@ -116,9 +121,6 @@ int master(MDL vmdl,void *vpst) {
             cellRight.log();
         }
 
-        ServiceReshuffle::output oCutIndices[nCells];
-        mdl->RunService(PST_RESHUFFLE, nCells * sizeof(ServiceReshuffle::input), iCells, oCutIndices);
-
     }
     return 0;
 }
@@ -134,8 +136,8 @@ void *worker_init(MDL vmdl) {
     mdl->AddService(std::make_unique<ServiceCountLeft>(pst));
     mdl->AddService(std::make_unique<ServiceInit>(pst));
     mdl->AddService(std::make_unique<ServiceCount>(pst));
-    mdl->AddService(std::make_unique<ServiceCopyToDevice>(pst));
-    mdl->AddService(std::make_unique<ServiceCountLeftGPU>(pst));
+    //mdl->AddService(std::make_unique<ServiceCopyToDevice>(pst));
+    //mdl->AddService(std::make_unique<ServiceCountLeftGPU>(pst));
     mdl->AddService(std::make_unique<ServiceReshuffle>(pst));
 
     return pst;

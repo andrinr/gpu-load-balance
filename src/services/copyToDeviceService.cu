@@ -17,7 +17,7 @@ int ServiceCopyToDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     assert(nOut / sizeof(output) >= nCells);
     //printf("ServiceCopyToDevice invoked on thread %d\n",pst->idSelf);
 
-    const int nThreads = 256;
+    const int nThreads = 512;
     // Can increase speed by another factor of around two
     const int elementsPerThread = 16;
 
@@ -31,7 +31,7 @@ int ServiceCopyToDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     int * d_counts;
     pst->lcl->d_counts(cellPtrOffset) = d_counts;
 
-    blitz::Array<float,1> particles = pst->lcl->particles(blitz::Range(beginInd, endInd), cell.cutAxis);
+    blitz::Array<float,1> particles = pst->lcl->particles(blitz::Range(beginInd, endInd), 0);
 
     cudaMalloc(&d_particles, sizeof (float) * nParticles);
     cudaMalloc(&lcl->d_counts(cellPtrOffset), sizeof (int) * nBlocks);

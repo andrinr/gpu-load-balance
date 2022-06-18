@@ -6,22 +6,14 @@
 class LocalData {
 public:
     blitz::Array<float, 2> particles;
+    blitz::Array<int, 1> cell;
+    blitz::Array<int, 1> axis;
     blitz::Array<int, 2> cellToRangeMap;
     blitz::Array<cudaStream_t, 1> streams;
     float * d_particles;
     blitz::Array<int *, 1> d_counts;
-
-    LocalData(blitz::Array<float, 2> particles,
-            blitz::Array<int, 2> cellToRangeMap,
-            blitz::Array<cudaStream_t, 1> streams,
-            blitz::Array<float *, 1> d_particles,
-            blitz::Array<int *, 1> d_counts) :
-            particles(particles),
-            cellToRangeMap(cellToRangeMap),
-            streams(streams),
-            d_particles(d_particles),
-            d_counts(d_counts){
-    }
+    int nThreads;
+    int nBlocks;
 
     LocalData() = default;
 };

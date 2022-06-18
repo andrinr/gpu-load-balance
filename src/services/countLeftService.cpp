@@ -20,16 +20,17 @@ int ServiceCountLeft::Service(PST pst, void *vin, int nIn, void *vout, int nOut)
         }
         int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
         int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
-        //printf("cell id %u, count from %u, to %u \n", cell.id, beginInd, endInd);
+
+        // Always count particles at axis 0 since we swap particles
+        // s.t. the cutAxis is always at storage axis 0
         blitz::Array<float,1> particles =
-                pst->lcl->particles(blitz::Range(beginInd, endInd), cell.cutAxis);
+                pst->lcl->particles(blitz::Range(beginInd, endInd), 0);
 
         float * startPtr = particles.data();
         float * endPtr = startPtr + (endInd - beginInd);
 
         int nLeft = 0;
-        float cut = (cell.cutMarginRight + cell.cutMarginLeft) / 2.0;
-
+        float cut = cell.getCut();
         for(auto p= startPtr; p<endPtr; ++p)
         {
             nLeft += *p < cut;

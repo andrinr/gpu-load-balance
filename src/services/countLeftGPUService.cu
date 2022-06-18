@@ -66,8 +66,7 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     printf("ServiceCountLeft initialized on thread %d\n",pst->idSelf);
 
     // https://developer.nvidia.com/blog/how-overlap-data-transfers-cuda-cc/
-    for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset){
-
+    for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
         cudaStreamSynchronize(lcl->streams(pst->idSelf));
 
         auto cell = static_cast<Cell>(*(in + cellPtrOffset));
@@ -93,7 +92,7 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
                 nThreads * sizeof (int),
                 lcl->streams(pst->idSelf)
                 >>>
-                (lcl->d_particles(cellPtrOffset),
+                (lcl->d_particles + beginInd,
                  lcl->d_counts(cellPtrOffset),
                 cut,
                 endInd - beginInd);

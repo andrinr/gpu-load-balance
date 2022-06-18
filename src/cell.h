@@ -78,6 +78,7 @@ struct Cell {
                 lower,
                 upper);
         leftChild.upper[cutAxis] = cut;
+        leftChild.prevCutAxis = cutAxis;
 
         Cell rightChild(
                 getRightChildId(),
@@ -85,6 +86,7 @@ struct Cell {
                 lower,
                 upper);
         rightChild.lower[cutAxis] = cut;
+        rightChild.prevCutAxis = cutAxis;
 
         return std::make_tuple(leftChild, rightChild);
     }
@@ -109,7 +111,7 @@ struct Cell {
         }
 
         // keep track of history
-        prevCutAxis = cutAxis;
+        //prevCutAxis = cutAxis;
         cutAxis = int(maxD);
     }
 
@@ -122,7 +124,7 @@ struct Cell {
         printf("Cell ID: %u \n", id);
         printf("lower: %f, %f, %f \n", lower[0], lower[1], lower[2]);
         printf("upper: %f, %f, %f \n", upper[0], upper[1], upper[2]);
-        printf("NLeafCells: %u, axis: %i , found: %u\n", nLeafCells, cutAxis, foundCut);
+        printf("NLeafCells: %u, axis: %i pAxis %i, found: %u\n", nLeafCells, cutAxis, prevCutAxis, foundCut);
         printf("Margin left %f, right: %f \n", cutMarginLeft, cutMarginRight);
     }
 };
