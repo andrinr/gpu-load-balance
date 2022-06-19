@@ -78,9 +78,10 @@ int ServiceReshuffle::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
             std::memcpy(a.data(), b.data(), sizeof (float ) *  a.rows());
             std::memcpy(b.data(), tmp.data(), sizeof (float ) *  a.rows());
 
-            printf("cell %u, swap 0 and %u \n", cell.id, cell.prevCutAxis);
+            //printf("cell %u, swap 0 and %u \n", cell.id, cell.prevCutAxis);
         }
 
+        // Rearange axis layout
         if (cell.cutAxis > 0) {
             blitz::Array<float, 1> a =
                     lcl->particles(blitz::Range(beginInd, endInd), cell.cutAxis);
@@ -93,7 +94,7 @@ int ServiceReshuffle::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
             std::memcpy(a.data(), b.data(), sizeof (float ) *  a.rows());
             std::memcpy(b.data(), tmp.data(), sizeof (float ) *  a.rows());
 
-            printf("cell %u, swap %u and 0 \n", cell.id, cell.cutAxis);
+            //printf("cell %u, swap %u and 0 \n", cell.id, cell.cutAxis);
         }
     }
 

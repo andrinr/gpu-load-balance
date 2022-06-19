@@ -9,7 +9,7 @@ public:
     blitz::Array<int, 1> cell;
     blitz::Array<int, 1> axis;
     blitz::Array<int, 2> cellToRangeMap;
-    blitz::Array<cudaStream_t, 1> streams;
+    cudaStream_t stream;
     float * d_particles;
     blitz::Array<int *, 1> d_counts;
     int nThreads;
@@ -45,6 +45,7 @@ enum pst_service {
     PST_SRV_STOP=0, /* service 0 is always STOP and handled by MDL */
     PST_SETADD,
     PST_INIT,
+    PST_INITGPU,
     PST_COPYTODEVICE,
     PST_COUNTLEFTGPU,
     PST_COUNTLEFT,

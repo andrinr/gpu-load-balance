@@ -9,42 +9,22 @@ static_assert(std::is_void<ServiceCopyToDevice::output>() || std::is_trivial<Ser
 
 int ServiceCopyToDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     // store streams / initialize in local data
-    //
     auto lcl = pst->lcl;
-    auto in  = static_cast<input *>(vin);
-    auto out = static_cast<output *>(vout);
-    auto nCells = nIn / sizeof(input);
-    assert(nOut / sizeof(output) >= nCells);
-    //printf("ServiceCopyToDevice invoked on thread %d\n",pst->idSelf);
-
-    const int nThreads = 512;
-    // Can increase speed by another factor of around two
-    const int elementsPerThread = 16;
-
-    auto cell = static_cast<Cell>(*(in + cellPtrOffset));
 
     int nParticles = lcl->particles.rows();
-
-    const int nBlocks = ceil(nParticles / (nThreads * elementsPerThread) / 2 );
-
-    //cudaStreamSynchronize(lcl->streams(streamId));
-    int * d_counts;
-    pst->lcl->d_counts(cellPtrOffset) = d_counts;
-
-    blitz::Array<float,1> particles = pst->lcl->particles(blitz::Range(beginInd, endInd), 0);
-
-    cudaMalloc(&d_particles, sizeof (float) * nParticles);
-    cudaMalloc(&lcl->d_counts(cellPtrOffset), sizeof (int) * nBlocks);
+    float * d_particles;
+    lcl->d_particles = d_particles;
+    cudaMalloc(&lcl->d_particles, sizeof (float) * nParticles);
+    // We only need the first nParticles, since axis 0 is axis where cuts need to be found
     cudaMemcpyAsync(
-            d_particles,
-            particles.data(),
-            endInd - beginInd,
+            lcl->d_particles,
+            lcl->particles.data(),
+            sizeof (float) * nParticles,
             cudaMemcpyHostToDevice,
-            pst->lcl->streams(streamId)
+            pst->lcl->stream
     );
 
-
-    return nCells * sizeof(output);
+    return sizeof(output);
 }
 
 int ServiceCopyToDevice::Combine(void *vout,void *vout2,int nIn,int nOut1,int nOut2) {
