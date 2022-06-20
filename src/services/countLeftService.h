@@ -5,7 +5,7 @@ class ServiceCountLeft : public TraverseCombinePST {
 public:
     static constexpr int max_cells = 8192;
     typedef struct Cell input; // Array of Cells
-    typedef uint64_t output;   // Array of counts
+    typedef uint output;   // Array of counts
     explicit ServiceCountLeft(PST pst)
         : TraverseCombinePST(pst,PST_COUNTLEFT,max_cells*sizeof(input),max_cells*sizeof(output),"CountLeft") {}
 protected:

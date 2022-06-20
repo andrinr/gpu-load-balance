@@ -1,4 +1,4 @@
-#include "copyToDeviceService.h"
+#include "buildTreeGPU.h"
 #include <blitz/array.h>
 #include <vector>
 
@@ -7,11 +7,18 @@
 static_assert(std::is_void<ServiceCopyToDevice::input>()  || std::is_trivial<ServiceCopyToDevice::input>());
 static_assert(std::is_void<ServiceCopyToDevice::output>() || std::is_trivial<ServiceCopyToDevice::output>());
 
-int ServiceCopyToDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
+__global__ void build() {
+    extern __shared__ sTree[];
+
+}
+
+int ServiceBuildTreeGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     // store streams / initialize in local data
     auto lcl = pst->lcl;
 
     int nParticles = lcl->particles.rows();
+    float * d_particles;
+    lcl->d_particles = d_particles;
     cudaMalloc(&lcl->d_particles, sizeof (float) * nParticles);
     // We only need the first nParticles, since axis 0 is axis where cuts need to be found
     cudaMemcpyAsync(
@@ -25,7 +32,7 @@ int ServiceCopyToDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     return sizeof(output);
 }
 
-int ServiceCopyToDevice::Combine(void *vout,void *vout2,int nIn,int nOut1,int nOut2) {
+int ServiceBuildTreeGPU::Combine(void *vout,void *vout2,int nIn,int nOut1,int nOut2) {
 
     return 0;
 }

@@ -20,7 +20,7 @@ __global__ void reduce(float *g_idata, int *g_odata, float cut, int n) {
     unsigned int gridSize = blockSize*2*gridDim.x;
     sdata[tid] = 0;
     while (i < n) {
-        sdata[tid] += g_idata[i] + g_idata[i+blockSize];
+        sdata[tid] += (g_idata[i] < cut) + (g_idata[i+blockSize] < cut);
         i += gridSize;
     }
     __syncthreads();
@@ -54,8 +54,8 @@ int main(int argc, char** argv) {
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
 
-    int n = 1 << 27;
-    int nd = 3;
+    int n = 1 << 13;
+    //int nd = 3;
 
     float * pos = (float*)calloc(n, sizeof(float));
     for (int i = 0; i < n; i++) {
@@ -63,15 +63,17 @@ int main(int argc, char** argv) {
     }
 
     int testSum = 0;
-    for (int i = 0; i < 10000; i++) {
+    for (int i = 0; i < n; i++) {
         testSum += pos[i] < 0.5;
     }
     std::cout << testSum << "\n";
 
-    const int nThreads = 256;
+    const int nThreads = 512;
     // Can increase speed by another factor of around two
-    int elementsPerThread = 16;
-    int nBlocks = ceil(n / nThreads / 2 / elementsPerThread);
+    int elementsPerThread = 2;
+    int nBlocks = (int) ceil((float) n / (nThreads * 2.0 * elementsPerThread));
+    printf("nThreads %i, nBlocks %i, n %i \n", nThreads, nBlocks, n);
+
 
     float * d_particles;
     int * d_sums;
@@ -81,9 +83,6 @@ int main(int argc, char** argv) {
 
     cudaMalloc(&d_sums, sizeof (int) * n);
 
-    // Number of threads per block is limited
-
-    // Need for cut service becomes clear here!
     float cut = 0.5;
 
     cudaEventRecord(start);
@@ -101,10 +100,11 @@ int main(int argc, char** argv) {
     int sum = 0;
 
     for (int i = 0; i < nBlocks; ++i) {
+        printf("sum %i \n", sum);
         sum += h_sums[i];
     }
 
-    std::cout << sum << " " << n << "\n";
+    std::cout << "is " << sum << " should be " << n / 2 << " \n";
 
     cudaFree(d_particles);
     cudaFree(d_sums);

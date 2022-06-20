@@ -20,7 +20,7 @@ int master(MDL vmdl,void *vpst) {
     ServiceSetAdd::input inAdd(mdl->Threads());
     mdl->RunService(PST_SETADD,sizeof(inAdd),&inAdd);
 
-    int n = 1 << 19;
+    int n = 1 << 18;
     int d = 1 << 4;
 
     float lower[3] = {-0.5, -0.5, -0.5};
@@ -104,6 +104,8 @@ int master(MDL vmdl,void *vpst) {
                     foundAll = false;
                 }
             }
+
+            //free(oCountLeft);
         }
 
         // Split and store all cells on current heap level
@@ -123,6 +125,9 @@ int master(MDL vmdl,void *vpst) {
             cellLeft.log();
             cellRight.log();
         }
+
+        //free(oCount);
+        //free(oCutIndices);
 
     }
     return 0;

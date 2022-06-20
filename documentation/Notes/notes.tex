@@ -152,15 +152,15 @@ Our main objective in this work is to improve the runtime of astrophysical simul
 \subsubsection{By example} 
 For the purpose of explaining the algorithm both visually and by a numeric example, we consider the following minimal dataset:
 
-\begin{filecontents*}{particles9.csv}
-x,y,id,o1,o2
-0.4,0.3,0,0,0
-0.2,0.6,1,2,1
-0.8,0.9,2,1,2
-0.6,0.5,3,0,0
-0.3,0.8,4,1,1
-0.7,0.1,5,2,2
-0.9,0.3,6,2,2
+\begin{filecontents*}{particles10.csv}
+x,y,id,o1,o2,x2,y2
+0.4,0.3,0,0,0,0.4,0.3
+0.2,0.6,1,2,1,0.2,0.6
+0.8,0.9,2,1,2,0.9,0.8
+0.6,0.5,3,0,0,0.6,0.5
+0.3,0.8,4,1,1,0.3,0.8
+0.7,0.1,5,2,2,0.7,0.1
+0.9,0.3,6,2,2,0.9,0.3
 \end{filecontents*}
 
 \begin{figure}[H]
@@ -170,7 +170,7 @@ x,y,id,o1,o2
             tabular=ccc,
             table head=\hline \bfseries{x} & \bfseries{y} & \bfseries{id} \\\hline,
             late after last line=\\\hline % horizontal line at the end of the table
-            ]{particles6.csv}{}{\csvcoli & \csvcolii & \csvcoliii}
+            ]{particles10.csv}{}{\csvcoli & \csvcolii & \csvcoliii}
         \end{minipage}
         \begin{minipage}[c]{0.7\linewidth}
             \begin{tikzpicture}
@@ -190,7 +190,7 @@ x,y,id,o1,o2
                     y=y, 
                     meta=id, 
                     col sep=comma] 
-                {particles6.csv};
+                {particles10.csv};
                 \end{axis}
 
             \end{tikzpicture}
@@ -291,7 +291,7 @@ The most straight forward way to avoid high ratios between the length and height
                     y=y, 
                     meta=id, 
                     col sep=comma] 
-                {particles6.csv};
+                {particles10.csv};
                 \draw [fill=red!20](0.0,0.0) rectangle (1, 1);
                 \node[below] at (0.5, 1){$cell_1$};
                 \end{axis}
@@ -329,7 +329,7 @@ The most straight forward way to avoid high ratios between the length and height
                     y=y, 
                     meta=id, 
                     col sep=comma] 
-                {particles6.csv};
+                {particles10.csv};
                 \draw [fill=green!20](0.0,0.0) rectangle (0.65, 1);
                 \draw [fill=blue!20](0.65,0.0) rectangle (1, 1);
                 \node[below] at (0.2, 1){$cell_2$};
@@ -372,7 +372,7 @@ The most straight forward way to avoid high ratios between the length and height
                     y=y, 
                     meta=id, 
                     col sep=comma] 
-                {particles6.csv};
+                {particles10.csv};
                 \draw [fill=pink!20](0.0,0.0) rectangle (0.65, 0.55);
                 \draw [fill=yellow!20](0.0,0.55) rectangle (0.65, 1);
                 \draw [fill=blue!20](0.65,0.0) rectangle (1, 1);
@@ -397,7 +397,7 @@ The most straight forward way to avoid high ratios between the length and height
 \end{figure}
 
 
-Since $d_{cellLeft} - d_{cellRight}$ must always be $\leq 1$, it must hold that the tree is a balanced binary tree. Therefore we can conclude that the height of the tree is equal to $\lceil log(d) \rceil$ and the total number of nodes (not only leaf nodes) is $log(d) \times d$. Since we have a balanced binary tree, we also have the possibility of storing it in a heap data-structure, which can in turn greatly increase the performance, since we will not have to perform a tree walk to access individual cells in the tree.
+Since $d_{cellLeft} - d_{cellRight}$ must always be $\leq 1$, it must hold that the tree is a nearly complete binary tree. Therefore we can conclude that the height of the tree is equal to $\lceil log(d) \rceil$ and the total number of nodes (not only leaf nodes) is $log(d) \times d$. Since we have a nearly complete binary tree, we also have the possibility of storing it in a heap data-structure, which can in turn greatly increase the performance, since we will not have to perform a tree walk to access individual cells in the tree.
 
 \begin{algorithm}[H]
 	\caption{The ORB main routine}\label{euclid}
@@ -603,7 +603,7 @@ Initially we assume that each processor has a subset of all the particles stored
 			y=y, 
 			meta=id, 
 			col sep=comma] 
-			{particles8.csv};
+			{particles10.csv};
 			
 			\addplot    +[
 			only marks,
@@ -614,7 +614,7 @@ Initially we assume that each processor has a subset of all the particles stored
 			y=y, 
 			meta=id, 
 			col sep=comma] 
-			{particles8.csv};
+			{particles10.csv};
 			
 			\addplot    +[
 			only marks,
@@ -625,7 +625,7 @@ Initially we assume that each processor has a subset of all the particles stored
 			y=y, 
 			meta=id, 
 			col sep=comma] 
-			{particles8.csv};
+			{particles10.csv};
 			
 			\legend{$p0$,$p1$,$p3$}
 			
@@ -681,7 +681,8 @@ When performing a local reshuffle, each processor sorts its particles according 
 
 \subsubsection{Global Reshuffling}
 
-In the case of global reshuffling, we reshuffle the particle in such a way, that we can designate a new operator for the second half of the particles, each time we perform a split. When looking at the numeric example this might look as follows:
+In the case of global reshuffling, we reshuffle the particle in such a way, that we can decouple the left and right child's computations completely from each other. In order to achieve this, the particles need to be redistributed among threads, s.t. each thread contains only particles contained in a single cell. Which in turn means it only need to consider particles in a designated volume. Finally this allows us to run the thread completely independent from others and remove the overhead introduced by synchronization operations.
+When looking at the numeric example this might look as follows:
 
 
 \begin{figure}[ht]
@@ -708,7 +709,7 @@ In the case of global reshuffling, we reshuffle the particle in such a way, that
 			y=y, 
 			meta=id, 
 			col sep=comma] 
-			{particles8.csv};
+			{particles10.csv};
 			
 			\addplot    +[
 			only marks,
@@ -719,7 +720,7 @@ In the case of global reshuffling, we reshuffle the particle in such a way, that
 			y=y, 
 			meta=id, 
 			col sep=comma] 
-			{particles8.csv};
+			{particles10.csv};
 			
 			\addplot    +[
 			only marks,
@@ -730,7 +731,7 @@ In the case of global reshuffling, we reshuffle the particle in such a way, that
 			y=y, 
 			meta=id, 
 			col sep=comma] 
-			{particles8.csv};
+			{particles10.csv};
 			
 			\legend{$p0$,$p1$,$p2$}
 			
@@ -766,7 +767,7 @@ In the case of global reshuffling, we reshuffle the particle in such a way, that
 			y=y, 
 			meta=id, 
 			col sep=comma] 
-			{particles9.csv};
+			{particles10.csv};
 			
 			\addplot    +[
 			only marks,
@@ -777,7 +778,7 @@ In the case of global reshuffling, we reshuffle the particle in such a way, that
 			y=y, 
 			meta=id, 
 			col sep=comma] 
-			{particles9.csv};
+			{particles10.csv};
 			
 			\addplot    +[
 			only marks,
@@ -788,7 +789,7 @@ In the case of global reshuffling, we reshuffle the particle in such a way, that
 			y=y, 
 			meta=id, 
 			col sep=comma] 
-			{particles9.csv};
+			{particles10.csv};
 			
 			\legend{$p0$,$p1$,$p2$}
 			
@@ -831,6 +832,24 @@ As soon as we have finished the first iteration of the  two domains, rank 0 can 
 	\caption{Parallelized ORB for np = 4 and global reshuffling}
 	\label{fig:orb_parallel}
 \end{figure}
+
+
+\subsection{Optimized Memory Layout}
+
+Describe how we swap sections of the particle array in order to reduce 
+\csvreader[
+tabular=ccc,
+table head=\hline \bfseries{x} & \bfseries{y} & \bfseries{id} \\\hline,
+late after last line=\\\hline % horizontal line at the end of the table
+]{particles10.csv}{}{\csvcoli & \csvcolii & \csvcoliii}
+
+\vspace{5mm}
+
+\csvreader[
+tabular=ccc,
+table head=\hline \bfseries{x} & \bfseries{y} & \bfseries{id} \\\hline,
+late after last line=\\\hline % horizontal line at the end of the table
+]{particles10.csv}{}{\csvcoli & \csvcolvi & \csvcolvii}
 
 \vspace{5mm}
 
@@ -1023,7 +1042,7 @@ processor. We perform the conditional reduction on  $2^{27}$. The reduction take
 	\label{fig:modelcpu}
 \end{figure}
 
-Finish this argumentation and explain why we only consider memory access times as they far outweight tflops. 
+Finish this argumentation and explain why we only consider memory access times as they far outweigh tflops. 
 
 \subsection{General Memory Model}
 
@@ -1473,7 +1492,7 @@ Blitz++ allows us to easily access the C-style array with the command $array.dat
 
 \subsection{Cell}
 
-As our tree consists of multiple cells, which are to be stored in a tree data-structure. As seen in section \ref{section:orb-example} the conditions for a balanced tree hold, allowing us to use a heap to store the tree. This \TODO{hint} reduces the runtime of the tree, and since we need to store the cells in an array for communication purposes anyways (\TODO{Why exactly?}), this makes a lot of sense.
+As our tree consists of multiple cells, which are to be stored in a tree data-structure. As seen in section \ref{section:orb-example} the conditions for a nearly complete binary tree hold, allowing us to use a heap to store the tree. This \TODO{hint} reduces the runtime of the tree, and since we need to store the cells in an array for communication purposes anyways (\TODO{Why exactly?}), this makes a lot of sense.
 
 \TODO{Either copy cell into buffer. You have to linearize. Add arguments with leaf cells.}
 
@@ -1566,7 +1585,7 @@ In this section we describe the services which were implemented using CUDA. In t
 
 \subsubsection{CUDA Reductions}
 
-Reductions in CUDA are a common theme and we were able to reuse highly optimized kernels, proposed in a CUDA webinar as the basis for the counting algorithms, which is part of the binary cut algorithm. The only thing which needs to change, is that we don`t simply sum up the values in an array, but we count the number of elements which are smaller than the proposed cut value. Other than that we can essentially copy the mentioned reduction code.
+Reductions in CUDA are a common explored application of kernels and we were able to reuse highly optimized kernels, proposed in a CUDA webinar as the basis for the counting algorithms, which is part of the binary cut algorithm. The only thing which needs to change, is that we don`t simply sum up the values in an array, but we count the number of elements which are smaller than the proposed cut value. Other than that we can essentially copy the mentioned reduction code.
 
 \subsubsection{Send to device}
 
@@ -1574,7 +1593,8 @@ In order to prepare the data and send it to a device...
 
 \subsubsection{CUDA streams}
 
-Describe our analysis weather it makes sense to use streams and why.
+We will leverage CUDA streams to send data from the host to the device in parallel. With streams the CUDA Kernel engine can already start processing data, when the first batch, in this case the particles owned by processor number 0 are transferred to the GPU. 
+
 
 \newpage
 \section{Empirical Analysis of ORB}
