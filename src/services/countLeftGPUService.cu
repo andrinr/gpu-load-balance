@@ -26,7 +26,11 @@ __global__ void reduce(float *g_idata, uint *g_odata, float cut, int n) {
     unsigned int gridSize = blockSize*2*gridDim.x;
     sdata[tid] = 0;
     while (i < n) {
-        sdata[tid] += (g_idata[i] < cut) + (g_idata[i+blockSize] < cut);
+        sdata[tid] += (g_idata[i] < cut);
+
+        if (i + blockSize < n) {
+            sdata[tid] += (g_idata[i+blockSize] < cut);
+        }
         i += gridSize;
     }
     __syncthreads();
@@ -72,44 +76,72 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
         int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
         int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
         int n = endInd - beginInd;
-        const int nThreads = 256;
-        // Can increase speed by another factor of around two
-        const int elementsPerThread = 16;
-        const int nBlocks = (int) ceil((float) n / (nThreads * 2.0 * elementsPerThread));
-
-        uint * h_counts = (uint*)calloc(nBlocks, sizeof(int));
-        uint * d_counts;
-        cudaMalloc(&d_counts, sizeof (uint) * nBlocks);
-
         float cut = cell.getCut();
-        reduce<nThreads>
-                <<<
-                nBlocks,
-                nThreads,
-                nThreads * sizeof (int),
-                lcl->stream
-                >>>
-                (lcl->d_particles + beginInd,
-                 d_counts,
-                cut,
-                n);
-
-        cudaMemcpyAsync(
-                h_counts,
-                d_counts,
-                sizeof (int ) * nBlocks,
-                cudaMemcpyDeviceToHost,
-                lcl->stream);
-
-        cudaStreamSynchronize(lcl->stream);
 
         out[cellPtrOffset] = 0;
-        for (int i = 0; i < nBlocks; ++i) {
-            out[cellPtrOffset] += h_counts[i];
+
+        if (n > 2048) {
+            const int nThreads = 256;
+            // Can increase speed by another factor of around two
+            const int elementsPerThread = 16;
+            const int nBlocks = (int) ceil((float) n / (nThreads * 2.0 * elementsPerThread));
+
+            uint * h_counts = (uint*)calloc(nBlocks, sizeof(int));
+            uint * d_counts;
+            cudaMalloc(&d_counts, sizeof (uint) * nBlocks);
+
+
+            printf("n %i, of %i, nBlocks %i, nThreads %i, begin %i, end %i, cell %i \n" ,
+                   n,
+                   lcl->particles.rows(),
+                   nBlocks,
+                   nThreads,
+                   beginInd,
+                   endInd,
+                   cell.id);
+            reduce<nThreads>
+            <<<
+            nBlocks,
+            nThreads,
+            nThreads * sizeof (uint),
+            lcl->stream
+            >>>
+                    (lcl->d_particles + beginInd,
+                     d_counts,
+                     cut,
+                     n - 5);
+
+            cudaMemcpyAsync(
+                    h_counts,
+                    d_counts,
+                    sizeof (uint) * nBlocks,
+                    cudaMemcpyDeviceToHost,
+                    lcl->stream);
+
+            cudaStreamSynchronize(lcl->stream);
+
+            for (int i = 0; i < nBlocks; ++i) {
+                out[cellPtrOffset] += h_counts[i];
+            }
+
+            // todo: Why no work?
+            //cudaFree(&d_counts);
+            free(h_counts);
         }
 
-        // todo: Why no work?
-        cudaFree(&d_counts);
+        else {
+            blitz::Array<float,1> particles =
+                    pst->lcl->particles(blitz::Range(beginInd, endInd), 0);
+
+            float * startPtr = particles.data();
+            float * endPtr = startPtr + (endInd - beginInd);
+
+            for(auto p= startPtr; p<endPtr; ++p)
+            {
+                out[cellPtrOffset] += *p < cut;
+            }
+        }
+
     }
 
     // Wait till all streams have finished

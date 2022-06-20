@@ -72,6 +72,7 @@ add_executable(
         src/services/copyToDeviceService.cu
         src/services/countLeftGPUService.cu
         src/services/reshuffleService.cpp
+        src/services/freeDeviceService.cu
         #src/services/countLeftGPUService.cpp
 )
 

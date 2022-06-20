@@ -29,7 +29,7 @@ int ServiceReshuffle::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
         int endInd = pst->lcl->cellToRangeMap(cell.id, 1);
 
         int i = beginInd-1, j = endInd;
-        float cut =  (cell.cutMarginLeft + cell.cutMarginRight) / 2.0;
+        float cut = cel.getCut();
 
         while(true)
         {
@@ -52,6 +52,7 @@ int ServiceReshuffle::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
 
         swap(lcl->particles, i, endInd -1);
 
+        printf("shuffle index %i %i %i cell %i \n", lcl->cellToRangeMap(cell.id, 0), i, lcl->cellToRangeMap(cell.id, 1), cell.id);
         // todo: check if true ,might be +- 1
         lcl->cellToRangeMap(cell.getLeftChildId(), 0) =
                 lcl->cellToRangeMap(cell.id, 0);

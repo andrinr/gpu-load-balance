@@ -50,6 +50,10 @@ struct Cell {
         return (id + 1) * 2;
     }
 
+    int getParentId() const {
+        return floor((id + 1) / 2.0 ) - 1;
+    }
+
     int getTotalNumberOfCells() const {
         return 2 * nLeafCells - 1;
     }
@@ -122,6 +126,7 @@ struct Cell {
 
     void log() const {
         printf("Cell ID: %u \n", id);
+        printf("Lc %u, rc %u, p %u \n", getLeftChildId(), getRightChildId(), getParentId());
         printf("lower: %f, %f, %f \n", lower[0], lower[1], lower[2]);
         printf("upper: %f, %f, %f \n", upper[0], upper[1], upper[2]);
         printf("NLeafCells: %u, axis: %i pAxis %i, found: %u\n", nLeafCells, cutAxis, prevCutAxis, foundCut);
