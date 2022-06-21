@@ -19,7 +19,6 @@ int ServiceReshuffle::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
 
     auto lcl = pst->lcl;
     auto in  = static_cast<input *>(vin);
-    auto out = static_cast<output *>(vout);
     auto nCells = nIn / sizeof(input);
 
     // todo: either make x-y-z swaps directly in loop or do it after and perform memcpy
@@ -63,11 +62,9 @@ int ServiceReshuffle::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
         lcl->cellToRangeMap(cell.getRightChildId(), 1) =
                 lcl->cellToRangeMap(cell.id, 1);
 
-        out[cellPtrOffset] = i;
-
     }
 
-    return sizeof (output);
+    return 0;
 }
 
 int ServiceReshuffle::Combine(void *vout,void *vout2,int nIn,int nOut1,int nOut2) {

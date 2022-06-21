@@ -24,7 +24,6 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     auto particles = blitz::Array<float, 2>(in.nParticles, k, storage);
     auto cellToRangeMap = blitz::Array<int, 2>(max_cells, 2);
     float * d_particles;
-    auto d_counts = blitz::Array<int *, 1>(max_cells);
 
     srand(pst->idSelf);
     int c = 0;
@@ -43,8 +42,6 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     lcl->particles.reference(particles);
     lcl->d_particles = d_particles;
     lcl->cellToRangeMap.reference(cellToRangeMap);
-    lcl->d_counts.reference(d_counts);
-
 
     //pst->lcl = new LocalData(particles, cellToRangeMap, streams, d_particles, d_counts);
 

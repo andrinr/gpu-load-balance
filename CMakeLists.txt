@@ -47,8 +47,9 @@ add_subdirectory(blitz)
 add_subdirectory(mdl2)
 
 set(CMAKE_C_FLAGS -fopenmp)
+#set(CMAKE_C_FLAGS -DBZ_DEBUG)
 #add_executable(
-#        glb
+#     CMAKE_C_FLAGS   glb
 #        src/glb.cpp
 #        src/orb.cpp
 #        src/comm/MPIMessaging.cpp

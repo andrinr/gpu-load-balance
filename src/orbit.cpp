@@ -23,13 +23,10 @@ int master(MDL vmdl,void *vpst) {
     mdl->RunService(PST_SETADD,sizeof(inAdd),&inAdd);
 
     int n = 1 << 20;
-    int d = 1 << 8;
+    int d = 1 << 10;
 
     float lower[3] = {-0.5, -0.5, -0.5};
     float upper[3] = {0.5, 0.5, 0.5};
-
-    // root cell is at index 1
-    blitz::Array<Cell, 1> cellHeap(d);
 
     // user code
     Cell root(0, d, lower, upper);
@@ -37,6 +34,10 @@ int master(MDL vmdl,void *vpst) {
     root.setCutMargin();
 
     root.log();
+
+    // root cell is at index 1
+    blitz::Array<Cell, 1> cellHeap(root.getTotalNumberOfCells());
+
     cellHeap(0) = root;
 
     ServiceInit::input iInit {n};
@@ -52,12 +53,12 @@ int master(MDL vmdl,void *vpst) {
         int a = std::pow(2, (l - 1)) - 1;
         int b = std::min(
                root.getNCellsOnLastLevel(),
-                (int) std::pow(2, l)) - 1;
+                (int) std::pow(2, l)) - 2;
 
-        int nCells = b - a;
-        //printf("\n from %u to %u \n \n", a, b);
+        int nCells = b - a + 1;
+        printf("\n from %u to %u total %u \n \n", a, b, cellHeap.rows());
         blitz::Array<Cell, 1> cells = cellHeap(blitz::Range(a, b));
-
+        printf("\n cell rows %i \n", cells.rows());
         ServiceCount::input *iCells = cells.data();
 
         ServiceReshuffle::output oSwaps[1];
@@ -79,7 +80,6 @@ int master(MDL vmdl,void *vpst) {
             int *sumLeft;
             foundAll = true;
 
-            //ServiceCountLeft::input *iCountLeft = cells(blitz::Range(a, b)).data();
             ServiceCountLeft::output oCountLeft[nCells];
             //mdl->RunService(PST_COUNTLEFT, nCells * sizeof(ServiceCountLeft::input), iCells, oCountLeft);
             mdl->RunService(PST_COUNTLEFTGPU, nCells * sizeof(ServiceCountLeft::input), iCells, oCountLeft);
@@ -135,9 +135,10 @@ int master(MDL vmdl,void *vpst) {
         //ServiceFreeDevice::input iFree[1];
         //ServiceFreeDevice::output oFree[1];
         //mdl->RunService(PST_FREE, sizeof (int), iFree, oFree);
-
-
     }
+
+
+
     return 0;
 }
 
