@@ -90,15 +90,16 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
             uint * d_counts;
             cudaMalloc(&d_counts, sizeof (uint) * nBlocks);
 
+            //printf("cl c %f %i \n", cut, cell.id);
 
-            printf("n %i, of %i, nBlocks %i, nThreads %i, begin %i, end %i, cell %i \n" ,
+            /*printf("n %i, of %i, nBlocks %i, nThreads %i, begin %i, end %i, cell %i \n" ,
                    n,
                    lcl->particles.rows(),
                    nBlocks,
                    nThreads,
                    beginInd,
                    endInd,
-                   cell.id);
+                   cell.id);*/
             reduce<nThreads>
             <<<
             nBlocks,

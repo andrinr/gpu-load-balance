@@ -125,12 +125,12 @@ struct Cell {
     }
 
     void log() const {
-        printf("Cell ID: %u \n", id);
+        printf("\n Cell ID: %u \n", id);
         printf("Lc %u, rc %u, p %u \n", getLeftChildId(), getRightChildId(), getParentId());
         printf("lower: %f, %f, %f \n", lower[0], lower[1], lower[2]);
         printf("upper: %f, %f, %f \n", upper[0], upper[1], upper[2]);
         printf("NLeafCells: %u, axis: %i pAxis %i, found: %u\n", nLeafCells, cutAxis, prevCutAxis, foundCut);
-        printf("Margin left %f, right: %f \n", cutMarginLeft, cutMarginRight);
+        printf("Margin left %f, right: %f \n \n", cutMarginLeft, cutMarginRight);
     }
 };
 

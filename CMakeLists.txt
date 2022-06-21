@@ -73,7 +73,7 @@ add_executable(
         src/services/countLeftGPUService.cu
         src/services/reshuffleService.cpp
         src/services/freeDeviceService.cu
-        #src/services/countLeftGPUService.cpp
+        src/services/axisSwapService.cpp
 )
 
 target_include_directories(orbit PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)

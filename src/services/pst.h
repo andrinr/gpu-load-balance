@@ -51,6 +51,7 @@ enum pst_service {
     PST_COUNTLEFT,
     PST_RESHUFFLE,
     PST_COUNT,
-    PST_FREE
+    PST_FREE,
+    PST_AXISSWAP
 };
 #endif

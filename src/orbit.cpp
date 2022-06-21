@@ -12,6 +12,7 @@
 #include "services/freeDeviceService.h"
 #include "services/reshuffleService.h"
 #include "services/initService.h"
+#include "services/axisSwapService.h"
 
 int master(MDL vmdl,void *vpst) {
     auto mdl = static_cast<mdl::mdlClass *>(vmdl);
@@ -21,8 +22,8 @@ int master(MDL vmdl,void *vpst) {
     ServiceSetAdd::input inAdd(mdl->Threads());
     mdl->RunService(PST_SETADD,sizeof(inAdd),&inAdd);
 
-    int n = 1 << 18;
-    int d = 1 << 6;
+    int n = 1 << 20;
+    int d = 1 << 8;
 
     float lower[3] = {-0.5, -0.5, -0.5};
     float upper[3] = {0.5, 0.5, 0.5};
@@ -32,7 +33,7 @@ int master(MDL vmdl,void *vpst) {
 
     // user code
     Cell root(0, d, lower, upper);
-    root.setCutAxis();
+    root.cutAxis = 0;
     root.setCutMargin();
 
     root.log();
@@ -58,6 +59,9 @@ int master(MDL vmdl,void *vpst) {
         blitz::Array<Cell, 1> cells = cellHeap(blitz::Range(a, b));
 
         ServiceCount::input *iCells = cells.data();
+
+        ServiceReshuffle::output oSwaps[1];
+        mdl->RunService(PST_AXISSWAP, nCells * sizeof(ServiceReshuffle::input), iCells, oSwaps);
 
         ServiceCount::output oCount[nCells];
         mdl->RunService(PST_COUNT, nCells * sizeof(ServiceCount::input), iCells, oCount);
@@ -125,7 +129,7 @@ int master(MDL vmdl,void *vpst) {
             cellRight.log();
         }
 
-        ServiceReshuffle::output oCutIndices[nCells];
+        ServiceReshuffle::output oCutIndices[1];
         mdl->RunService(PST_RESHUFFLE, nCells * sizeof(ServiceReshuffle::input), iCells, oCutIndices);
 
         //ServiceFreeDevice::input iFree[1];
@@ -153,6 +157,7 @@ void *worker_init(MDL vmdl) {
     mdl->AddService(std::make_unique<ServiceCountLeftGPU>(pst));
     mdl->AddService(std::make_unique<ServiceReshuffle>(pst));
     mdl->AddService(std::make_unique<ServiceFreeDevice>(pst));
+    mdl->AddService(std::make_unique<ServiceAxisSwap>(pst));
 
     return pst;
 }
