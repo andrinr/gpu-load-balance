@@ -14,6 +14,8 @@
 #include "services/initService.h"
 #include "services/axisSwapService.h"
 
+#include "constants.h"
+
 int master(MDL vmdl,void *vpst) {
     auto mdl = static_cast<mdl::mdlClass *>(vmdl);
     auto pst = reinterpret_cast<PST*>(vpst);
@@ -21,9 +23,6 @@ int master(MDL vmdl,void *vpst) {
     // Build the PST tree structure
     ServiceSetAdd::input inAdd(mdl->Threads());
     mdl->RunService(PST_SETADD,sizeof(inAdd),&inAdd);
-
-    int n = 1 << 20;
-    int d = 1 << 10;
 
     float lower[3] = {-0.5, -0.5, -0.5};
     float upper[3] = {0.5, 0.5, 0.5};
@@ -40,11 +39,11 @@ int master(MDL vmdl,void *vpst) {
 
     cellHeap(0) = root;
 
-    ServiceInit::input iInit {n};
+    ServiceInit::input iInit {N/mdl->Threads()};
     ServiceInit::output oInit[1];
     mdl->RunService(PST_INIT, sizeof (ServiceInit::input), &iInit, oInit);
 
-    ServiceInitGPU::input iInitGpu{mdl->Threads()};
+    ServiceInitGPU::input iInitGpu{mdl->Threads(), N/mdl->Threads()};
     ServiceInitGPU::output oInitGpu[1];
     mdl->RunService(PST_INITGPU, sizeof (ServiceInitGPU::input), &iInitGpu, oInitGpu);
 
@@ -56,9 +55,7 @@ int master(MDL vmdl,void *vpst) {
                 (int) std::pow(2, l)) - 2;
 
         int nCells = b - a + 1;
-        printf("\n from %u to %u total %u \n \n", a, b, cellHeap.rows());
         blitz::Array<Cell, 1> cells = cellHeap(blitz::Range(a, b));
-        printf("\n cell rows %i \n", cells.rows());
         ServiceCount::input *iCells = cells.data();
 
         ServiceReshuffle::output oSwaps[1];
@@ -86,14 +83,14 @@ int master(MDL vmdl,void *vpst) {
 
             for (int i = 0; i < nCells; ++i) {
                 if (cells(i).foundCut) continue;
-                printf(
+                /*printf(
                         "counted left: %u, of %u. cut %f, axis %d, level %u, cell %u \n",
                         oCountLeft[i],
                         oCount[i] / 2,
                         (cells(i).cutMarginLeft + cells(i).cutMarginRight) / 2.0,
                         cells(i).cutAxis,
                         l,
-                        cells(i).id);
+                        cells(i).id);*/
                 //CellHelpers::log(cells(i));
 
                 float ratio = ceil(cells(i).nLeafCells / 2.0) / cells(i).nLeafCells;
@@ -132,9 +129,9 @@ int master(MDL vmdl,void *vpst) {
         ServiceReshuffle::output oCutIndices[1];
         mdl->RunService(PST_RESHUFFLE, nCells * sizeof(ServiceReshuffle::input), iCells, oCutIndices);
 
-        //ServiceFreeDevice::input iFree[1];
-        //ServiceFreeDevice::output oFree[1];
-        //mdl->RunService(PST_FREE, sizeof (int), iFree, oFree);
+        ServiceFreeDevice::input iFree[1];
+        ServiceFreeDevice::output oFree[1];
+        mdl->RunService(PST_FREE, sizeof (int), iFree, oFree);
     }
 
 

@@ -5,6 +5,7 @@ class ServiceInitGPU : public TraverseCombinePST {
 public:
     struct input {
         int nThreads;
+        int nParticles;
     }; // Number of particles
     typedef int output; // Number of particles
     explicit ServiceInitGPU(PST pst)

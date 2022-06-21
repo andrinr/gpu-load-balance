@@ -7,6 +7,11 @@
 static_assert(std::is_void<ServiceCountLeftGPU::input>()  || std::is_trivial<ServiceCountLeftGPU::input>());
 static_assert(std::is_void<ServiceCountLeftGPU::output>() || std::is_trivial<ServiceCountLeftGPU::output>());
 
+inline void CUDA_Abort(cudaError_t rc, const char *fname, const char *file, int line) {
+    fprintf(stderr,"%s error %d in %s(%d)\n%s\n", fname, rc, file, line, cudaGetErrorString(rc));
+    exit(1);
+}
+
 template <unsigned int blockSize>
 __device__ void warpReduce(volatile int *sdata, unsigned int tid) {
     if (blockSize >= 64) sdata[tid] += sdata[tid + 32];
@@ -67,6 +72,7 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     assert(nOut / sizeof(output) >= nCells);
 
     // https://developer.nvidia.com/blog/how-overlap-data-transfers-cuda-cc/
+    int blockOffset = 0;
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
         auto cell = static_cast<Cell>(*(in + cellPtrOffset));
 
@@ -80,44 +86,34 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
 
         out[cellPtrOffset] = 0;
 
-        if (n > 2048) {
+        if (n > 1 << 12) {
             const int nThreads = 256;
             // Can increase speed by another factor of around two
-            const int elementsPerThread = 16;
-            const int nBlocks = (int) ceil((float) n / (nThreads * 2.0 * elementsPerThread));
+            const int nBlocks = (int) ceil((float) n / (nThreads * 2.0 * ELEMENTS_PER_THREAD));
 
             uint * h_counts = (uint*)calloc(nBlocks, sizeof(int));
-            uint * d_counts;
-            cudaMalloc(&d_counts, sizeof (uint) * nBlocks);
 
-            //printf("cl c %f %i \n", cut, cell.id);
-
-            /*printf("n %i, of %i, nBlocks %i, nThreads %i, begin %i, end %i, cell %i \n" ,
-                   n,
-                   lcl->particles.rows(),
-                   nBlocks,
-                   nThreads,
-                   beginInd,
-                   endInd,
-                   cell.id);*/
             reduce<nThreads>
             <<<
-            nBlocks,
-            nThreads,
-            nThreads * sizeof (uint),
-            lcl->stream
+                nBlocks,
+                nThreads,
+                nThreads * sizeof (uint),
+                lcl->stream
             >>>
                     (lcl->d_particles + beginInd,
-                     d_counts,
+                     lcl->d_counts + blockOffset,
                      cut,
                      n - 5);
 
-            cudaMemcpyAsync(
+            printf("off %i blocks %i \n", blockOffset, nBlocks);
+            CUDA_CHECK(cudaMemcpyAsync,(
                     h_counts,
-                    d_counts,
+                    lcl->d_counts + blockOffset,
                     sizeof (uint) * nBlocks,
                     cudaMemcpyDeviceToHost,
-                    lcl->stream);
+                    lcl->stream));
+
+            blockOffset += nBlocks;
 
             cudaStreamSynchronize(lcl->stream);
 
@@ -125,8 +121,6 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
                 out[cellPtrOffset] += h_counts[i];
             }
 
-            // todo: Why no work?
-            //cudaFree(&d_counts);
             free(h_counts);
         }
 

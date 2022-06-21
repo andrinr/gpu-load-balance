@@ -14,10 +14,9 @@ Head to [/documentation](https://github.com/andrinr/gpu-load-balance/tree/main/d
 ### Compile
 1. ``mkdir build``
 2. ``cd build``
-3. ``cmake ..``
+3. ``cmake ..`` or for debugging ``cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo --DBZ_DEBUG ..``
 4. `` cmake --build .``
-5. -DCMAKE_BUILD_TYPE=RelWithDebInfo
-6. CMAKE_BUILD_TYPE=REL_WITH
+
 
 ### Debug
 ``mpirun -np <x> gdb glb <# thousand of particles> <# domains>``

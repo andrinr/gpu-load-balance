@@ -3,7 +3,6 @@
 
 class ServiceInit : public TraverseCombinePST {
 public:
-    static constexpr int max_cells = 8192;
     struct input {
         int nParticles;
     };

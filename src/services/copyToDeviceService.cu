@@ -12,7 +12,6 @@ int ServiceCopyToDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     auto lcl = pst->lcl;
 
     int nParticles = lcl->particles.rows();
-    cudaMalloc(&lcl->d_particles, sizeof (float) * nParticles);
     // We only need the first nParticles, since axis 0 is axis where cuts need to be found
     cudaMemcpyAsync(
             lcl->d_particles,

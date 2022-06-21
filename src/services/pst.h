@@ -11,6 +11,7 @@ public:
     blitz::Array<int, 2> cellToRangeMap;
     cudaStream_t stream;
     float * d_particles;
+    uint * d_counts;
     int nThreads;
     int nBlocks;
 

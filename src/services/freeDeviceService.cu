@@ -11,7 +11,7 @@ int ServiceFreeDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     // store streams / initialize in local data
     auto lcl = pst->lcl;
 
-    cudaFree(&lcl->d_particles);
+    cudaFree(lcl->d_particles);
 
     return sizeof(output);
 }

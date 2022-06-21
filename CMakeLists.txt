@@ -75,7 +75,7 @@ add_executable(
         src/services/reshuffleService.cpp
         src/services/freeDeviceService.cu
         src/services/axisSwapService.cpp
-)
+        src/constants.h)
 
 target_include_directories(orbit PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set_target_properties(orbit PROPERTIES
