@@ -128,13 +128,11 @@ int master(MDL vmdl,void *vpst) {
 
         ServiceReshuffle::output oCutIndices[1];
         mdl->RunService(PST_RESHUFFLE, nCells * sizeof(ServiceReshuffle::input), iCells, oCutIndices);
-
-        ServiceFreeDevice::input iFree[1];
-        ServiceFreeDevice::output oFree[1];
-        mdl->RunService(PST_FREE, sizeof (int), iFree, oFree);
     }
 
-
+    ServiceFreeDevice::input iFree[1];
+    ServiceFreeDevice::output oFree[1];
+    mdl->RunService(PST_FREE, sizeof (int), iFree, oFree);
 
     return 0;
 }

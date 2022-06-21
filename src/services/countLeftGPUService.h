@@ -1,7 +1,6 @@
 #include "TraversePST.h"
 #include "cell.h"
 #include "../constants.h"
-#define CUDA_CHECK(f,a) {cudaError_t rc = (f)a; if (rc!=cudaSuccess) CUDA_Abort(rc,#f,__FILE__,__LINE__);}
 
 class ServiceCountLeftGPU : public TraverseCombinePST {
 public:
