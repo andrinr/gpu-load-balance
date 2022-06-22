@@ -36,12 +36,12 @@ int ServiceReshuffle::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
             do
             {
                 i++;
-            } while(lcl->particles(i, 0) < cut && i <= endInd);
+            } while(lcl->particles(i, cell.cutAxis) < cut && i <= endInd);
 
             do
             {
                 j--;
-            } while(lcl->particles(j, 0) > cut && j >= beginInd);
+            } while(lcl->particles(j, cell.cutAxis) > cut && j >= beginInd);
 
             if(i >= j) {
                 break;

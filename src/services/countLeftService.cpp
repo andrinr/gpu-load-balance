@@ -5,6 +5,7 @@
 static_assert(std::is_void<ServiceCountLeft::input>()  || std::is_trivial<ServiceCountLeft::input>());
 static_assert(std::is_void<ServiceCountLeft::output>() || std::is_trivial<ServiceCountLeft::output>());
 
+
 int ServiceCountLeft::Service(PST pst, void *vin, int nIn, void *vout, int nOut) {
     auto lcl = pst->lcl;
     auto in  = static_cast<input *>(vin);
@@ -21,10 +22,8 @@ int ServiceCountLeft::Service(PST pst, void *vin, int nIn, void *vout, int nOut)
         int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
         int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
 
-        // Always count particles at axis 0 since we swap particles
-        // s.t. the cutAxis is always at storage axis 0
         blitz::Array<float,1> particles =
-                pst->lcl->particles(blitz::Range(beginInd, endInd), 0);
+                pst->lcl->particlesAxis(blitz::Range(beginInd, endInd));
 
         float * startPtr = particles.data();
         float * endPtr = startPtr + (endInd - beginInd);

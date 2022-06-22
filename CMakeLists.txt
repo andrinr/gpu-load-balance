@@ -47,6 +47,12 @@ add_subdirectory(blitz)
 add_subdirectory(mdl2)
 
 set(CMAKE_C_FLAGS -fopenmp)
+
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  message(STATUS "Release build with debug info selected")
+  set(CMAKE_BUILD_TYPE RelWithDebInfo)
+endif()
+
 #set(CMAKE_C_FLAGS -DBZ_DEBUG)
 #add_executable(
 #     CMAKE_C_FLAGS   glb

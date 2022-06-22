@@ -83,24 +83,32 @@ int master(MDL vmdl,void *vpst) {
 
             for (int i = 0; i < nCells; ++i) {
                 if (cells(i).foundCut) continue;
-                /*printf(
+                printf(
                         "counted left: %u, of %u. cut %f, axis %d, level %u, cell %u \n",
                         oCountLeft[i],
                         oCount[i] / 2,
                         (cells(i).cutMarginLeft + cells(i).cutMarginRight) / 2.0,
                         cells(i).cutAxis,
                         l,
-                        cells(i).id);*/
+                        cells(i).id);
                 //CellHelpers::log(cells(i));
 
                 float ratio = ceil(cells(i).nLeafCells / 2.0) / cells(i).nLeafCells;
-                if (abs(oCountLeft[i] - oCount[i] * ratio) < 32) {
+                int difference = oCountLeft[i] - oCount[i] * ratio;
+                float diffPct = (float) difference / oCountLeft[i];
+                printf("diff %f %, diff %i \n", diffPct, difference);
+                if (abs(difference) < 32) {
                     cells(i).foundCut = true;
-                } else if (oCountLeft[i] - oCount[i] * ratio > 0) {
-                    cells(i).cutMarginRight = cells(i).getCut();
+                } else if (difference > 0) {
+                    // good optimization, but can it be proven to give a result?
+                    // Take more constrained version of both, which should ensure it?
+                    // Could maybe also be proven.
+                    cells(i).cutMarginRight -= diffPct * (cells(i).cutMarginRight - cells(i).cutMarginLeft);
+                    //cells(i).cutMarginRight = cells(i).getCut();
                     foundAll = false;
                 } else {
-                    cells(i).cutMarginLeft = cells(i).getCut();
+                    cells(i).cutMarginLeft -= diffPct * (cells(i).cutMarginRight - cells(i).cutMarginLeft);
+                    //cells(i).cutMarginLeft = cells(i).getCut();
                     foundAll = false;
                 }
             }

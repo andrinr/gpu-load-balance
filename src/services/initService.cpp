@@ -36,13 +36,17 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     storage.base() = 0, 0;
     storage.ascendingFlag() = true, true;
     // x, y, z, cellId, tmp
-    int k = 4;
-
-    // Give memory directly to blitz
-    //std::aligned_alloc()
-    //cudaHostRegister(buffer, size of buffer, cudahostregisterportable)
+    int k = 3;
 
     auto particles = blitz::Array<float, 2>(in.nParticles, k, storage);
+
+    float * particlesAxisData = (float *)calloc(N, sizeof(float ));
+    CUDA_CHECK(cudaMallocHost, ((void**)&particlesAxisData, N * sizeof (float )));
+
+    auto particlesAxis = blitz::Array<float, 1>(
+            particlesAxisData,
+            in.nParticles,
+            blitz::deleteDataWhenDone);
     auto cellToRangeMap = blitz::Array<int, 2>(MAX_CELLS, 2);
     float * d_particles;
 
@@ -61,9 +65,16 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     cellToRangeMap(0, 0) = 0;
     cellToRangeMap(0, 1) = in.nParticles;
 
+    int nCounts = ((float) in.nParticles / (N_THREADS * 2 * ELEMENTS_PER_THREAD) + MAX_CELLS);
+    uint * h_counts = (uint*)calloc(nCounts, sizeof(uint));
+    CUDA_CHECK(cudaMallocHost, ((void**)&h_counts, nCounts * sizeof (uint)));
+
+    lcl->h_counts = h_counts;
     lcl->particles.reference(particles);
+    lcl->particlesAxis.reference(particlesAxis);
     lcl->d_particles = d_particles;
     lcl->cellToRangeMap.reference(cellToRangeMap);
+
 
     //pst->lcl = new LocalData(particles, cellToRangeMap, streams, d_particles, d_counts);
 

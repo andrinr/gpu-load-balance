@@ -1,6 +1,6 @@
 #include "countLeftGPUService.h"
 #include <blitz/array.h>
-#include <vector>
+#include <array>
 
 // Make sure that the communication structure is "trivial" so that it
 // can be moved around with "memcpy" which is required for MDL.
@@ -25,6 +25,7 @@ __global__ void reduce(float *g_idata, uint *g_odata, float cut, int n) {
     unsigned int i = blockIdx.x*(blockSize*2) + threadIdx.x;
     unsigned int gridSize = blockSize*2*gridDim.x;
     sdata[tid] = 0;
+    // todo: ask doug
     while (i < n) {
         sdata[tid] += (g_idata[i] < cut);
 
@@ -63,16 +64,24 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     auto lcl = pst->lcl;
     auto in  = static_cast<input *>(vin);
     auto out = static_cast<output *>(vout);
-    auto nCells = nIn / sizeof(input);
+    const int nCells = nIn / sizeof(input);
     assert(nOut / sizeof(output) >= nCells);
 
+    //int bytes = nCounts * sizeof (uint);
     // https://developer.nvidia.com/blog/how-overlap-data-transfers-cuda-cc/
     int blockOffset = 0;
-    std::vector<int> offsets;
+    std::array<int, MAX_CELLS> offsets;
+    offsets[0] = 0;
+
+    for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
+        out[cellPtrOffset] = 0;
+    }
+
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
         auto cell = static_cast<Cell>(*(in + cellPtrOffset));
 
         if (cell.foundCut) {
+            offsets[cellPtrOffset+1] = blockOffset;
             continue;
         }
         int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
@@ -80,15 +89,9 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
         int n = endInd - beginInd;
         float cut = cell.getCut();
 
-        out[cellPtrOffset] = 0;
-
         if (n > 1 << 12) {
             // Can increase speed by another factor of around two
             const int nBlocks = (int) ceil((float) n / (N_THREADS * 2.0 * ELEMENTS_PER_THREAD));
-
-            uint * h_counts = (uint*)calloc(nBlocks, sizeof(int));
-
-            printf("off %u blocks %u . \n", blockOffset, nBlocks);
 
             reduce<N_THREADS>
             <<<
@@ -97,23 +100,13 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
                 N_THREADS * sizeof (uint),
                 lcl->stream
             >>>
-                    (lcl->d_particles + beginInd,
-                     lcl->d_counts + blockOffset,
-                     cut,
-                     n - 5);
+                (lcl->d_particles + beginInd,
+                 lcl->d_counts + blockOffset,
+                 cut,
+                 n - 5);
 
-            offsets.push_back(blockOffset);
             blockOffset += nBlocks;
-
-            //cudaStreamSynchronize(lcl->stream);
-
-            for (int i = 0; i < nBlocks; ++i) {
-                out[cellPtrOffset] += h_counts[i];
-            }
-
-            free(h_counts);
         }
-
         else {
             blitz::Array<float,1> particles =
                     pst->lcl->particles(blitz::Range(beginInd, endInd), 0);
@@ -121,26 +114,34 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
             float * startPtr = particles.data();
             float * endPtr = startPtr + (endInd - beginInd);
 
-            offsets.push_back(-1);
-
             for(auto p= startPtr; p<endPtr; ++p)
             {
                 out[cellPtrOffset] += *p < cut;
             }
         }
+
+        offsets[cellPtrOffset+1] = blockOffset;
     }
 
+    //CUDA_CHECK(cudaStreamSynchronize,(lcl->stream));
+
     CUDA_CHECK(cudaMemcpyAsync,(
-            h_counts,
-                    lcl->d_counts,
-                    sizeof (uint) * blockOffset,
-                    cudaMemcpyDeviceToHost,
-                    lcl->stream));
+            lcl->h_counts,
+            lcl->d_counts,
+            sizeof (uint) * blockOffset,
+            cudaMemcpyDeviceToHost,
+            lcl->stream));
+
+    CUDA_CHECK(cudaStreamSynchronize,(lcl->stream));
 
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
-        auto cell = static_cast<Cell>(*(in + cellPtrOffset));
+        int begin = offsets[cellPtrOffset];
+        int end = offsets[cellPtrOffset + 1];
 
-        
+        for (int i = begin; i < end; ++i) {
+            out[cellPtrOffset] += lcl->h_counts[i];
+        }
+    }
 
     return nCells * sizeof(output);
 }

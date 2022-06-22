@@ -8,8 +8,8 @@
 static const int MAX_CELLS = 8192;
 static const int N_THREADS = 512;
 static const int ELEMENTS_PER_THREAD = 32;
-static const int N = 1 << 26;
-static const int d = 1 << 10;
+static const int N = 1 << 27;
+static const int d = 1 << 11;
 
 inline void CUDA_Abort(cudaError_t rc, const char *fname, const char *file, int line) {
     fprintf(stderr,"%s error %d in %s(%d)\n%s\n", fname, rc, file, line, cudaGetErrorString(rc));

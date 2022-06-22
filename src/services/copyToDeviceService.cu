@@ -15,7 +15,7 @@ int ServiceCopyToDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     // We only need the first nParticles, since axis 0 is axis where cuts need to be found
     cudaMemcpyAsync(
             lcl->d_particles,
-            lcl->particles.data(),
+            lcl->particlesAxis.data(),
             sizeof (float) * nParticles,
             cudaMemcpyHostToDevice,
             pst->lcl->stream

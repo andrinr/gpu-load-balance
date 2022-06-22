@@ -13,6 +13,9 @@ int ServiceFreeDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
 
     cudaFree(lcl->d_particles);
     cudaFree(lcl->d_counts);
+    cudaFreeHost(lcl->particlesAxis.data());
+
+    cudaFreeHost(lcl->h_counts);
 
     return sizeof(output);
 }

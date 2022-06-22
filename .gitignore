@@ -21,6 +21,8 @@ CMakeCache.txt
 cmake-build-debug/
 CMakeFiles/
 build/
+release/
+debug/
 *.dat
 *.out
 *.o
