@@ -39,7 +39,6 @@ __global__ void reduce(float *g_idata, uint *g_odata, float cut, int n) {
     if (blockSize >= 512) {
         if (tid < 256) {
             sdata[tid] += sdata[tid + 256];
-        } __syncthreads();
     }
     if (blockSize >= 256) {
         if (tid < 128) {
@@ -60,7 +59,8 @@ __global__ void reduce(float *g_idata, uint *g_odata, float cut, int n) {
 }
 
 int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
-    // store streams / initialize in local data
+    // store streams / initialize in local d
+    // ata
     auto lcl = pst->lcl;
     auto in  = static_cast<input *>(vin);
     auto out = static_cast<output *>(vout);

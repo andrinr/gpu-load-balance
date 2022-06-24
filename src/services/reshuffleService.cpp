@@ -21,7 +21,6 @@ int ServiceReshuffle::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     auto in  = static_cast<input *>(vin);
     auto nCells = nIn / sizeof(input);
 
-    // todo: either make x-y-z swaps directly in loop or do it after and perform memcpy
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset){
         auto cell = static_cast<Cell>(*(in + cellPtrOffset));
 
@@ -52,8 +51,6 @@ int ServiceReshuffle::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
 
         swap(lcl->particles, i, endInd -1);
 
-        //printf("shuffle index %i %i %i cell %i cut %f \n", lcl->cellToRangeMap(cell.id, 0), i, lcl->cellToRangeMap(cell.id, 1), cell.id, cut);
-        // todo: check if true ,might be +- 1
         lcl->cellToRangeMap(cell.getLeftChildId(), 0) =
                 lcl->cellToRangeMap(cell.id, 0);
         lcl->cellToRangeMap(cell.getLeftChildId(), 1) = i;

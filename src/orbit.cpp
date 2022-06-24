@@ -113,7 +113,7 @@ int master(MDL vmdl,void *vpst) {
                 }
             }
 
-            //free(oCountLeft);
+            // free(oCountLeft);
         }
 
         // Split and store all cells on current heap level

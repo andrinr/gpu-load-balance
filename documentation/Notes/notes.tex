@@ -46,9 +46,14 @@
 \usepackage{parallelP}
 
 \lstset { %
-    language=C++,
     backgroundcolor=\color{black!5}, % set backgroundcolor
     basicstyle=\footnotesize,% basic font setting
+    numbers=left,                    % where to put the line-numbers; possible values are (none, left, right)
+    numbersep=5pt,                   % how far the line-numbers are from the code
+    numberstyle=\tiny\color{black}, % the style that is used for the line-numbers
+    rulecolor=\color{black},
+    keywordstyle=\color{blue},
+    tabsize=3,	
 }
 
 
@@ -1404,7 +1409,7 @@ This yields in a speed-up of:
 
 \subsection{Conclusion}
 
-We conclude that the GPU version with GPU Tree building enabled yields the best speedup and also performs a lot better than the CPU version. Also we can observe that the speedup is bounded by $\frac{B_{GPU}}{B_{CPU}}$/ \TODO{Add reasoning}
+We conclude that the GPU version with GPU Tree building enabled yields the best speedup and also performs a lot better than the CPU version. Furthermore we can observe that the speedup is bounded by $\frac{B_{GPU}}{B_{CPU}}$/, because both the CPU and GPU implemented version are ultimately limited by the bandwidth.
 
 \begin{figure}[H]
 	\begin{center}
@@ -1467,11 +1472,13 @@ We conclude that the GPU version with GPU Tree building enabled yields the best 
 \end{comment}
 
 \newpage
-\section{Stand-alone Implementation}
+\section{Implementation}
 
-\TODO{Give introduction as to how precise the description is and should be}
+In this section we will describe the stand-alone implementation of the accelerated ORB algorithm. We will develop this somewhat separately from the PKDGrav codebase in order to have smaller and easily understandable codebase. We will however use mdl2 from PKDGrav, which is used to distribute the workload among the processors in the system. We aim to use this platform for extensive empirical testing of different strategies and evaluate weather our the proposed method indeed outperforms the CPU version. 
 
-In this section we will describe the stand-alone implementation of the accelerated ORB algorithm. We will develop this somewhat separately from the PKDGrav codebase in order to have smaller and easily understandable codebase. We will however use mdl2 from PKDGrav, which is used to distribute the workload among the processors in the system. We aim to use this platform for extensive empirical testing of different strategies and evaluate weather our the proposed method indeed outperforms the CPU version.
+We will not describe every part of the code in detail, as this would exceed the scope of the thesis. However any performance critical details and all the important data-structures are described. Furthermore, we will pay special attention to the CUDA kernels and also memory management strategies, as they are of great importance.
+
+This implementation uses a local reshuffling method, where particles do not change their owner in terms of threads or processors. This also means, that there exists a operator thread which coordinates the ORB algorithm and keeps track of all the cells.
 
 A brief overview of the core elements:
 
@@ -1484,19 +1491,27 @@ A brief overview of the core elements:
 
 For this project we will use C++ 17 along with CUDA 11.3, OpenMPI 4.1.0 and Blitz++ 1.0.2 \cite{blitzcpp}. 
 
+\subsection{MDL}
+
+Briefly explain how mdl exactly works. 
+
 \subsection{Particles}
 
 To implement the particles array, we use C-style arrays interchangeably with blitz++ arrays. The blitz++ array is a wrapper class around C-style arrays, which helps with pointer management and can speed up the debugging process by keeping track of the array size and checking access indexes. Furthermore, we can easily create slices and make borrowed copies. 
-Blitz++ allows us to easily access the C-style array with the command $array.data()$, enabling us to switch to C-style arrays, whenever its deemed necessarily. We have observed cases where iterating over a blitz array does not enable AVX, however iterating over the underlying C-style array did enable AVX.
+Blitz++ allows us to easily access the C-style array with the command $array.data()$, enabling us to switch to C-style arrays, whenever its deemed necessarily. 
 
+The particles array is essentially a 2D array where each row represents a single particle. Since the performance critical part, the binary cut algorithm, of ORB only iterates over a single axis, we can further enhance the performance by choosing a column major storage format. This ensures that memory accesses are happening over consecutive data, and cache misses are limited.
+
+We have observed cases, where iterating over a blitz array does not enable AVX, even though in theory the storage order would allow so. However iterating over the underlying C-style array did enable AVX.
+
+\subsection{Mapping cells to particles}
+
+Since only the operative needs to keep track of the cells, we need a separate data-structure which defines the range of particles which are encompassed inside the volume of a cell, for each thread. We solve this problem with a 2D array, where we map from a cell ID to its start index in the particles array, as well as its end index. Of course, this array needs to be updated each time we perform a reshuffling.
 
 \subsection{Cell}
 
-As our tree consists of multiple cells, which are to be stored in a tree data-structure. As seen in section \ref{section:orb-example} the conditions for a nearly complete binary tree hold, allowing us to use a heap to store the tree. This \TODO{hint} reduces the runtime of the tree, and since we need to store the cells in an array for communication purposes anyways (\TODO{Why exactly?}), this makes a lot of sense.
+The tree which is constructed by ORB consists of multiple cells and ultimately we need to find a suitable data-structure. The most obvious choice is a tree, which keeps track of its children using pointers. But as we have seen in section \ref{section:orb-example} the conditions for a nearly complete binary tree hold, allowing for a heap to be used as storage method for the tree. The heap A heap of course has constant $O(1)$ access times over $O(log(d))$ for the tree.
 
-\TODO{Either copy cell into buffer. You have to linearize. Add arguments with leaf cells.}
-
-When using a parallelization schema using local reshuffling we will have to send all cells on a single level using the messaging interface. Using the heap datastructure, cells which corresponds to single level in the tree, can be accessed using a simple range.
 
 \begin{figure}[H]
 	\begin{center}
@@ -1528,7 +1543,10 @@ When using a parallelization schema using local reshuffling we will have to send
 	\caption{Tree as heap}
 \end{figure}
 
-Note that due to the property of always assigning the larger desired number of leaf cells to the left child cell, there will never be gaps in the lowest level of the tree, i.e. all consecutive indices in the array are filled with a cell until the last element.
+When a heap array exceeds its allocated memory space, we need to reallocate memory, which can be very time intensive, especially for very large arrays. In our case however, its possible to set an upper boundary for the maximum number of cells. Another positive aspect of the heap is that the interface of mdl2 requires data to be sent in an array structure anyways, further decreasing performance loss and algorithmic complexity.
+
+
+Since the last level of the tree, in cases when $d$ s not a power of two, is only partially filled with leaf nodes, we need to be careful when applying the algorithm. However we can derive all crucial metrics for a given tree, based on the basic heap conditions.
 
 \subsubsection{Heap Conditions}
 As with all heap data-structures we have the following conditions:
@@ -1562,42 +1580,207 @@ The cell class consists of the following variables:
 	\item $tmp$: The cell has room for additional data, which may be stored during executions of algorithms. 
 \end{itemize}
 
+\subsection{Operative}
 
-The cells could be stored as binary tree or as we have already mentioned we could make use of a heap data-structure which allows for greater flexibility. Due to performance improvements, we will opt for the second variant.
-
+Describe operative code here. Mention why we use for loop instead of recursive version. Inlcude code? -> quiet long
 
 \subsection{Services}
 
-As required by mdl, we make use of services, which essentially is a collection of functions which can be sent to any set of processors in the computing system. We abstract every performance critical part of the orb main runtime, which can parallelized into such a service.
+As required by mdl, we make use of services, which are essentially a collection of functions which can be sent to any set of processors in the computing system. We abstract every performance critical part of the orb main runtime, which can parallelized and distributed among processors.
 
-The services we have implemented are:
+The services we have implemented and which are crucial for the CPU version are:
 
 \begin{itemize}
+	\item $initService$ : Reads the particles and allocates memory on the CPU accordingly.
+	\item $finallizeService$ : Frees all the memory and ensures a memory leak free execution.  
 	\item $countLeftService$ : Counts the number of particles left of a provided cut position for each of the cells.
-	\item $countService$ : Counts the number particles inside the domain for each of the provided cells.
+	\item $countService$ : Counts the total number particles inside the domain for each of the provided cells.
 	\item $localReshuffleService$ : Reshuffles the particles locally, such that their memory locality corresponds to a cell. 
 \end{itemize}
 
+\subsubsection{countLeftService}
+
+The countLeftService takes as a input an array of cells and stores the counts in an output array. Each cell comes with a cut position and a cut axis, thus the service counts the number of particles to the left of this position in the given axis. 
+
+As for every service, we have access to the input array with a pointer to its first element in memory called $in$ and correspondingly $out$ for the output array. We then iterate over the number of cells and access the cell structure given the cellPtrOffset as seen on line number two.
+We then check weather the proper cut has already been found, if so we directly continue with the next cell (Line 4-6). We use the cellToRangeMap, which is stored as local data of the pst to retrieve the begin and end index of this cell in the particles array. (Line 7-8).
+We then take a slice of the particles array and store a pointer to the data in $startPtr$ and correspondingly compute the end pointer as well. (10-14).
+Finally we simple iterate over the particles and count up, as previously mentioned, this can enable AVX, given hardware support and the proper compile flags. Usually $-march=native$ along with $O3$ will enable AVX. 
+
+\begin{lstlisting}[language=c++]
+ for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset){
+	auto cell = static_cast<Cell>(*(in + cellPtrOffset));
+	
+	if (cell.foundCut) {
+		continue;
+	}
+	int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
+	int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
+	
+	blitz::Array<float,1> particles =
+		pst->lcl->particlesAxis(blitz::Range(beginInd, endInd));
+	
+	float * startPtr = particles.data();
+	float * endPtr = startPtr + (endInd - beginInd);
+	
+	int nLeft = 0;
+	float cut = cell.getCut();
+	for(auto p= startPtr; p<endPtr; ++p)
+	{
+		nLeft += *p < cut;
+	}
+	
+	out[cellPtrOffset] = nLeft;
+}
+\end{lstlisting}
+
+
+\subsubsection{countService}
+
+Counting the total number of particles is very trivial, given the cellToRange map. 
+
+\begin{lstlisting}[language=c++]
+for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset) {
+	auto cell = static_cast<Cell>(*(in + cellPtrOffset));
+	out[cellPtrOffset] = 
+		lcl->cellToRangeMap(cell.id,1) - 
+		lcl->cellToRangeMap(cell.id,0);
+}
+
+\end{lstlisting}
+
+\subsubsection{localReshuffleService}
+
+
+\begin{lstlisting}[language=c++]
+	
+for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset){
+	auto cell = static_cast<Cell>(*(in + cellPtrOffset));
+	
+	int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
+	int endInd = pst->lcl->cellToRangeMap(cell.id, 1);
+	
+	int i = beginInd-1, j = endInd;
+	float cut = cell.getCut();
+	
+	while(true)
+	{
+		do
+		{
+			i++;
+		} while(lcl->particles(i, cell.cutAxis) < cut && i <= endInd);
+		
+		do
+		{
+			j--;
+		} while(lcl->particles(j, cell.cutAxis) > cut && j >= beginInd);
+		
+		if(i >= j) {
+			break;
+		}
+		
+		swap(lcl->particles, i, j);
+	}
+	
+	swap(lcl->particles, i, endInd -1);
+	
+	lcl->cellToRangeMap(cell.getLeftChildId(), 0) =
+	lcl->cellToRangeMap(cell.id, 0);
+	lcl->cellToRangeMap(cell.getLeftChildId(), 1) = i;
+	
+	lcl->cellToRangeMap(cell.getRightChildId(), 0) = i;
+	lcl->cellToRangeMap(cell.getRightChildId(), 1) =
+	lcl->cellToRangeMap(cell.id, 1);
+	
+}
+\end{lstlisting}
 
 \subsection{CUDA Implementations}
 
-In this section we describe the services which were implemented using CUDA. In this section we may also add some theory about how exactly CUDA works.
+In this section we describe the services which were implemented using CUDA and 
 
-\subsubsection{CUDA Reductions}
+\subsubsection{CUDA Reduction}
 
-Reductions in CUDA are a common explored application of kernels and we were able to reuse highly optimized kernels, proposed in a CUDA webinar as the basis for the counting algorithms, which is part of the binary cut algorithm. The only thing which needs to change, is that we don`t simply sum up the values in an array, but we count the number of elements which are smaller than the proposed cut value. Other than that we can essentially copy the mentioned reduction code.
+Optimized reductions in CUDA are well documented and explained by the NVIDIA developer team. We make use of a reduction introduced by \TODO{Reference} and adapt it slightly to fit our needs.
 
-\subsubsection{Send to device}
+\begin{lstlisting}[language=c++]
+template <unsigned int blockSize>
+__global__ void reduce(float *g_idata, uint *g_odata, float cut, int n) {
+	extern __shared__ int sdata[];
+	
+	unsigned int tid = threadIdx.x;
+	unsigned int i = blockIdx.x*(blockSize*2) + threadIdx.x;
+	unsigned int gridSize = blockSize*2*gridDim.x;
+	sdata[tid] = 0;
+	// todo: ask doug
+	while (i < n) {
+		sdata[tid] += (g_idata[i] < cut);
+		
+		if (i + blockSize < n) {
+			sdata[tid] += (g_idata[i+blockSize] < cut);
+		}
+		i += gridSize;
+	}
+	__syncthreads();
+	
+	if (blockSize >= 512) {
+		if (tid < 256) {
+			sdata[tid] += sdata[tid + 256];
+		}
+		if (blockSize >= 256) {
+			if (tid < 128) {
+				sdata[tid] += sdata[tid + 128];
+			} __syncthreads();
+		}
+		if (blockSize >= 128) {
+			if (tid < 64) {
+				sdata[tid] += sdata[tid + 64];
+			} __syncthreads();
+		}
+		if (tid < 32) {
+			warpReduce<blockSize>(sdata, tid);
+		}
+		if (tid == 0) {
+			g_odata[blockIdx.x] = sdata[0];
+		}
+	}
+\end{lstlisting}
+
+\begin{lstlisting}[language=c++]
+	template <unsigned int blockSize>
+	__device__ void warpReduce(volatile int *sdata, unsigned int tid) {
+		if (blockSize >= 64) sdata[tid] += sdata[tid + 32];
+		if (blockSize >= 32) sdata[tid] += sdata[tid + 16];
+		if (blockSize >= 16) sdata[tid] += sdata[tid + 8];
+		if (blockSize >= 8) sdata[tid] += sdata[tid + 4];
+		if (blockSize >= 4) sdata[tid] += sdata[tid + 2];
+		if (blockSize >= 2) sdata[tid] += sdata[tid + 1];
+	}
+	
+\end{lstlisting}
+
+\subsubsection{Memory allocation}
+
+We limit memory allocation and freeing to the very beginning and end of the orb algorithm. This reduces the runtime of the algorithm by a substantial factor.
+
+\subsubsection{Copy data to device}
 
 In order to prepare the data and send it to a device... 
 
+Most importantly we try to reduce the overhead generated 
+
 \subsubsection{CUDA streams}
 
-We will leverage CUDA streams to send data from the host to the device in parallel. With streams the CUDA Kernel engine can already start processing data, when the first batch, in this case the particles owned by processor number 0 are transferred to the GPU. 
+Cuda streams can be leveraged to improve the performance of data-intensive applications by allowing different tasks to be executed in parallel on the GPU. This can be used to overlap data transfers with computation, or to execute multiple kernels concurrently. Some GPU's have several Kernel engines, this means that the execution of kernel code can be overlapped when we make use of streams.
+
+\newpage
+\subsection{Integration into PKDGRAV}
+
 
 
 \newpage
-\section{Empirical Analysis of ORB}
+\section{Performance Analysis of ORB}
+
 
 \subsection{Methodology}
 
