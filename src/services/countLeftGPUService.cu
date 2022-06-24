@@ -90,7 +90,6 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
         float cut = cell.getCut();
 
         if (n > 1 << 12) {
-            // Can increase speed by another factor of around two
             const int nBlocks = (int) ceil((float) n / (N_THREADS * 2.0 * ELEMENTS_PER_THREAD));
 
             reduce<N_THREADS>
@@ -103,7 +102,7 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
                 (lcl->d_particles + beginInd,
                  lcl->d_counts + blockOffset,
                  cut,
-                 n - 5);
+                 n);
 
             blockOffset += nBlocks;
         }
@@ -122,8 +121,6 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
 
         offsets[cellPtrOffset+1] = blockOffset;
     }
-
-    //CUDA_CHECK(cudaStreamSynchronize,(lcl->stream));
 
     CUDA_CHECK(cudaMemcpyAsync,(
             lcl->h_counts,

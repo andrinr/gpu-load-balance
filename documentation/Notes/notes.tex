@@ -1699,9 +1699,16 @@ for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset){
 
 In this section we describe the services which were implemented using CUDA and 
 
+
 \subsubsection{CUDA Reduction}
 
 Optimized reductions in CUDA are well documented and explained by the NVIDIA developer team. We make use of a reduction introduced by \TODO{Reference} and adapt it slightly to fit our needs.
+
+Warp divergence.
+
+Elements per kernel.
+
+Loop unrolling.
 
 \begin{lstlisting}[language=c++]
 template <unsigned int blockSize>
@@ -1761,7 +1768,7 @@ __global__ void reduce(float *g_idata, uint *g_odata, float cut, int n) {
 
 \subsubsection{Memory allocation}
 
-We limit memory allocation and freeing to the very beginning and end of the orb algorithm. This reduces the runtime of the algorithm by a substantial factor.
+We limit memory allocation and freeing to the very beginning and end of the orb algorithm. This reduces the runtime of the algorithm by a substantial factor. Furthermore we use pinned memory
 
 \subsubsection{Copy data to device}
 
@@ -1780,6 +1787,11 @@ Cuda streams can be leveraged to improve the performance of data-intensive appli
 
 \newpage
 \section{Performance Analysis of ORB}
+
+We will use two system for our performance analysis. One is the Summit supercomputer which has been described in section 3.1. The other has the following specs:
+
+
+AMD EPYC 7702 64-Core Processor, Tesla T4.
 
 
 \subsection{Methodology}

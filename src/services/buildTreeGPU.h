@@ -1,5 +1,6 @@
 #include "TraversePST.h"
 #include "cell.h"
+#include "../constants.h"
 
 class ServiceBuildTreeGPU : public TraverseCombinePST {
 public:

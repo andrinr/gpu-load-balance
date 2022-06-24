@@ -18,7 +18,7 @@ __device__ void warpReduce(volatile int *sdata, unsigned int tid) {
 }
 
 template <unsigned int blockSize>
-__global__ void reduce(float *g_idata, uint *g_odata, float cut, int n) {
+__device__ void reduce(float *g_idata, uint *g_odata, float cut, int n) {
     extern __shared__ int sdata[];
 
     unsigned int tid = threadIdx.x;
@@ -61,8 +61,13 @@ __global__ void reduce(float *g_idata, uint *g_odata, float cut, int n) {
     }
 }
 
-__global__ void build(float *g_idata, uint *g_odata) {
-    extern __shared__ sTree[];
+__global__ void build(float *g_iParticles, uint * g_oTree) {
+    extern __shared__ s_tree[];
+    extern __shared__ int s_counts[];
+
+    unsigned int tid = threadIdx.x;
+    unsigned int i = blockIdx.x * (blockSize * 2) + threadIdx.x;
+    unsigned int gridSize = blockSize * 2 * gridDim.x;
 
 }
 
@@ -70,7 +75,18 @@ int ServiceBuildTreeGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     // store streams / initialize in local data
     auto lcl = pst->lcl;
 
+    const int nBlocks = (int) ceil((float) lcl->particles.rows() / (N_THREADS * 2.0 * ELEMENTS_PER_THREAD));
 
+    build<N_THREADS>
+    <<<
+    nBlocks,
+    N_THREADS,
+    N_THREADS * sizeof (uint) * d,
+    lcl->stream
+    >>>
+        (lcl->d_particles,
+         lcl->d_counts,
+         n;
 
     return sizeof(output);
 }
