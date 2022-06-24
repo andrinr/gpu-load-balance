@@ -18,19 +18,25 @@ __device__ void warpReduce(volatile int *sdata, unsigned int tid) {
 }
 
 template <unsigned int blockSize>
-__device__ void reduce(float *g_idata, uint *g_odata, float cut, int n) {
-    extern __shared__ int sdata[];
+__device__ void reduce(
+        float * g_particles,
+        uint * g_cell,
+        uint * g_axis,
+        float * g_cuts,
+        uint * g_counts,
+        int n
+    {
+    extern __shared__ int s_counts[];
 
     unsigned int tid = threadIdx.x;
     unsigned int i = blockIdx.x * (blockSize * 2) + threadIdx.x;
     unsigned int gridSize = blockSize * 2 * gridDim.x;
-    sdata[tid] = 0;
-    // todo: ask doug
+
     while (i < n) {
-        sdata[tid] += (g_idata[i] < cut);
+        s_counts[s_cell[i]] += (g_idata[i] < g_cuts[s_cell[i]]);
 
         if (i + blockSize < n) {
-            sdata[tid] += (g_idata[i + blockSize] < cut);
+            s_counts[s_cell[i]] += (g_idata[i + blockSize] <  g_cuts[s_cell[i]]);
         }
         i += gridSize;
     }
@@ -56,19 +62,9 @@ __device__ void reduce(float *g_idata, uint *g_odata, float cut, int n) {
             warpReduce<blockSize>(sdata, tid);
         }
         if (tid == 0) {
-            g_odata[blockIdx.x] = sdata[0];
+            g_counts[blockIdx.x] = sdata[0];
         }
     }
-}
-
-__global__ void build(float *g_iParticles, uint * g_oTree) {
-    extern __shared__ s_tree[];
-    extern __shared__ int s_counts[];
-
-    unsigned int tid = threadIdx.x;
-    unsigned int i = blockIdx.x * (blockSize * 2) + threadIdx.x;
-    unsigned int gridSize = blockSize * 2 * gridDim.x;
-
 }
 
 int ServiceBuildTreeGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
@@ -77,7 +73,7 @@ int ServiceBuildTreeGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
 
     const int nBlocks = (int) ceil((float) lcl->particles.rows() / (N_THREADS * 2.0 * ELEMENTS_PER_THREAD));
 
-    build<N_THREADS>
+    reduce<N_THREADS>
     <<<
     nBlocks,
     N_THREADS,

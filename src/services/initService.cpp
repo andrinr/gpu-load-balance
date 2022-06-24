@@ -38,17 +38,20 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     // x, y, z, cellId, tmp
     int k = 3;
 
-    auto particles = blitz::Array<float, 2>(in.nParticles, k, storage);
+    float * particlesData = (float *)malloc(N * 3, sizeof(float ));
+    CUDA_CHECK(cudaMallocHost, ((void**)&particlesData, N * sizeof (float )));
+    auto h_particles = blitz::Array<float, 2>(particlesData, in.nParticles, k, storage);
 
-    float * particlesAxisData = (float *)calloc(N, sizeof(float ));
-    CUDA_CHECK(cudaMallocHost, ((void**)&particlesAxisData, N * sizeof (float )));
+    float * cellData = (float *)malloc(N, sizeof(uint));
+    CUDA_CHECK(cudaMallocHost, ((void**)&cellData, MAX_CELLS sizeof (uint)));
+    auto h_cells = blitz::Array<float, 2>(particlesData, in.nParticles);
 
-    auto particlesAxis = blitz::Array<float, 1>(
-            particlesAxisData,
-            in.nParticles,
-            blitz::deleteDataWhenDone);
+    float * axisData = (float *)malloc(MAX_CELLS, sizeof(uint));
+    CUDA_CHECK(cudaMallocHost, ((void**)&cellData, MAX_CELLS sizeof (uint)));
+    auto h_cells = blitz::Array<float, 2>(particlesData, in.nParticles);
+
+
     auto cellToRangeMap = blitz::Array<int, 2>(MAX_CELLS, 2);
-    float * d_particles;
 
     srand(pst->idSelf);
     int c = 0;

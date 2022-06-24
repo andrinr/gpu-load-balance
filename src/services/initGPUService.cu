@@ -11,11 +11,14 @@ int ServiceInitGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     auto lcl = pst->lcl;
     ServiceInitGPU::input in = *static_cast<input *>(vin);
 
-    CUDA_CHECK(cudaMalloc,(&lcl->d_particles, sizeof (float) * in.nParticles));
+    CUDA_CHECK(cudaMalloc,(&lcl->d_particles, sizeof (float) * in.nParticles * 3));
+    CUDA_CHECK(cudaMalloc,(&lcl->d_cell, sizeof (uint) * in.nParticles));
+    CUDA_CHECK(cudaMalloc,(&lcl->d_axis, sizeof (float) * MAX_CELLS));
+    CUDA_CHECK(cudaMalloc,(&lcl->d_cuts, sizeof (float) * MAX_CELLS));
 
     int nCounts = (in.nParticles / (N_THREADS * 2 * ELEMENTS_PER_THREAD) + MAX_CELLS);
-    printf("nCounts %i \n", nCounts);
     CUDA_CHECK(cudaMalloc, (&lcl->d_counts, sizeof (uint) * nCounts));
+
     CUDA_CHECK(cudaStreamCreate, (&lcl->stream));
 
     return 0;

@@ -5,17 +5,20 @@
 
 class LocalData {
 public:
-    blitz::Array<float, 2> particles;
-    blitz::Array<float, 1> particlesAxis;
-    blitz::Array<int, 1> cell;
-    blitz::Array<int, 1> axis;
     blitz::Array<int, 2> cellToRangeMap;
-    cudaStream_t stream;
+    blitz::Array<float, 2> particles;
     float * d_particles;
+    uint * d_cell;
+    uint * h_cell;
+    uint * d_axis;
+    uint * h_axis;
+    float * d_cuts;
+    float * h_cuts;
     uint * d_counts;
     uint * h_counts;
     int nThreads;
     int nBlocks;
+    cudaStream_t stream;
 
     LocalData() = default;
 };
