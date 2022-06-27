@@ -1796,9 +1796,13 @@ Most importantly we try to reduce the overhead generated
 
 Cuda streams can be leveraged to improve the performance of data-intensive applications by allowing different tasks to be executed in parallel on the GPU. This can be used to overlap data transfers with computation, or to execute multiple kernels concurrently. Some GPU's have several Kernel engines, this means that the execution of kernel code can be overlapped when we make use of streams.
 
-\subsection{CUDA GPU Tree Building}
+\subsubsection{CUDA GPU Tree Building}
 
-In section \ref{gpu-tree-building} we have mentioned how Cuda GPU Tree building can improve runtime by reducing the number of 
+In section \ref{gpu-tree-building} we have mentioned how Cuda GPU Tree building can improve runtime by reducing the data transfers between the CPU and GPU. However this is only effective when combined with a GPU sorting algorithm.
+
+\subsubsection{CUDA partitioning}
+
+
 \newpage
 \subsection{Integration into PKDGRAV}
 

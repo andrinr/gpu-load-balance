@@ -72,15 +72,15 @@ add_executable(
         src/orbit.cpp
         src/services/setadd.cpp
         src/services/TraversePST.cpp
-        src/services/countLeftService.cpp
-        src/services/countService.cpp
-        src/services/initService.cpp
-        src/services/initGPUService.cu
-        src/services/copyToDeviceService.cu
-        src/services/countLeftGPUService.cu
-        src/services/reshuffleService.cpp
-        src/services/freeDeviceService.cu
-        src/services/axisSwapService.cpp
+        src/services/countLeft.cpp
+        src/services/count.cpp
+        src/services/init.cpp
+        src/services/init.cu
+        src/services/copyToDevice.cu
+        src/services/countLeft.cu
+        src/services/reshuffle.cpp
+        src/services/finalize.cu
+        src/services/makeAxis.cpp
         src/constants.h)
 
 target_include_directories(orbit PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)

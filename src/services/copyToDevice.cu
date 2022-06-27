@@ -1,4 +1,4 @@
-#include "copyToDeviceService.h"
+#include "copyToDevice.cuh"
 #include <blitz/array.h>
 #include <vector>
 

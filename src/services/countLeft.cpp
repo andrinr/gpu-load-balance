@@ -1,4 +1,4 @@
-#include "countLeftService.h"
+#include "countLeft.h"
 #include "../cell.h"
 // Make sure that the communication structure is "trivial" so that it
 // can be moved around with "memcpy" which is required for MDL.

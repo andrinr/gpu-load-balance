@@ -1,4 +1,4 @@
-#include "initGPUService.h"
+#include "init.cuh"
 #include <blitz/array.h>
 #include "../constants.h"
 // Make sure that the communication structure is "trivial" so that it

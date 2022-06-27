@@ -1,4 +1,4 @@
-#include "reshuffleService.h"
+#include "reshuffle.cuh"
 #include "../cell.h"
 #include <blitz/array.h>
 // Make sure that the communication structure is "trivial" so that it

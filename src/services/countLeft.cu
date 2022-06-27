@@ -1,4 +1,4 @@
-#include "countLeftGPUService.h"
+#include "countLeft.cuh"
 #include <blitz/array.h>
 #include <array>
 

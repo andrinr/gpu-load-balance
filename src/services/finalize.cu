@@ -1,4 +1,4 @@
-#include "freeDeviceService.h"
+#include "finalize.cuh"
 #include <blitz/array.h>
 #include <vector>
 

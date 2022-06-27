@@ -1,4 +1,4 @@
-#include "axisSwapService.h"
+#include "makeAxis.h"
 #include "../cell.h"
 #include <blitz/array.h>
 // Make sure that the communication structure is "trivial" so that it
