@@ -839,24 +839,6 @@ As soon as we have finished the first iteration of the  two domains, rank 0 can 
 \end{figure}
 
 
-\subsection{Optimized Memory Layout}
-
-Describe how we swap sections of the particle array in order to reduce 
-\csvreader[
-tabular=ccc,
-table head=\hline \bfseries{x} & \bfseries{y} & \bfseries{id} \\\hline,
-late after last line=\\\hline % horizontal line at the end of the table
-]{particles10.csv}{}{\csvcoli & \csvcolii & \csvcoliii}
-
-\vspace{5mm}
-
-\csvreader[
-tabular=ccc,
-table head=\hline \bfseries{x} & \bfseries{y} & \bfseries{id} \\\hline,
-late after last line=\\\hline % horizontal line at the end of the table
-]{particles10.csv}{}{\csvcoli & \csvcolvi & \csvcolvii}
-
-\vspace{5mm}
 
 \newpage
 \section{Theoretical Analysis of ORB runtime}
@@ -1245,7 +1227,7 @@ The Equation \ref{eq:gpu} for the GPU is similar, the only difference being that
 \vspace{5mm}
 
 
-\subsubsection{GPU tree building}
+\subsubsection{GPU tree building}\label{gpu-tree-building}
 
 Let us now consider an alternative way of computing binary cuts. We will build part of the tree on the GPU itself. This will allow us to reduce the very costly overheads imposed by transferring data from the CPU to the GPU. The maximum number of cuts we can perform is $p \times 3$. After p cuts we have $2^{p \times 3}$ leaf cells, and have reached the precision. Note that in this case we also need to send back the information about the built tree from the GPU to the CPU. 
 
@@ -1272,11 +1254,11 @@ Due to possible overhead and no real improvement over the naive GPU version, we 
 
 \subsubsection{Data compression}
 
-Since for most computer the Interconnect bandwidth is greatly smaller than the Memory Bandwidth, we could potentially also think about compressing the particle data. This would increase computational costs, but would allow us to store a higher amount of particles and reduce the cost which comes from loading the particles from memory as well as sending the data over the Interconnect.
+Since for most computer the Interconnect bandwidth is greatly smaller than the Memory bandwidth, we could potentially also think about compressing the particle data. This would increase computational costs, but would allow us to store a higher amount of particles and reduce the cost which comes from loading the particles from memory as well as sending the data over the Interconnect.
 
 \begin{itemize}
 	\item Why do we even use floats in the first place? wouldn't integers suit better since precision is uniformly equal?
-	\item Reduce transfered number of bits, sacrifice precision?
+	\item Reduce transferred number of bits, sacrifice precision?
 \end{itemize}
 
 \TODO{Add plots?}
@@ -1787,11 +1769,23 @@ __global__ void reduce(float *g_idata, uint *g_odata, float cut, int n) {
 
 \subsubsection{Memory allocation}
 
+We can use several strategies in order to improve the performance of memory allocation: 
+
+\begin{enumerate}
+	\item \textbf{Pinned Memory} As the GPU cannot access the default paged memory directly, when copying memory from the host to the device, the memory must first be copied to pinned memory. This means if we use pinned memory directly with $cudaMallocHost()$, data transfers can be around twice as fast. 
+	\item \textbf{Reuse memory} The most obvious choice is to avoid allocation and freeing commands altogether and instead reuse previously allocated memory whenever possible. 
+\end{enumerate}
+
 We limit memory allocation and freeing to the very beginning and end of the orb algorithm. This reduces the runtime of the algorithm by a substantial factor. Furthermore we use pinned memory
 
-\subsubsection{Copy data to device}
+\subsubsection{Data Transfer}
 
-In order to prepare the data and send it to a device... 
+We can use several strategies in order to improve the performance of data transfers: 
+
+\begin{enumerate}
+	\item \textbf{CUDA Streams} As the GPU cannot access the default paged memory directly, when copying memory from the host to the device, the memory must first be copied to pinned memory. This means if we use pinned memory directly with $cudaMallocHost()$, data transfers can be around twice as fast. 
+	\item \textbf{Reuse data} The most obvious choice is to avoid transfers alltogether and and instead reuse previously sent data whenever possible. 
+\end{enumerate}
 
 Most importantly we try to reduce the overhead generated 
 
@@ -1799,6 +1793,9 @@ Most importantly we try to reduce the overhead generated
 
 Cuda streams can be leveraged to improve the performance of data-intensive applications by allowing different tasks to be executed in parallel on the GPU. This can be used to overlap data transfers with computation, or to execute multiple kernels concurrently. Some GPU's have several Kernel engines, this means that the execution of kernel code can be overlapped when we make use of streams.
 
+\subsection{CUDA GPU Tree Building}
+
+In section \ref{gpu-tree-building} we have mentioned how Cuda GPU Tree building can improve runtime by reducing the number of 
 \newpage
 \subsection{Integration into PKDGRAV}
 

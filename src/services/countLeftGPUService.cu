@@ -40,6 +40,7 @@ __global__ void reduce(float *g_idata, uint *g_odata, float cut, int n) {
         if (tid < 256) {
             sdata[tid] += sdata[tid + 256];
         }
+        __syncthreads();
     }
     if (blockSize >= 256) {
         if (tid < 128) {
@@ -57,6 +58,7 @@ __global__ void reduce(float *g_idata, uint *g_odata, float cut, int n) {
     if (tid == 0) {
         g_odata[blockIdx.x] = sdata[0];
     }
+
 }
 
 int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {

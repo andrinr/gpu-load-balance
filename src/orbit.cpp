@@ -90,7 +90,8 @@ int master(MDL vmdl,void *vpst) {
                         (cells(i).cutMarginLeft + cells(i).cutMarginRight) / 2.0,
                         cells(i).cutAxis,
                         l,
-                        cells(i).id);
+                        cells(i).id
+                        );
                 //CellHelpers::log(cells(i));
 
                 float ratio = ceil(cells(i).nLeafCells / 2.0) / cells(i).nLeafCells;
@@ -113,7 +114,7 @@ int master(MDL vmdl,void *vpst) {
                 }
             }
 
-            // free(oCountLeft);
+            //free(oCountLeft);
         }
 
         // Split and store all cells on current heap level
