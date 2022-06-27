@@ -16,7 +16,7 @@ int ServiceInitGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     CUDA_CHECK(cudaMalloc,(&lcl->d_axis, sizeof (float) * MAX_CELLS));
     CUDA_CHECK(cudaMalloc,(&lcl->d_cuts, sizeof (float) * MAX_CELLS));
 
-    int nCounts = (in.nParticles / (N_THREADS * 2 * ELEMENTS_PER_THREAD) + MAX_CELLS);
+    int nCounts = (in.nParticles / (N_THREADS * ELEMENTS_PER_THREAD) + MAX_CELLS);
     CUDA_CHECK(cudaMalloc, (&lcl->d_counts, sizeof (uint) * nCounts));
 
     CUDA_CHECK(cudaStreamCreate, (&lcl->stream));

@@ -10,13 +10,20 @@ static_assert(std::is_void<ServiceCopyToDevice::output>() || std::is_trivial<Ser
 int ServiceCopyToDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     // store streams / initialize in local data
     auto lcl = pst->lcl;
-
+    auto in  = static_cast<input *>(vin);
     int nParticles = lcl->particles.rows();
     // We only need the first nParticles, since axis 0 is axis where cuts need to be found
     cudaMemcpyAsync(
-            lcl->d_particles,
-            lcl->particles.data(),
-            sizeof (float) * nParticles,
+            lcl->d_axis,
+            lcl->h_axis.data(),
+            sizeof (uint) * in->nCells,
+            cudaMemcpyHostToDevice,
+            pst->lcl->stream
+    );
+    cudaMemcpyAsync(
+            lcl->d_cell,
+            lcl->d_cell.data(),
+            sizeof (uint16_t) * nParticles,
             cudaMemcpyHostToDevice,
             pst->lcl->stream
     );

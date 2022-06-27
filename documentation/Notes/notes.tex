@@ -1650,10 +1650,12 @@ for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset) {
 \end{lstlisting}
 
 \subsubsection{localReshuffleService}
-
+The local reshuffle service is responsible for rearranging the particles in such a way, that each range in the particles array, corresponds to a single cell. 
+Its implementation is equivalent to a hoar partition. The implementation is straight forward and there exists no known way to improve this, at least from an algorithmic perspective. There might be some ways to explore in terms of memory access speed, or even porting the algorithm to CUDA. 
+ 
+On line 31 till 37 we also update the cellToRangeMap in order to reflect the changes we have made in the particles array.
 
 \begin{lstlisting}[language=c++]
-	
 for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset){
 	auto cell = static_cast<Cell>(*(in + cellPtrOffset));
 	
@@ -1697,12 +1699,16 @@ for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset){
 
 \subsection{CUDA Implementations}
 
-In this section we describe the services which were implemented using CUDA and 
-
+Our primary focus for optimization is the binary cut algorithm, more specifically the counting method. Its implementation in CUDA is straight forward and performance improvement are guaranteed as shown in section \TODO{add reference}. 
 
 \subsubsection{CUDA Reduction}
+We have described a CPU implementation of the countLeftService. In this section we explain how we can port this problem to the GPU. In essence we can use a general reduction as a basis version, and implement it to specifically fit our needs, which in our case is summing up elements which fulfill a certain condition. The condition being smaller than a given value.
 
 Optimized reductions in CUDA are well documented and explained by the NVIDIA developer team. We make use of a reduction introduced by \TODO{Reference} and adapt it slightly to fit our needs.
+
+There are several key points which need to be addressed in order make the algorithm as efficient as possible. In a reduction we decompose the problem into smaller subproblem which can be run independently. In our case we decompose the array into subsegment, for each we apply the conditional summation. 
+
+In the context of CUDA, we apply a decomposition and run each subproblem on a single CUDA block, this allows us to make use of the fast shared memory register, keep the number of operations per thread in a reasonable range and because the subproblems can the solved independently from each other, blocks can be executed in parallel or also serially without any conflicts. In fact, since the number of blocks which can be run concurrently on the GPU is limited, some kernel will be forced to run serially, with a problem size as large as ours. \TODO{Explain cuda blocks, threads, shared memory?} After running the reduction for each block, we end up with a an array of results, which can then be summed together on CPU using a simple iterator, or we can invoke another simple sum reduction kernel for this task.
 
 Warp divergence.
 
@@ -1719,7 +1725,7 @@ __global__ void reduce(float *g_idata, uint *g_odata, float cut, int n) {
 	unsigned int i = blockIdx.x*(blockSize*2) + threadIdx.x;
 	unsigned int gridSize = blockSize*2*gridDim.x;
 	sdata[tid] = 0;
-	// todo: ask doug
+
 	while (i < n) {
 		sdata[tid] += (g_idata[i] < cut);
 		

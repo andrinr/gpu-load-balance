@@ -6,21 +6,20 @@
 static_assert(std::is_void<ServiceReshuffle::input>()  || std::is_trivial<ServiceReshuffle::input>());
 static_assert(std::is_void<ServiceReshuffle::output>() || std::is_trivial<ServiceReshuffle::output>());
 
-
-static void swap(blitz::Array<float, 2> p, int a, int b) {
-    for (int d = 0; d < p.columns(); d++) {
-        float tmp = p(a, d);
-        p(a, d) = p(b, d);
-        p(b, d) = tmp;
-    }
-};
-
 int ServiceReshuffle::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
 
     auto lcl = pst->lcl;
     auto in  = static_cast<input *>(vin);
     auto nCells = nIn / sizeof(input);
 
+    for (int i = 0; i < lcl->particles.rows(); i++) {
+        uint16_t cellId = lcl.cells(i);
+        if (lcl.particles(i,lcl.axis(cellId)) < lcl.cut(cellId)) {
+            lcl.particles(i,lcl.axis(cellId)) = lcl.cut(cellId);
+            
+
+        }
+    }
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset){
         auto cell = static_cast<Cell>(*(in + cellPtrOffset));
 

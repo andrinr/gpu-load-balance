@@ -72,12 +72,12 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     uint * h_counts = (uint*)calloc(nCounts, sizeof(uint));
     CUDA_CHECK(cudaMallocHost, ((void**)&h_counts, nCounts * sizeof (uint)));
 
-    lcl->h_counts = h_counts;
-    lcl->particles.reference(particles);
-    lcl->particlesAxis.reference(particlesAxis);
-    lcl->d_particles = d_particles;
+    lcl->h_particles.reference(h_particles);
+    lcl->h_cells.reference(h_cells);
+    lcl->h_axis.reference(h_axis);
+    lcl->h_cuts.reference(h_cuts);
+    lcl->h_counts.reference(h_counts);
     lcl->cellToRangeMap.reference(cellToRangeMap);
-
 
     //pst->lcl = new LocalData(particles, cellToRangeMap, streams, d_particles, d_counts);
 

@@ -3,7 +3,9 @@
 
 class ServiceCopyToDevice : public TraverseCombinePST {
 public:
-    typedef int  input; // Array of Cells
+    struct input {
+        int nCells;
+    }; // Array of Cells
     typedef int output;   // Array of counts
     explicit ServiceCopyToDevice(PST pst)
         : TraverseCombinePST(pst,PST_COPYTODEVICE,sizeof(input),sizeof(output),"CountLeft") {}
