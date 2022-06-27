@@ -39,6 +39,7 @@ __global__ void reduce(float *g_idata, uint *g_odata, float cut, int n) {
     if (blockSize >= 512) {
         if (tid < 256) {
             sdata[tid] += sdata[tid + 256];
+        }
     }
     if (blockSize >= 256) {
         if (tid < 128) {
