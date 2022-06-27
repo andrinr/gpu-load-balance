@@ -1773,7 +1773,7 @@ We can use several strategies in order to improve the performance of memory allo
 
 \begin{enumerate}
 	\item \textbf{Pinned Memory} As the GPU cannot access the default paged memory directly, when copying memory from the host to the device, the memory must first be copied to pinned memory. This means if we use pinned memory directly with $cudaMallocHost()$, data transfers can be around twice as fast. 
-	\item \textbf{Reuse memory} The most obvious choice is to avoid allocation and freeing commands altogether and instead reuse previously allocated memory whenever possible. 
+	\item \textbf{Reuse Memory} The most obvious choice is to avoid allocation and freeing commands altogether and instead reuse previously allocated memory whenever possible. 
 \end{enumerate}
 
 We limit memory allocation and freeing to the very beginning and end of the orb algorithm. This reduces the runtime of the algorithm by a substantial factor. Furthermore we use pinned memory
@@ -1783,8 +1783,11 @@ We limit memory allocation and freeing to the very beginning and end of the orb 
 We can use several strategies in order to improve the performance of data transfers: 
 
 \begin{enumerate}
-	\item \textbf{CUDA Streams} As the GPU cannot access the default paged memory directly, when copying memory from the host to the device, the memory must first be copied to pinned memory. This means if we use pinned memory directly with $cudaMallocHost()$, data transfers can be around twice as fast. 
-	\item \textbf{Reuse data} The most obvious choice is to avoid transfers alltogether and and instead reuse previously sent data whenever possible. 
+	\item \textbf{CUDA Streams}
+	\item \textbf{Reduce Data } 
+	\item \textbf{Reuse Data} The most obvious choice is to avoid transfers alltogether and and instead reuse previously sent data whenever possible. 
+	\item \textbf{Data Batches}
+	
 \end{enumerate}
 
 Most importantly we try to reduce the overhead generated 
