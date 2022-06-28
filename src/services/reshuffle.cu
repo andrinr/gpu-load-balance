@@ -1,53 +1,51 @@
 #include "reshuffle.cuh"
 #include "../cell.h"
 #include <blitz/array.h>
+
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
 // Make sure that the communication structure is "trivial" so that it
 // can be moved around with "memcpy" which is required for MDL.
 static_assert(std::is_void<ServiceReshuffle::input>()  || std::is_trivial<ServiceReshuffle::input>());
 static_assert(std::is_void<ServiceReshuffle::output>() || std::is_trivial<ServiceReshuffle::output>());
 
-template <unsigned int blockSize>
-__device__ void warpReduce(volatile int *sdata, unsigned int tid) {
-    if (blockSize >= 64) sdata[tid] += sdata[tid + 32];
-    if (blockSize >= 32) sdata[tid] += sdata[tid + 16];
-    if (blockSize >= 16) sdata[tid] += sdata[tid + 8];
-    if (blockSize >= 8) sdata[tid] += sdata[tid + 4];
-    if (blockSize >= 4) sdata[tid] += sdata[tid + 2];
-    if (blockSize >= 2) sdata[tid] += sdata[tid + 1];
+// Exclusive vector scan: the array to be scanned is stored
+// in local thread memory scope as uint4
+inline __device__ uint scan1Inclusive(uint idata, volatile uint *s_Data,
+                                      uint size, cg::thread_block cta) {
+    uint pos = 2 * threadIdx.x - (threadIdx.x & (size - 1));
+    s_Data[pos] = 0;
+    pos += size;
+    s_Data[pos] = idata;
+
+    for (uint offset = 1; offset < size; offset <<= 1) {
+        cg::sync(cta);
+        uint t = s_Data[pos] + s_Data[pos - offset];
+        cg::sync(cta);
+        s_Data[pos] = t;
+    }
+    
+
+    return s_Data[pos];
 }
 
 template <unsigned int blockSize>
-__global__ void pivotPrefixSum( float * g_idata, float * g_data, float pivot) {
-    extern __shared__ int s_data[];
+__global__ void pivotPrefixSum( float * g_idata, float * g_odata, float pivot) {
+    extern __shared__ uint s_lqPivot[];
+    extern __shared__ uint s_gPivot[];
 
     unsigned int tid = threadIdx.x;
-    unsigned int i = blockIdx.x*blockSize+threadIdx.x;
+    unsigned int i = blockIdx.x*(blockSize)+threadIdx.x*4;
     unsigned int gridSize = blockSize*gridDim.x;
 
-    s_data[tid] = g_idata[i] < pivot;
+    uint f = g_idata[i] < pivot
+    s_data[tid].x = f;
+    s_data[tid].y = 1-f;
 
-    if (blockSize >= 512) {
-        if (tid < 256) {
-            sdata[tid] += sdata[tid + 256];
-        }
-        __syncthreads();
-    }
-    if (blockSize >= 256) {
-        if (tid < 128) {
-            sdata[tid] += sdata[tid + 128];
-        } __syncthreads();
-    }
-    if (blockSize >= 128) {
-        if (tid < 64) {
-            sdata[tid] += sdata[tid + 64];
-        } __syncthreads();
-    }
-    if (tid < 32) {
-        warpReduce<blockSize>(sdata, tid);
-    }
-    if (tid == 0) {
-        g_odata[blockIdx.x] = sdata[0];
-    }
+    __syncthreads();
+
+
 }
 
 int ServiceReshuffle::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {

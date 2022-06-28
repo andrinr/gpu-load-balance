@@ -1688,19 +1688,23 @@ We have described a CPU implementation of the countLeftService. In this section 
 
 Optimized reductions in CUDA are well documented and explained by the NVIDIA developer team. We make use of a reduction introduced by \TODO{Reference} and adapt it slightly to fit our needs.
 
-In a reduction we decompose the problem into smaller subproblem which can be run independently. In our case we decompose the array into subsegment, for each we apply the conditional summation. 
+In a reduction we decompose the problem into smaller subproblem which can be run independently. In our case we decompose the array into smaller arrays, for each of which we apply the conditional summation. 
 
-In the context of CUDA, we apply a decomposition and run each subproblem on a single CUDA block, this allows us to make use of the fast shared memory register, keep the number of operations per thread in a reasonable range and because the subproblems can the solved independently from each other, blocks can be executed in parallel or also serially without any conflicts. In fact, since the number of blocks which can be run concurrently on the GPU is limited, some kernel will be forced to run serially with a problem size as large as ours. \TODO{Explain cuda blocks, threads, shared memory?} After running the reduction for each block, we end up with a an array of results, which can then be summed together on CPU using a simple iterator, or we can invoke another simple sum reduction kernel for this task.
+In the context of CUDA, we apply a decomposition and run each subproblem on a single CUDA block, this allows us to leverage fast shared memory register, keep the number of operations per thread in a reasonable range and because the subproblems can be solved independently from each other, blocks can be executed in parallel or also serially without any conflicts or synchronization. In fact, since the number of blocks which can be run concurrently on the GPU is limited, some blocks will be forced to run serially with a problem size as large as ours. \TODO{Explain cuda blocks, threads, shared memory?} After running the conditional summation on each slice of the array, we end up with a an array of results. These results can then be summed together on CPU using a simple iterator, or we can invoke another sum reduction kernel for this task.
 
 There are several key points which need to be addressed in order make the algorithm as efficient as possible. 
 
 \begin{enumerate}
 	\item \textbf{Shared Memory} 
-	In figure \ref{cuda:reduction} on line 3 we invocate the shared memory, where its size is dynamic as marked with the extern keyword. In a next step (lines 10-13) we apply our condition and copy the results to shared memory. This allows us to work exclusively on shared memory in the future, which is a lot quicker than global memory (as seen in the input parameters of the kernel)
-	\item \textbf{Ops per thread} There exists an optimum when considering the number of operation performed by a single thread. In order to adapt the number of ops dynamically, we iterate over a certain number of elements in the global memory, as seen in figure \ref{cuda:reduction} lines 10-13. The input parameter n defines the total number of particles. Therefore if we reduce the total number of blocks by a factor of $r$, the while loop will iterate over $r$ elements. 
-	\item \textbf{Meta programming} The reduction is optimized by using a template, which indicates the total number of thread per block, which is equivalent to the blockSize. Since the template is evaluated at compile time, all the if statements taking blockSize as a parameter in figure \ref{cuda:reduction} and figure \ref{cuda:warp-device} do not cause any performance loss. 
-	\item \textbf{Shared Memory bank conflicts} \TODO{do}
-	\item \textbf{Warp divergence}  \TODO{do} 
+	In the code depicted in figure \ref{cuda:reduction} on line 3 we invocate the shared memory, where its size is dynamic as marked with the extern keyword. In a next step (lines 10-13) we apply our condition and copy the results to shared memory. This allows us to work exclusively with shared memory, reducing the amount of costly accesses performed on global memory.
+	
+	\item \textbf{Ops Per Thread} There exists an optimum when considering the number of operation performed by a single thread. In order to adapt the number of ops dynamically, we iterate over a certain number of elements in the global memory, as seen in figure \ref{cuda:reduction} lines 10-13. The input parameter n defines the total number of particles. Therefore if we reduce the total number of blocks by a factor of $r$, the while loop will iterate over $r$ elements. 
+	
+	\item \textbf{Meta Programming} The reduction is optimized by using a template, which indicates the total number of thread per block, which is equivalent to the blockSize. Since the template is evaluated at compile time, all the if statements taking blockSize as a parameter in figure \ref{cuda:reduction} and figure \ref{cuda:warp-device} do not cause any performance loss. In fact, because we are able to unroll loops, which would be evaluated at runtime, we increase the performance of the code. 
+
+	\item \textbf{Shared Memory Bank Conflicts} In order to decrease the bank conflicts in the shared memory we want to aim for coalesced memory access. This means there should not be any or at least no large gaps between individual read / write operations on shared memory. We can observe on lines 18, 23, 38 how we all threads write to a continuous memory segment without any gaps.
+	
+	\item \textbf{Warp divergence} Each time we we have an if / else call in the code, we introduce a divergence. On the GPU these divergences become especially bad when they are introduced inside a warp. This means that any of the threads of the 32 threads in a warp, have to execute a different code than the rest. For this reason, the warpReduce method as seen in figure \ref{cuda:warp-device} is introduced. We can see on line 32 in figure \ref{cuda:reduction} that this method is only executed when we reach 32 elements in the shared memory, which remain to be added together. Inside the warp reduce method, we again encounter an unrolled loop, but in this case we have no if statements that could generate a divergence. The if statements which are present, are as mentioned, not present anymore after compilation. Inside a warp we are also not dependent on synchronization, thus the thread synchronization call can be omitted as well. Note that this implementation will perform many unnecessary operations, but this does not affect the performance negatively.
 \end{enumerate}
 
 
@@ -1772,8 +1776,9 @@ __global__ void reduce(float *g_idata, uint *g_odata, float cut, int n) {
 We can use several strategies in order to improve the performance of memory allocation: 
 
 \begin{enumerate}
-	\item \textbf{Pinned Memory} As the GPU cannot access the default paged memory directly, when copying memory from the host to the device, the memory must first be copied to pinned memory. This means if we use pinned memory directly with $cudaMallocHost()$, data transfers can be around twice as fast. 
-	\item \textbf{Reuse Memory} The most obvious choice is to avoid allocation and freeing commands altogether and instead reuse previously allocated memory whenever possible. 
+	\item \textbf{Pinned Memory} As the GPU cannot access the default paged memory directly, when copying memory from the host to the device, the memory must first be copied to pinned memory. This means if we use pinned memory directly with $cudaMallocHost()$, data transfers can be around twice as fast. In our implementation we use pinned memory for all data, which need to be either sent from the host to device or vice versa.
+	\item \textbf{Reuse Memory} The most obvious choice is to avoid allocation and freeing commands altogether and instead reuse previously allocated memory whenever possible. In our implementation we allocate the memory in the very beginning, whereas we have a fixed number of particles and a fixed upper limit for the number of cells. 
+	
 \end{enumerate}
 
 We limit memory allocation and freeing to the very beginning and end of the orb algorithm. This reduces the runtime of the algorithm by a substantial factor. Furthermore we use pinned memory
@@ -1783,9 +1788,9 @@ We limit memory allocation and freeing to the very beginning and end of the orb 
 We can use several strategies in order to improve the performance of data transfers: 
 
 \begin{enumerate}
+	\item \textbf{Reuse Data} The most obvious choice is to avoid transfers altogether and and instead reuse previously sent data whenever possible. 
 	\item \textbf{CUDA Streams}
 	\item \textbf{Reduce Data } 
-	\item \textbf{Reuse Data} The most obvious choice is to avoid transfers alltogether and and instead reuse previously sent data whenever possible. 
 	\item \textbf{Data Batches}
 	
 \end{enumerate}

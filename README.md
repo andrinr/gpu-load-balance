@@ -42,7 +42,6 @@ Using Nvidia Nsight:
 Insert instructions here
 
 ## Open questions
-- How are number of threads defined?
-- How can I pass header data?
-- Why cant I cast to input data?
+- Should we use uint4 for shared memory?
+- 
 - 
