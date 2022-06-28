@@ -1,4 +1,4 @@
-#include "reduce.cuh"
+#include "condReduce.cuh"
 
 template <unsigned int blockSize>
 extern __device__ void warpReduce(volatile int *sdata, unsigned int tid) {
@@ -58,10 +58,10 @@ void conditionalReduce(
         float *g_idata,
         uint *g_odata,
         float cut,
-        uint n,
-        uint nBlocks,
-        uint nThreads,
-        uint sharedMemBytes,
+        int n,
+        int nBlocks,
+        int nThreads,
+        int sharedMemBytes,
         cudaStream_t stream) {
 
     reduce<blockSize, leq>

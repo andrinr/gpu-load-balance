@@ -1,7 +1,7 @@
 #include "reshuffle.cuh"
 #include "../cell.h"
 #include <blitz/array.h>
-#include "../utils/reduce.cuh"
+#include "../utils/condReduce.cuh"
 #include <cooperative_groups.h>
 
 namespace cg = cooperative_groups;
@@ -9,8 +9,6 @@ namespace cg = cooperative_groups;
 // can be moved around with "memcpy" which is required for MDL.
 static_assert(std::is_void<ServiceReshuffle::input>()  || std::is_trivial<ServiceReshuffle::input>());
 static_assert(std::is_void<ServiceReshuffle::output>() || std::is_trivial<ServiceReshuffle::output>());
-
-
 
 template <unsigned int blockSize>
 inline __device__ uint scan(volatile uint s_idata, uint offset) {
@@ -30,7 +28,7 @@ inline __device__ uint scan(volatile uint s_idata, uint offset) {
 }
 
 template <unsigned int blockSize>
-__global__ void pivotPrefixSum( float * g_idata, float * g_odata, float pivot) {
+__global__ void pivotPrefixSum(int offsetLeq, int offsetG, float * g_data, float pivot) {
     extern __shared__ uint s_lqPivot[];
     extern __shared__ uint s_gPivot[];
     extern __shared__ float s_res[];
@@ -40,7 +38,7 @@ __global__ void pivotPrefixSum( float * g_idata, float * g_odata, float pivot) {
     unsigned int i = blockIdx.x*(blockSize)+threadIdx.x;
     unsigned int gridSize = blockSize*gridDim.x;
 
-    uint f = g_idata[i] < pivot
+    uint f = g_data[i] < pivot
     s_lqPivot[tid].x = f;
     s_gPivot[tid].y = 1-f;
 
@@ -51,8 +49,8 @@ __global__ void pivotPrefixSum( float * g_idata, float * g_odata, float pivot) {
 
     __syncthreads();
 
-    s_res[is_lqPivot[tid] + iStart] = g_idata[i];
-    s_res[is_lqPivot[tid] + offLq +  iStart] = g_idata[i];
+    g_data[is_lqPivot[tid] + offsetLeq] = g_idata[i];
+    g_data[is_lqPivot[tid] + offsetG] = g_idata[i];
 
 }
 
@@ -136,10 +134,27 @@ int ServiceReshuffle::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
             countLeq[cellPtrOffset] += lcl->h_resultsA[i];
             countG[cellPtrOffset] += lcl->h_resultsB[i];
         }
+
+        const int nBlocks = (int) ceil((float) n / (N_THREADS *  ELEMENTS_PER_THREAD));
+
+        auto cell = static_cast<Cell>(*(in + cellPtrOffset));
+
+        int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
+        int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
+
+        pivotPrefixSum<N_THREADS>
+                <<<nBlocks,
+                N_THREADS,
+                N_THREADS * sizeof (uint) * 2 + N_THREADS * sizeof (float),
+                lcl->stream>>>(
+                    countLeq[cellPtrOffset],
+                    countG[cellPtrOffset],
+                    lcl->d_particles,
+                    cell.getCut()
+                );
     }
 
-
-
+    CUDA_CHECK(cudaStreamSynchronize,(lcl->stream));
     return 0;
 }
 

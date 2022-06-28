@@ -9,7 +9,7 @@ public:
     blitz::Array<float, 1> particlesAxis;
     blitz::Array<int, 1> cell;
     blitz::Array<int, 1> axis;
-    blitz::Array<int, 2> cellToRangeMap;
+    blitz::Array<uint, 2> cellToRangeMap;
     cudaStream_t stream;
     float * d_particles;
     uint * d_resultsA;

@@ -69,7 +69,7 @@ endif()
 
 add_executable(
         orbit
-        src/utils/reduce.cu
+        src/utils/condReduce.cu
         src/orbit.cpp
         src/services/setadd.cpp
         src/services/TraversePST.cpp

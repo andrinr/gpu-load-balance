@@ -47,7 +47,7 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
             particlesAxisData,
             in.nParticles,
             blitz::deleteDataWhenDone);
-    auto cellToRangeMap = blitz::Array<int, 2>(MAX_CELLS, 2);
+    auto cellToRangeMap = blitz::Array<uint, 2>(MAX_CELLS, 2);
     float * d_particles;
 
     srand(pst->idSelf);
