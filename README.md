@@ -10,7 +10,7 @@ Head to [/documentation](https://github.com/andrinr/gpu-load-balance/tree/main/d
 
 1. OpenMPI ``sudo apt-get install openmpi-bin libopenmpi-dev``
 2. Blitz++ https://github.com/blitzpp/blitz
-3. Clone PKDGRAV3 from https://bitbucket.org/dpotter/pkdgrav3/
+3. Clone PKDGRAV3 from https://bitbucket.org/dpotter/pkdgrav3/ and make sure its prerequisites are met.
 4. Clone this repo and ``cd`` into its root directory
 5. Link mdl2 and blitz from the PKDGRAV repo using ``ln -s /path/to/lib``
 
@@ -41,9 +41,11 @@ Using Nvidia Nsight:
 
 ## Automized performance analysis
 
-Insert instructions here
+todo
 
 ## Open questions
 - Should we use uint4 for shared memory?
+- Why does warp occupancy erode over time?
+- Why even "mitigate" first two threads if iterating over certain number of elements anyways?
 - 
 - 

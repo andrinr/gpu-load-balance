@@ -12,10 +12,12 @@ int ServiceFreeDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     auto lcl = pst->lcl;
 
     cudaFree(lcl->d_particles);
-    cudaFree(lcl->d_counts);
+    cudaFree(lcl->d_resultsA);
+    cudaFree(lcl->d_resultsB);
     cudaFreeHost(lcl->particlesAxis.data());
 
-    cudaFreeHost(lcl->h_counts);
+    cudaFreeHost(lcl->h_resultsA);
+    cudaFreeHost(lcl->h_resultsB);
 
     return sizeof(output);
 }

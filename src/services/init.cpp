@@ -65,11 +65,15 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     cellToRangeMap(0, 0) = 0;
     cellToRangeMap(0, 1) = in.nParticles;
 
-    int nCounts = ((float) in.nParticles / (N_THREADS * 2 * ELEMENTS_PER_THREAD) + MAX_CELLS);
-    uint * h_counts = (uint*)calloc(nCounts, sizeof(uint));
-    CUDA_CHECK(cudaMallocHost, ((void**)&h_counts, nCounts * sizeof (uint)));
+    int nCounts = ((float) in.nParticles / (N_THREADS * ELEMENTS_PER_THREAD) + MAX_CELLS);
+    uint * h_resultsA = (uint*)calloc(nCounts, sizeof(uint));
+    CUDA_CHECK(cudaMallocHost, ((void**)&h_resultsA, nCounts * sizeof (uint)));
 
-    lcl->h_counts = h_counts;
+    uint * h_resultsB = (uint*)calloc(nCounts, sizeof(uint));
+    CUDA_CHECK(cudaMallocHost, ((void**)&h_resultsB, nCounts * sizeof (uint)));
+
+    lcl->h_resultsA = h_resultsA;
+    lcl->h_resultsB = h_resultsB;
     lcl->particles.reference(particles);
     lcl->particlesAxis.reference(particlesAxis);
     lcl->d_particles = d_particles;

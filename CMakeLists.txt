@@ -63,12 +63,13 @@ endif()
 #        src/services/countLeftService.cpp
 #        src/services/localReshuffleService.cpp
 #        src/services/buildTreeService.cpp)
-#        analysis/cpu-reduce/main.cpp)
+#        analysis/cpu-reduce.cu/main.cpp)
 #set_target_properties(glb PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 #target_link_libraries(glb ${MPI_LIBRARIES} blitz)
 
 add_executable(
         orbit
+        src/utils/reduce.cu
         src/orbit.cpp
         src/services/setadd.cpp
         src/services/TraversePST.cpp
