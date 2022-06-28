@@ -10,32 +10,34 @@ Head to [/documentation](https://github.com/andrinr/gpu-load-balance/tree/main/d
 
 1. OpenMPI ``sudo apt-get install openmpi-bin libopenmpi-dev``
 2. Blitz++ https://github.com/blitzpp/blitz
+3. Clone PKDGRAV3 from https://bitbucket.org/dpotter/pkdgrav3/
+4. Clone this repo and ``cd`` into its root directory
+5. Link mdl2 and blitz from the PKDGRAV repo using ``ln -s /path/to/lib``
 
-### Compile
-1. ``mkdir build``
-2. ``cd build``
-3. ``cmake ..`` or for debugging ``cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo --DBZ_DEBUG ..``
+### Compile for execution
+1. ``mkdir release && cd release``
+3. ``cmake ..``
 4. `` cmake --build .``
+
+### Run
+``./orbit``
+
+### Compile for debugging
+1. ``mkdir debug && cd debug``
+2. ``cmake -DCMAKE_BUILD_TYPE=Debug --DBZ_DEBUG ..``
+3. `` cmake --build .``
 
 
 ### Debug
-``mpirun -np <x> gdb glb <# thousand of particles> <# domains>``
-
-Or with   console for each process:
-
-``mpirun -np <x> xterm -e gdb glb <# thousand of particles> <# domains>``
-
-Or run gdb on only one process:
-
-``mpiexec -n 1 gdb glb <# thousand of particles> <# domains>m : -n <x-1> glb <# thousand of particles> <# domains>``
+``gdb ./orbit``
+or
+``cuda-gdb ./orbit``
 
 ### CUDA Profile
 
 Using Nvidia Nsight: 
 ```run ./nsys-ui```
 
-### Run
-``mpirun -np <x> glb <# thousand of particles> <# domains>``
 
 ## Automized performance analysis
 

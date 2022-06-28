@@ -12,8 +12,7 @@ static_assert(std::is_void<ServiceReshuffle::output>() || std::is_trivial<Servic
 
 // Exclusive vector scan: the array to be scanned is stored
 // in local thread memory scope as uint4
-inline __device__ uint scan1Inclusive(uint idata, volatile uint *s_Data,
-                                      uint size, cg::thread_block cta) {
+inline __device__ uint scan1Inclusive(uint idata, volatile uint *s_Data, comm
     uint pos = 2 * threadIdx.x - (threadIdx.x & (size - 1));
     s_Data[pos] = 0;
     pos += size;
@@ -25,7 +24,7 @@ inline __device__ uint scan1Inclusive(uint idata, volatile uint *s_Data,
         cg::sync(cta);
         s_Data[pos] = t;
     }
-    
+
 
     return s_Data[pos];
 }
