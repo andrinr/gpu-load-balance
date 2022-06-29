@@ -10,25 +10,63 @@ namespace cg = cooperative_groups;
 static_assert(std::is_void<ServiceReshuffle::input>()  || std::is_trivial<ServiceReshuffle::input>());
 static_assert(std::is_void<ServiceReshuffle::output>() || std::is_trivial<ServiceReshuffle::output>());
 
+// https://www.cse.chalmers.se/~tsigas/papers/GPU-Quicksort-jea.pdf
+// https://developer.nvidia.com/gpugems/gpugems3/part-vi-gpu-computing/chapter-39-parallel-prefix-sum-scan-cuda
+// https://github.com/NVIDIA/cuda-samples/tree/master/Samples/2_Concepts_and_Techniques/scan
+// https://onlinelibrary.wiley.com/doi/epdf/10.1002/cpe.3611
+
+__global__ void prescan(volatile uint * s_idata, float *g_idata, int n) {
+    extern __shared__ float temp[];  // allocated on invocation
+    int thid = threadIdx.x;
+    int offset = 1;
+    temp[2*thid] = g_idata[2*thid]; // load input into shared memory
+    temp[2*thid+1] = g_idata[2*thid+1];
+
+    for (int d = n>>1; d > 0; d >>= 1) {             // build sum in place up the tree
+        __syncthreads();
+        if (thid < d) {
+            int ai = offset*(2*thid+1)-1;
+            int bi = offset*(2*thid+2)-1;
+            temp[bi] += temp[ai];
+        }
+        offset *= 2;
+    }
+    if (thid == 0) {
+        temp[n - 1] = 0;
+    } // clear the last element
+
+    for (int d = 1; d < n; d *= 2) {// traverse down tree & build scan
+        offset >>= 1;
+        __syncthreads();
+        if (thid < d) {
+            int ai = offset*(2*thid+1)-1;
+            int bi = offset*(2*thid+2)-1;
+            float t = temp[ai]; temp[ai] = temp[bi]; temp[bi] += t;
+        }
+    }  __syncthreads();
+
+    g_odata[2*thid] = temp[2*thid]; // write results to device memory
+    g_odata[2*thid+1] = temp[2*thid+1];
+}
+
 template <unsigned int blockSize>
-inline __device__ uint scan(volatile uint s_idata, uint offset) {
-    uint pos = 2 * threadIdx.x - (threadIdx.x & (size - 1));
-    s_idata[pos] = 0;
+inline __device__ uint scan(volatile uint * s_idata, uint tid) {
+
+    // y & ( x - 1) equal to y % x
+    uint pos = 2 * tid - (tid & (blockSize - 1));
     pos += size;
     s_idata[pos] = idata;
 
-    for (uint offset = 1; offset < size; offset <<= 1) {
+    for (uint offset = 1; offset < blockSize; offset <<= 1) {
         __syncthreads();
-        uint t = s_Data[pos] + s_Data[pos - offset];
-        cg::sync(cta);
-        s_Data[pos] = t;
+        s_Data[pos] += s_Data[pos - offset];
     }
 
     return s_Data[pos];
 }
 
 template <unsigned int blockSize>
-__global__ void pivotPrefixSum(int offsetLeq, int offsetG, float * g_data, float pivot) {
+__global__ void reshuffle(int offsetLeq, int offsetG, float * g_data, float pivot) {
     extern __shared__ uint s_lqPivot[];
     extern __shared__ uint s_gPivot[];
     extern __shared__ float s_res[];
@@ -44,13 +82,13 @@ __global__ void pivotPrefixSum(int offsetLeq, int offsetG, float * g_data, float
 
     __syncthreads();
 
-    uint offLq = scan(s_lqPivot[tid], 0);
-    uint offG = scan(s_gPivot[tid], 0);
+    uint offLq = scan(s_lqPivot, tid);
+    uint offG = scan(s_gPivot, tid);
 
     __syncthreads();
 
-    g_data[is_lqPivot[tid] + offsetLeq] = g_idata[i];
-    g_data[is_lqPivot[tid] + offsetG] = g_idata[i];
+    g_data[s_lqPivot[tid] + offsetLeq] = g_idata[i];
+    g_data[s_lqPivot[tid] + offsetG] = g_idata[i];
 
 }
 
@@ -126,13 +164,15 @@ int ServiceReshuffle::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
 
     CUDA_CHECK(cudaStreamSynchronize,(lcl->stream));
 
+    int totalLeqOffset = 0;
+    int totalGOffset = 0;
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
         int begin = offsets[cellPtrOffset];
         int end = offsets[cellPtrOffset + 1];
 
         for (int i = begin; i < end; ++i) {
-            countLeq[cellPtrOffset] += lcl->h_resultsA[i];
-            countG[cellPtrOffset] += lcl->h_resultsB[i];
+            totalLeqOffset += lcl->h_resultsA[i];
+            totalGOffset += lcl->h_resultsB[i];
         }
 
         const int nBlocks = (int) ceil((float) n / (N_THREADS *  ELEMENTS_PER_THREAD));
@@ -142,14 +182,15 @@ int ServiceReshuffle::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
         int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
         int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
 
+        // todo: pay attention to axis
         pivotPrefixSum<N_THREADS>
                 <<<nBlocks,
                 N_THREADS,
                 N_THREADS * sizeof (uint) * 2 + N_THREADS * sizeof (float),
                 lcl->stream>>>(
-                    countLeq[cellPtrOffset],
-                    countG[cellPtrOffset],
-                    lcl->d_particles,
+                    totalLeqOffset,
+                    totalGOffset,
+                    lcl->d_particles + beginInd,
                     cell.getCut()
                 );
     }

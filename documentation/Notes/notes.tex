@@ -40,6 +40,7 @@
 % Plots
 \usepackage{pgfplots}
 \pgfplotsset{compat = newest}
+\usepgfplotslibrary{fillbetween}
 
 % Dependencies
 \usepackage{mymacros}
@@ -74,13 +75,12 @@
 \newpage
 \section{Introduction}
 
-
 The N-Body technique has been used for decades to simulate the Universe so we can compare theory with observations. This technique uses ``particles'' or ``bodies'' to sample phase space, and as gravity operates over infinite distance it is necessary to consider all pair-wise interactions which makes a naive implementation $\mathcal{O}(n^2)$.
 It is clear that this does not scale particularly well with large particle counts.
 
-One common approach is to decompose the particles into a tree structure and multipole expansions of the particles in each tree cell to approximate the forces. This reduces the complexity of the algorithm to $\mathcal{O}(n\log{}n)$. More recently the Fast Multipole Method (FMM) has gained wider option primarily due to the extremely large sizes of modern simulations. This technique further reduces the complexity to $\mathcal{O}(n)$!
+One common approach is to decompose the particles into a tree structure and multipole expansions of the particles in each tree cell to approximate the forces. This reduces the complexity of the algorithm to $\mathcal{O}(n\log{}n)$. More recently the Fast Multipole Method (FMM), also relying on the tree data structure, has gained wider option primarily due to the extremely large sizes of modern simulations. This technique further reduces the complexity to $\mathcal{O}(n)$. 
 
-The computational effort required in modern N-Body simulations can thus be split into three categories:
+The computational effort required in modern N-Body simulations can be split into three categories:
 
 \begin{itemize}
 	\item \textbf{Load Balancing:} Distribute particles equally among nodes with regards to memory.
@@ -90,7 +90,7 @@ The computational effort required in modern N-Body simulations can thus be split
 
 Before the implementation of FMM into codes, and particularly before the era of modern accelerated computing (e.g., SIMD vectorization and GPU computing) the forces calculations dominated the computational cost. In more recent simulations, each category is about one third of the total calculation time\cite{2017ComAC...4....2P}. This makes the tree building and load balancing subjects to great performance gains, since GPU acceleration is usually not exploited. 
 
-This project proposes to implement Tree Building with the GPU using CUDA to accelerate load balancing. We will however consider, implementing the same method for tree building as well. Thus some considerations, which are important for FFM also apply to this work.
+This project proposes to implement Tree Building with the GPU using CUDA to accelerate load balancing. We will consider implementing the same method for tree building as well. Thus some considerations, which are important for FFM, also apply to this work.
 
 \subsection{Target Data}\label{section:target-data}
 
@@ -136,7 +136,6 @@ Non equal weighting functions for different particles are due to higher accelera
 
 \subsection{PKDGrav}
 
-\TODO{Brief summary of PKDGrav and how this work can be used to improve PKDGrav}
 
 \newpage
 \section{Orthogonal Recursive Bisection (ORB)} \label{section:orb}
@@ -848,6 +847,178 @@ The nature of the ORB algorithm and its application with very large data-sizes, 
 When creating such a model, the performance is either bound by the number of floating point operations per minute, or in some cases its bound by the memory access speed. In our case, we assume that we are generally bound by memory access times, and not tflops. If we investigate the operations which are needed for the binary cut algorithm, we notice that the actual operations completed inside the loop, are only very few. When comparing the CPU implementation with GPU one, we need to not only consider benefits from increased parallelism in GPU hardware, which will lead to a higher tflops, but also possible speed-ups reached by higher bandwidths in GPU memory than CPU memory. On the other hand we need to mitigate the very low bandwidths between the GPU and CPU, which cannot be avoided altogether, as the data needs to be sent from the CPU to GPU before we can process it on the graphics processor.
 
 
+\subsection{General Memory Model}
+
+In order to have a clear terminology and understanding of a computing system, we will briefly describe a general computer model which can be applied to most modern high performance systems.
+
+A computing system consists of several nodes, where each node has one or more CPU`s and some additionally have one or more GPU`s. Both the CPU and the GPU have their own memory which are connected by a data link. The bandwidth of this link is called Memory Bandwidth. We name the capacity of the CPU Memory Bandwidth $B_{CPU}$ and the GPU Memory Bandwidth $B_{GPU}$. Furthermore we have a separate data link between the CPU and the GPU memory which is in some cases called PCI express, NVLink (for modern NVidia GPU`s) among others. We will refer to it as $I_{GC}$. In systems with multiple CPU there is a link between the individiual CPU which we denote as $I_{CC}$. Finally we denote the link between GPUs as $I_{GG}$.
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+			
+			\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = west,
+			fill = white,
+			align=center,
+			minimum width = 2cm, 
+			minimum height = 1.5cm] (cpu1) at (0cm,1.5cm) {CPU1};
+			
+			\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = west,
+			fill = white,
+			align=center,
+			minimum width = 2cm, 
+			minimum height = 1.5cm] (cpu2) at (0cm,-1.5cm) {CPU2};
+			
+			\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = west,
+			fill = white,
+			align=center,
+			minimum width = 2cm, 
+			minimum height = 1.5cm] (cpum1) at (-3cm,1.5cm) {CPU1 \\ Memory};
+			
+			\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = west,
+			fill = white,
+			align=center,
+			minimum width = 2cm, 
+			minimum height = 1.5cm] (cpum2) at (-3cm,-1.5cm) {CPU2 \\ Memory};
+			
+			
+			\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = west,
+			fill = white,
+			align=center,
+			minimum width = 2cm, 
+			minimum height = 1.5cm] (gpu1) at (4cm,4cm) {GPU1};
+			
+			\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = west,
+			fill = white,
+			align=center,
+			minimum width = 2cm, 
+			minimum height = 1.5cm] (gpu2) at (4cm,1cm) {GPU2};
+			
+			\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = west,
+			fill = white,
+			align=center,
+			minimum width = 2cm, 
+			minimum height = 1.5cm] (gpu3) at (4cm,-1cm) {GPU3};
+			
+			\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = west,
+			fill = white,
+			align=center,
+			minimum width = 2cm, 
+			minimum height = 1.5cm] (gpu4) at (4cm,-4cm) {GPU4};
+			
+			\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = west,
+			fill = white,
+			align=center,
+			minimum width = 2cm, 
+			minimum height = 1.5cm] (gpum1) at (7cm,4cm) {GPU1 \\ Memory};
+			
+			\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = west,
+			fill = white,
+			align=center,
+			minimum width = 2cm, 
+			minimum height = 1.5cm] (gpum2) at (7cm,1cm) {GPU2 \\ Memory};
+			
+			\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = west,
+			fill = white,
+			align=center,
+			minimum width = 2cm, 
+			minimum height = 1.5cm] (gpum3) at (7cm,-1cm) {GPU3 \\ Memory};
+			
+			\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = west,
+			fill = white,
+			align=center,
+			minimum width = 2cm, 
+			minimum height = 1.5cm] (gpum4) at (7cm,-4cm) {GPU4 \\ Memory};
+			
+			
+			\draw[red,  thick, stealth-stealth] (cpum1) to (cpu1);
+			\draw[red,  thick, stealth-stealth] (cpum2) to (cpu2);
+			\draw[red, double,  thick, stealth-stealth] (cpu1) to (cpu2);
+			
+			
+			\draw[orange, dashed,  thick, stealth-stealth] (cpu1) to (gpu1);
+			\draw[orange, dashed,  thick, stealth-stealth] (cpu1) to (gpu2);
+			\draw[orange, dashed,  thick, stealth-stealth] (cpu2) to (gpu3);
+			\draw[orange, dashed,  thick, stealth-stealth] (cpu2) to (gpu4);
+			
+			\draw[cyan,  thick, stealth-stealth] (gpum1) to (gpu1);
+			\draw[cyan,  thick, stealth-stealth] (gpum2) to (gpu2);
+			\draw[cyan,  thick, stealth-stealth] (gpum3) to (gpu3);
+			\draw[cyan,  thick, stealth-stealth] (gpum4) to (gpu4);
+			
+			\draw[cyan, double,  thick, stealth-stealth] (gpu1) to (gpu2);
+			\draw[cyan, double,  thick, stealth-stealth] (gpu3) to (gpu4);
+			
+			
+			\node(al) at (-2cm, -3.5cm) {};
+			\node (ar) at (-3cm, -3.5cm) {};
+			\node[align=left] () at (0.5cm, -3.5cm) {CPU Mem Bandwidth, $B_{C}$};
+			\draw[red,  thick, stealth-stealth] (al) to (ar);
+			
+			\node(al) at (-2cm, -4cm) {};
+			\node (ar) at (-3cm, -4cm) {};
+			\node[align=left] () at (0.5cm, -4cm) {GPU Mem Bandwidth, $B_{G}$};
+			\draw[cyan,  thick, stealth-stealth] (al) to (ar);
+			
+			\node (bl) at (-2cm, -4.5cm) {};
+			\node (br) at (-3cm, -4.5cm) {};
+			\node[align=left] () at (0.5cm, -4.5cm) { CPU-CPU Interconnect, $I_{CC}$};
+			\draw[red, double,  thick, stealth-stealth] (bl) to (br);
+			
+			\node (cl) at (-2cm, -5cm) {};
+			\node (cr) at (-3cm, -5cm) {};
+			\node[align=left] () at (0.5cm, -5cm) { GPU-CPU Interconnect, $I_{GC}$};
+			\draw[orange, dashed,  thick, stealth-stealth] (cl) to (cr);
+			
+			\node (dl) at (-2cm, -5.5cm) {};
+			\node (dr) at (-3cm, -5.5cm) {};
+			\node[align=left] () at (0.5cm, -5.5cm) { GPU-GPU Interconnect, $I_{GG}$};
+			\draw[cyan, double,  thick, stealth-stealth] (dl) to (dr);
+			
+			
+		\end{tikzpicture}
+	\end{center}
+\end{figure}
+
+We now sketch out various implementation ideas, derive for each a formula to estimate its runtime and finally insert datapoints from our target computing systems.
+We assume that the data is stored in the CPU memory initially and we define the size of the data as $s$. 
+
 \subsection{Datapoints of Supercomputers}
 
 We will compare the performance with the datapoints of Piz Daint, Summit and Alps which is a part of Eiger. We choose Piz Daint because we have the possibility to test the Code on its systems. We choose Eiger because we can also access its systems and it will give us a good reference values, due to it being a non hybrid supercomputer, meaning the nodes to not have GPU. Finally we analyse its performance on Summit, as its at the time of writing this thesis, one of the most capable supercomputers in the world.
@@ -855,8 +1026,9 @@ We will compare the performance with the datapoints of Piz Daint, Summit and Alp
 \small
 \begin{figure}[H]
 	\begin{center}
+		\resizebox{\textwidth}{!}{%
 		\begin{tabular}{|@{} c | c | c | c | }
-			Piz Daint \cite{piz_daint} & Summit\cite{summit} & Alps (Eiger) \\ 
+			Constant & Piz Daint \cite{piz_daint} & Summit\cite{summit} & Alps (Eiger) \\ 
 			\hline
 			\# Nodes & 5704 & 4608 & 1024\\
 			\# CPUs & 1 & 2 & 2\\
@@ -876,7 +1048,7 @@ We will compare the performance with the datapoints of Piz Daint, Summit and Alp
 			$I_{GG}$ & - & 50 GB/s & -\\
 			Tflops & 10.6 & 14 &\\
 			\# CUDA Cores & 3584 & 5120 & \\
-		\end{tabular}
+		\end{tabular}}	
 	\end{center}
 	\caption{Datapoints of Supercomputers}
 	\label{fig:datapoints}
@@ -966,8 +1138,9 @@ In theory we can estimate the number of tflops with the following formula:
 Where GHZ are the gigahertz which can be reached by the CPU, the AVX is the number of floats which can be packaged by AVX2. CPI is the cycles per instructions, which is equal to 2 for the AVX commands. Finally we have np which is the number of processors. Note that we assume a perfect parallelization, which is reasonable in this case.
 
 The following test results were achieved from a Intel(R) Core(TM) i9-10885H CPU @ 2.40GHz
-processor. We perform the conditional reduction on  $2^{27}$. The reduction takes 244420 microseconds. This means we have a throughput of $2^{27} / 10^{12} * 10^6 / 24420 = 0.00549 tflops$. This of course does not lie anywhere near the theoretical maximum, which even for a single processor ($np = 1$) is $2.4 * 8 * 2 * 1 / 1000 = 0.0384 tflops.$. This is a strong indication, that already now we are in the realm of bandwidth limited algorithms. This effect becomes even stronger when considering parallelism. 
+processor. We perform the conditional reduction on  $2^{27}$ particles. The reduction takes 244420 microseconds. This means we have a throughput of $2^{27} / 10^{12} * 10^6 / 24420 = 0.00549 tflops$. This of course does not lie anywhere near the theoretical maximum, which even for a single processor ($np = 1$) is $2.4 * 8 * 2 * 1 / 1000 = 0.0384 tflops.$. This is a strong indication, that already with a single processor solutions, we are in the realm of bandwidth limited algorithms. This effect becomes even stronger when considering parallelism. 
 
+We can back this claim by comparing tflops with 
 \TODO{If there is time, build simple MPI version to backup model with data.}
 
 \TODO{Try to integrate: https://zsmith.co/bandwidth.php}
@@ -985,25 +1158,22 @@ processor. We perform the conditional reduction on  $2^{27}$. The reduction take
 				height=10cm,width=10cm, 
 				xlabel={\# Processors},
 				ylabel={tflops},
-				xmin = 0.5, xmax = 16, ymin= -0.1, ymax=0.6,
-				legend style={at={(0.03,0.8)},anchor=west}]
+				xmin = 1, xmax = 16, ymin= -0.02, ymax=0.3,
+				legend style={at={(0.6,0.3)},anchor=west}]
 				
-				\addplot+[domain = 1:16, mark=none] {
-					4.5 * 8 * \x / 1000
+				\addplot+[name path = A, domain = 1:16, mark=none] {
+					4.5 * 8 * 2* \x / 1000
 				};	
-				\addlegendentryexpanded{4.5 GHZ};
-
-				\addplot+[domain = 1:16, mark=none] {
-					3.5 * 8 * \x / 1000
-				};	
-				\addlegendentryexpanded{3.5 GHZ};
+	
+				\addlegendentryexpanded{4.5 GHZ, $100\%$ parallel}
 				
-		
-				\addplot+[domain = 1:16, mark=none] {
-					2.5 * 8 * \x / 1000
+				\addplot+[name path = B, domain = 1:16, mark=none] {
+					2.5 * 8 * 2 * (0.8 * \x + 0.2) / 1000
 				};	
-				\addlegendentryexpanded{2.5 GHZ};
-				
+			
+	
+				\addlegendentryexpanded{2.5 GHZ, $80\%$ parallel}
+			
 				\addplot+[mark=none] coordinates {(0,0.002) (16,0.002)};
 				\addlegendentry{$B_{C}$ Intel}
 				
@@ -1012,6 +1182,10 @@ processor. We perform the conditional reduction on  $2^{27}$. The reduction take
 				
 				\addplot+[mark=none] coordinates {(0,0.0062) (16,0.0062)};
 				\addlegendentry{$B_{C}$ AMD}
+				
+				
+				\addplot[gray!50] fill between[of=A and B];
+				
 
 				%\node[label={Intel E5-2690 v3},circle,fill,inner sep=2pt] at (axis cs:12,45.6) {};
 				
@@ -1029,179 +1203,9 @@ processor. We perform the conditional reduction on  $2^{27}$. The reduction take
 	\label{fig:modelcpu}
 \end{figure}
 
+In figure \ref{fig:modelcpu} We can 
+
 Finish this argumentation and explain why we only consider memory access times as they far outweigh tflops. 
-
-\subsection{General Memory Model}
-
-In order to have a clear terminology and understanding of a computing system, we will briefly describe a general computer model which can be applied to most modern high performance systems.
-
-A computing system consists of several nodes, where each node has one or more CPU`s and some additionally have one or more GPU`s. Both the CPU and the GPU have their own memory which are connected by a data link. The bandwidth of this link is called Memory Bandwidth. We name the capacity of the CPU Memory Bandwidth $B_{CPU}$ and the GPU Memory Bandwidth $B_{GPU}$. Furthermore we have a separate data link between the CPU and the GPU memory which is in some cases called PCI express, NVLink (for modern NVidia GPU`s) among others. We will refer to it as $I_{GC}$. In systems with multiple CPU there is a link between the individiual CPU which we denote as $I_{CC}$. Finally we denote the link between GPUs as $I_{GG}$.
-
-\begin{figure}[H]
-	\begin{center}
-		\begin{tikzpicture}
-			
-			\node[rectangle,
-			draw = black,
-			text = black,
-			anchor = west,
-			fill = white,
-			align=center,
-			minimum width = 2cm, 
-			minimum height = 1.5cm] (cpu1) at (0cm,1.5cm) {CPU1};
-			
-			\node[rectangle,
-			draw = black,
-			text = black,
-			anchor = west,
-			fill = white,
-			align=center,
-			minimum width = 2cm, 
-			minimum height = 1.5cm] (cpu2) at (0cm,-1.5cm) {CPU2};
-			
-			\node[rectangle,
-			draw = black,
-			text = black,
-			anchor = west,
-			fill = white,
-			align=center,
-			minimum width = 2cm, 
-			minimum height = 1.5cm] (cpum1) at (-3cm,1.5cm) {CPU1 \\ Memory};
-			
-			\node[rectangle,
-			draw = black,
-			text = black,
-			anchor = west,
-			fill = white,
-			align=center,
-			minimum width = 2cm, 
-			minimum height = 1.5cm] (cpum2) at (-3cm,-1.5cm) {CPU2 \\ Memory};
-			
-			
-			\node[rectangle,
-			draw = black,
-			text = black,
-			anchor = west,
-			fill = white,
-			align=center,
-			minimum width = 2cm, 
-			minimum height = 1.5cm] (gpu1) at (4cm,4cm) {GPU1};
-			
-			\node[rectangle,
-			draw = black,
-			text = black,
-			anchor = west,
-			fill = white,
-			align=center,
-			minimum width = 2cm, 
-			minimum height = 1.5cm] (gpu2) at (4cm,1cm) {GPU2};
-			
-			\node[rectangle,
-			draw = black,
-			text = black,
-			anchor = west,
-			fill = white,
-			align=center,
-			minimum width = 2cm, 
-			minimum height = 1.5cm] (gpu3) at (4cm,-1cm) {GPU3};
-			
-					\node[rectangle,
-			draw = black,
-			text = black,
-			anchor = west,
-			fill = white,
-			align=center,
-			minimum width = 2cm, 
-			minimum height = 1.5cm] (gpu4) at (4cm,-4cm) {GPU4};
-			
-							\node[rectangle,
-			draw = black,
-			text = black,
-			anchor = west,
-			fill = white,
-			align=center,
-			minimum width = 2cm, 
-			minimum height = 1.5cm] (gpum1) at (7cm,4cm) {GPU1 \\ Memory};
-			
-				\node[rectangle,
-			draw = black,
-			text = black,
-			anchor = west,
-			fill = white,
-			align=center,
-			minimum width = 2cm, 
-			minimum height = 1.5cm] (gpum2) at (7cm,1cm) {GPU2 \\ Memory};
-			
-			\node[rectangle,
-			draw = black,
-			text = black,
-			anchor = west,
-			fill = white,
-			align=center,
-			minimum width = 2cm, 
-			minimum height = 1.5cm] (gpum3) at (7cm,-1cm) {GPU3 \\ Memory};
-			
-			\node[rectangle,
-			draw = black,
-			text = black,
-			anchor = west,
-			fill = white,
-			align=center,
-			minimum width = 2cm, 
-			minimum height = 1.5cm] (gpum4) at (7cm,-4cm) {GPU4 \\ Memory};
-		
-			
-			\draw[red,  thick, stealth-stealth] (cpum1) to (cpu1);
-			\draw[red,  thick, stealth-stealth] (cpum2) to (cpu2);
-			\draw[red, double,  thick, stealth-stealth] (cpu1) to (cpu2);
-			
-			
-			\draw[orange, dashed,  thick, stealth-stealth] (cpu1) to (gpu1);
-			\draw[orange, dashed,  thick, stealth-stealth] (cpu1) to (gpu2);
-			\draw[orange, dashed,  thick, stealth-stealth] (cpu2) to (gpu3);
-			\draw[orange, dashed,  thick, stealth-stealth] (cpu2) to (gpu4);
-			
-			\draw[cyan,  thick, stealth-stealth] (gpum1) to (gpu1);
-			\draw[cyan,  thick, stealth-stealth] (gpum2) to (gpu2);
-			\draw[cyan,  thick, stealth-stealth] (gpum3) to (gpu3);
-			\draw[cyan,  thick, stealth-stealth] (gpum4) to (gpu4);
-			
-			\draw[cyan, double,  thick, stealth-stealth] (gpu1) to (gpu2);
-			\draw[cyan, double,  thick, stealth-stealth] (gpu3) to (gpu4);
-			
-			
-			\node(al) at (-2cm, -3.5cm) {};
-			\node (ar) at (-3cm, -3.5cm) {};
-			\node[align=left] () at (0.5cm, -3.5cm) {CPU Mem Bandwidth, $B_{C}$};
-			\draw[red,  thick, stealth-stealth] (al) to (ar);
-			
-			\node(al) at (-2cm, -4cm) {};
-			\node (ar) at (-3cm, -4cm) {};
-			\node[align=left] () at (0.5cm, -4cm) {GPU Mem Bandwidth, $B_{G}$};
-			\draw[cyan,  thick, stealth-stealth] (al) to (ar);
-			
-			\node (bl) at (-2cm, -4.5cm) {};
-			\node (br) at (-3cm, -4.5cm) {};
-			\node[align=left] () at (0.5cm, -4.5cm) { CPU-CPU Interconnect, $I_{CC}$};
-			\draw[red, double,  thick, stealth-stealth] (bl) to (br);
-			
-			\node (cl) at (-2cm, -5cm) {};
-			\node (cr) at (-3cm, -5cm) {};
-			\node[align=left] () at (0.5cm, -5cm) { GPU-CPU Interconnect, $I_{GC}$};
-			\draw[orange, dashed,  thick, stealth-stealth] (cl) to (cr);
-			
-			\node (dl) at (-2cm, -5.5cm) {};
-			\node (dr) at (-3cm, -5.5cm) {};
-			\node[align=left] () at (0.5cm, -5.5cm) { GPU-GPU Interconnect, $I_{GG}$};
-			\draw[cyan, double,  thick, stealth-stealth] (dl) to (dr);
-			
-			
-		\end{tikzpicture}
-	\end{center}
-\end{figure}
-
-We now sketch out various implementation ideas, derive for each a formula to estimate its runtime and finally insert datapoints from our target computing systems.
-We assume that the data is stored in the CPU memory initially and we define the size of the data as $s$. 
 
 
 \subsubsection{Naive implementation}
@@ -1544,12 +1548,10 @@ Furthermore we can derive the following constraints given the number of leaf cel
 
 \begin{itemize}
 	\item We can compute the depth of the tree with: $\lceil log_2(d) \rceil$
-	\item The number of cells on the second last level (which must all be leaf cells) is given by $2^{depth} - d$ 
-	\item There are exactly $2 \times d - 2^{depth}$ items on the last level. 
+	\item The number of leaf cells on the second last level is given by $2^{depth} - d$ 
+	\item There are exactly $2 \times d - 2^{depth}$ items (which must all be leaf cells) on the last level. 
 	\item The total number of cells are $2\times d - 1$.
 \end{itemize}
-
-\TODO{Should I add the proofs here?}
 
 \subsubsection{Class}
 The cell class consists of the following variables:
@@ -1681,6 +1683,30 @@ for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset){
 
 \subsection{CUDA Implementations}
 
+Here we describe some first time measurements and where the actual bottlenecks are. We explain why the binary cut algorithm is the first target for GPU parallelization.
+We visually explain the CPU measurements using a timeline diagram.
+
+\begin{figure}
+	\begin{center}
+		\begin{tikzpicture}
+			% draw horizontal line   
+			\draw[thick, -Triangle] (0,0) -- (\textwidth,0) node[font=\scriptsize,below left=3pt and -8pt]{t};
+			\draw[darkgray, line width=4pt] 
+			(0.5,.5) -- +(1,0);
+			
+			\draw[red, line width=4pt] 
+			(1.5,1.0) -- +(3,0);
+			
+			\draw[green, line width=4pt] 
+			(4.5,1.5) -- +(3,0);
+	
+		\end{tikzpicture}
+	\end{center}
+	\caption{timeline}
+	\label{u}
+\end{figure}
+
+As of now the time
 Our primary focus for optimization is the binary cut algorithm, more specifically the counting method. Its implementation in CUDA is straight forward and performance improvement are guaranteed as shown in section \TODO{add reference}. 
 
 \subsubsection{CUDA Reduction}
@@ -1708,6 +1734,8 @@ There are several key points which need to be addressed in order make the algori
 \end{enumerate}
 
 In our case we invoke the reduction for each cell once, where we distribute the particles within the cell among a number of blocks. The number of blocks can be determined by the number of particles in this cell $n_{cell}$ divided by the number of threads per block which is set to 512 and finally we devide this further by the number of elements per thread $r$. This of course makes the implementation straight forward but we have to pay attention to keep the number of particles large enough. As we increase the number of cells, we make more calls to the reduction kernel, where each call processes less elements. At some point a single cell may not even have enough elements left to keep a single block busy. This will results in a lot of unused warps and hinder performance. Even if we do not reach this point, as we increase the number of cells, in theory we can have an almost unoccupied block for each cell. Considering 1024 cells this is considerable and leads to a reduced warp occupancy. 
+
+In order to resolve this, we have 
 
   Nevertheless it leads to reduced warp occupancy rate. However compared to earlier calls, we have few kernel calls with large array sections, the performance is greatly reduced. In fact we have observed a 10 fold reduction in speed for the binary cut algorithm. Some of the effects can also be explained by  \TODO{insert}.
 
@@ -1811,13 +1839,32 @@ Most importantly we try to reduce the overhead generated
 
 Cuda streams can be leveraged to improve the performance of data-intensive applications by allowing different tasks to be executed in parallel on the GPU. This can be used to overlap data transfers with computation, or to execute multiple kernels concurrently. Some GPU's have several Kernel engines, this means that the execution of kernel code can be overlapped when we make use of streams.
 
-\subsubsection{CUDA GPU Tree Building}
+\subsubsection{Reshuffling on the GPU}
 
-In section \ref{gpu-tree-building} we have mentioned how Cuda GPU Tree building can improve runtime by reducing the data transfers between the CPU and GPU. However this is only effective when combined with a GPU sorting algorithm.
+We describe measurements which were done using the reduction in CUDA, we mention how the reduction cannot necessarily be improved a lot and that the data transfer between the GPU and CPU is the main bottleneck now. We mention how building the tree on the does not make a lot of sense. We explain why instead we focus our efforts to implement a GPU reshuffling method, which can improve runtime by reducing the reshuffling costs and also remove CPU GPU transfers between invocations of the binary cut algorithm altogether. 
 
-\subsubsection{CUDA partitioning}
+We add a timeline which is based on measurements with a CUDA enhanced binary cut algorithm. 
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+			% draw horizontal line   
+			\draw[thick, -Triangle] (0,0) -- (\textwidth,0) node[font=\scriptsize,below left=3pt and -8pt]{t};
+			\draw[darkgray, line width=4pt] 
+			(0.5,.5) -- +(1,0);
+			
+			\draw[red, line width=4pt] 
+			(1.5,1.0) -- +(3,0);
+			
+			\draw[green, line width=4pt] 
+			(4.5,1.5) -- +(3,0);
+			
+		\end{tikzpicture}
+	\end{center}
+	\caption{timeline}
+	\label{u}
+\end{figure}
 
-
+We mention how the partitioning algorithm can be taken from quick sort implementations, where the most performance critical part is the scan algorithm. 
 \newpage
 \subsection{Integration into PKDGRAV}
 

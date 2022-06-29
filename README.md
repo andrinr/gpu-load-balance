@@ -47,5 +47,8 @@ todo
 - Should we use uint4 for shared memory?
 - Why does warp occupancy erode over time?
 - Why even "mitigate" first two threads if iterating over certain number of elements anyways?
+- Can we reduce unused warps by reducing number of threads in partially used blocks?
+- What happens to threads in warp when we call syncthreads?
+- What about the improved binary cut algorithm, keep or nah?
 - 
 - 
