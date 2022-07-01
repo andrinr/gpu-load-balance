@@ -205,10 +205,12 @@ x,y,id,o1,o2,x2,y2
 
 
 \subsection{Memory and Workload Balancing}\label{balancing}
-We have now formulated our main objectives for improving ORB, which are to improve the runtime, which is done with workload balancing, but at the same time keeping $N$ as large as possible. In this section we will explain the averse effects when disregarding interactions between maximizing runtime and maximizing N.
+We have now formulated our main objectives for improving ORB, which are (1) to improve the runtime, which is done with workload balancing, whilst (2) at the same time keeping $N$ as large as possible. In this section we will explain the averse effects when disregarding interactions between maximizing runtime and maximizing N.
 
 
-As described in section \ref{section:force-integration}, if we want to mitigate the error across all particles, we need to introduce more discrete time steps for certain particles than for others. The need for non-constant simulations steps across the simulation is caused by the vastly variant forces which are exercised on different particles. It is possible that certain particles follow a straight path with an almost constant velocity, whereas others are influenced by strong gravitational poles. We denote the workload for a particle $p_i$ as the weighting function $w(p_i)$. The workload correlates with the number of simulations steps, that need to be computed for a single particle. In an optimally parallelized system, the workload should be very similar among computing units, thus it would make sense to distribute the particles regarding the weighting function. This in turn implies an unequal distribution of the particles with regards to memory.
+As described in section \ref{section:force-integration}, if we want to reduce the error across all particles, we need to introduce more discrete time steps for certain particles than for others. The need for non-constant simulations steps across the simulation is caused by the vastly variant forces which are exercised on different particles. It is possible that certain particles follow a straight path with an almost constant velocity, whereas others are influenced by strong gravitational poles. 
+
+We denote the workload for a particle $p_i$ as the weighting function $w(p_i)$. The workload correlates with the number of simulations steps, that need to be computed for a single particle. In an optimally parallelized system, the workload should be very similar among computing units, thus it would appear make sense to distribute the particles regarding the weighting function. This in turn implies an unequal distribution of the particles with regards to memory.
 
 Let us consider a simple example to illustrate the point. Given the set of particles $A = \{p_1, p_2, .., p_{2m/3}\}$ and respectively $B = \{p_{2m/3 + 1}, p_2, .., p_{m}\}$. This gives us a total number of particles equivalent to $N = m$. Let us now consider that $\forall p \in A : w(p) = 1$ and $\forall p \in B : w(p) = 2$. If we assign all particles from set $A$ to process with rank 0 and the particles from B to rank 1. It is clear that $\sum_{p\in A} w(p) = \sum_{p\in B} w(p)$. Thus the two processors are balanced in terms of computing costs, but clearly they are not balanced in terms of memory size. In fact, process with rank 0 has $2m/3$ elements and rank 1 has $m/3$ elements. Assuming each process has a memory size of $2m/3$, then clearly this configuration is not optimal. If we were to favor memory balancing, we could assign $2m/3$ to each processor and have $(4/3) \times m$ particles in total. 
 
@@ -232,7 +234,7 @@ In each recursive call of the ORB algorithm, we are given a $cell$ along with a 
 	\end{equation}
 \end{center}
 
-How the domains of the child cells are exactly defined, will be explained in later stages of this section. Primarily we need to define the variable $d$ for the child cells.
+How the volumes of the child cells are exactly defined, will be explained in later stages of this section. Primarily we need to define the variable $d$ for the child cells.
 
 Given a cell, we recursively define $nLeafCells$ for its children as follows:
 
@@ -412,7 +414,7 @@ Since $d_{cellLeft} - d_{cellRight}$ must always be $\leq 1$, it must hold that 
 		\newline
 		
 		\State $cut = cut(x, \vec{lower}_{axis}, \vec{upper}_{axis}, axis, )$
-		\State $mid = reshuffle(split, axis, x)$
+		\State $mid = partition(split, axis, x)$
 		\newline
 		
 		\State $\vec{upperChild} = \vec{upper}$
@@ -547,16 +549,16 @@ The underlying distribution is a normal distribution. \TODO{Add reference to sec
 
 
 
-\subsection{Reshuffling Algorithm}
+\subsection{Partition Algorithm}
 
-We have already introduced all basic building blocks of the ORB algorithm. The only and final piece which is missing is the reshuffling algorithm. Note that it is not necessarily part of the ORB algorithm, but rather the bookkeeping strategy of the data-structure. We want to continuously update the particles array and in the words used before, have a direct correlation between $x_i$ and $i$. This allows us to group all particles, which are contained in a cell in a fixed range of indexes of the particles array. 
+We have already introduced all basic building blocks of the ORB algorithm. The only and final piece which is missing is the partition algorithm. Note that it is not necessarily part of the ORB algorithm, but rather the bookkeeping strategy of the data-structure. We want to continuously update the particles array and in the words used before, have a direct correlation between $x_i$ and $i$. This allows us to group all particles, which are contained in a cell in a fixed range of indexes of the particles array. 
 
-When thinking about this in terms of the recursive algorithm, maintaining this data structure is pretty straight forward. Each time we split a cell into two children, we make sure that particles contained in the left child cell are found in a designated range of the particles array, and the exact same concept is applied to the right cell.
+When thinking about this in terms of the recursive algorithm, maintaining this data structure is pretty straight forward. Each time we split a cell into two children, we make sure that particles contained in the left child cell are found in a designated range of the particles array, and the exact same concept is applied to the right cell. The partition algorithm is equivalent to the common hoar partition algorithm. \TODO{Add reference}
 
 \begin{algorithm}[H]
-	\caption{Reshuffle algorithm}\label{euclid}
+	\caption{Partition algorithm}\label{euclid}
 	\begin{algorithmic}[1]
-		\Procedure{reshuffle}{$x, N_j, cut, axis$}
+		\Procedure{partition}{$x, N_j, cut, axis$}
 		\State $i = 0$
 		
 		\For{$k \in {0,..N_j - 1}$}
@@ -572,7 +574,7 @@ When thinking about this in terms of the recursive algorithm, maintaining this d
 	\end{algorithmic}
 \end{algorithm}
 
-The reshuffle algorithm has a clearly observable runtime of $O(N)$ since we iterate over all particles once. Since we need to touch each element at least once to reshuffle the entire array there is no better algorithm than this.
+The partition algorithm has a clearly observable runtime of $O(N)$ since we iterate over all particles once. Since we need to touch each element at least once to reshuffle the entire array there is no better algorithm than this.
 
 
 \subsection{Parallelize ORB }
@@ -640,7 +642,7 @@ Initially we assume that each processor has a subset of all the particles stored
 	
 \end{figure}
 
-\subsubsection{Local Reshuffling}
+\subsubsection{Local Partitioning}
 
 When performing a local reshuffle, each processor sorts its particles according to the cell information available. The cell information is however being held by a single processor. This processor supervises the ORB algorithm and broadcast the data to the workers. The distribution of the particles among the processors does not change when performing a local reshuffle.
 
@@ -683,9 +685,9 @@ When performing a local reshuffle, each processor sorts its particles according 
 	\label{fig:orb_parallel}
 \end{figure}
 
-\subsubsection{Global Reshuffling}
+\subsubsection{Global Partitioning}
 
-In the case of global reshuffling, we reshuffle the particle in such a way, that we can decouple the left and right child's computations completely from each other. In order to achieve this, the particles need to be redistributed among threads, s.t. each thread contains only particles contained in a single cell. Which in turn means it only need to consider particles in a designated volume. Finally this allows us to run the thread completely independent from others and remove the overhead introduced by synchronization operations.
+In the case of global partitioning, we partition the particle in such a way, that we can decouple the left and right child's computations completely from each other. In order to achieve this, the particles need to be redistributed among threads, s.t. each thread contains only particles contained in a single cell. Which in turn means it only need to consider particles in a designated volume. Finally this allows us to run the thread completely independent from others and remove the overhead introduced by synchronization operations.
 When looking at the numeric example this might look as follows:
 
 
@@ -806,10 +808,7 @@ When looking at the numeric example this might look as follows:
 	
 \end{figure}
 
-We can see how the ownership of particle 2 and particle 1 are being switched. After this is done, $p_2$ can perform further steps of the orb algorithm completely independent of the other processors. This has the advantage, that no further synchronization has to be performed, but comes with some considerable communication costs which are due to the global reshuffling. 
-
-As soon as we have finished the first iteration of the  two domains, rank 0 can process one domain and rank 1 can process the other domain. This has the advantage that not only the counting part, but also the costly reshuffling part of the ORB algorithm can be parallelized. Furthermore the amount of data which needs to be communicated between the different threads is smaller. This is due to the fact that as soon as we found our first cut, only half the array of particles 
-
+We can observe how the ownership of particle 2 and particle 1 has to be changed, in order to make sure, that all particles from $cell_3$ are owned by the same thread. This change of ownership can be done using any desired multiprocessor communication strategy, in a multi node system we off course need to rely on internode communication systems. After a succesfull ownership swap, $p_2$ can perform further steps of the orb algorithm completely independent from $p_0$ and $p_1$. This can improve performance, because due to decoupling there needs to be less synchronization overhead. On the other hand, global partitioning comes with some considerable communication costs. 
 
 \begin{figure}[H]
 	\begin{center}
@@ -842,16 +841,20 @@ As soon as we have finished the first iteration of the  two domains, rank 0 can 
 \newpage
 \section{Theoretical Analysis of ORB runtime}
 
-The nature of the ORB algorithm and its application with very large data-sizes, requires that we consider hardware for concrete implementation details. Since the decision tree for the implementation details of the algorithm is vast and each implementation involves a significant amount of development time, we will propose a theoretical model to guide us in the decision process. Based on this decision, we rule out certain alternatives before the implementation. Finally we will try to verify the models using empirical data.
+\TODO{More like assumption and predictions to narrow the search space. Its more like one influences the other. The theoretical model can set limits, in terms of how fast "could you" do it. }
 
-When creating such a model, the performance is either bound by the number of floating point operations per minute, or in some cases its bound by the memory access speed. In our case, we assume that we are generally bound by memory access times, and not tflops. If we investigate the operations which are needed for the binary cut algorithm, we notice that the actual operations completed inside the loop, are only very few. When comparing the CPU implementation with GPU one, we need to not only consider benefits from increased parallelism in GPU hardware, which will lead to a higher tflops, but also possible speed-ups reached by higher bandwidths in GPU memory than CPU memory. On the other hand we need to mitigate the very low bandwidths between the GPU and CPU, which cannot be avoided altogether, as the data needs to be sent from the CPU to GPU before we can process it on the graphics processor.
+The nature of the ORB algorithm and its application with very large data-sizes, requires that we consider hardware specific performance metrics for concrete implementation details. Since the decision tree for the implementation details of the algorithm is vast and each implementation involves a significant amount of development time, we will further guide our path using a theoretical model. Furthermore the model should be seen as a theoretical maximum in terms of optimization. Of course this assumes a perfect CPU and perfect GPU implementation, which are both not achievable due to a lack of knowledge and a lock of time to optimize each an every single part of the code. The lack of knowledge, is at this stage mostly present in terms of GPU implementations. Still to this day, there are new papers published which discuss new implementation details of fairly fundamental algorithms. 
+
+When creating such a model, the performance is either bound by the number of floating point operations per minute, or in some cases its bound by the memory access speed. In our case, we have the hypothesis that binary cut, as well as the partition method in ORB are bound by memory access times and not the actual processor performance.
+
+Now how can we verify, that the most performance intensive parts of ORB are are in fact memory bound? A very straight forward method is to compare the hardware bandwidth limits in terms of bytes between the CPU and its memory with the number of operations we perform on each loaded elements and correspondingly the maximum number of flops which can be performed on the respective hardware.
 
 
 \subsection{General Memory Model}
 
-In order to have a clear terminology and understanding of a computing system, we will briefly describe a general computer model which can be applied to most modern high performance systems.
+In order to have a clear terminology and understanding of a computing system, we will briefly describe a general model of computing system, which can be applied to most modern high performance systems.
 
-A computing system consists of several nodes, where each node has one or more CPU`s and some additionally have one or more GPU`s. Both the CPU and the GPU have their own memory which are connected by a data link. The bandwidth of this link is called Memory Bandwidth. We name the capacity of the CPU Memory Bandwidth $B_{CPU}$ and the GPU Memory Bandwidth $B_{GPU}$. Furthermore we have a separate data link between the CPU and the GPU memory which is in some cases called PCI express, NVLink (for modern NVidia GPU`s) among others. We will refer to it as $I_{GC}$. In systems with multiple CPU there is a link between the individiual CPU which we denote as $I_{CC}$. Finally we denote the link between GPUs as $I_{GG}$.
+A computing system consists of several nodes, where each node has one or more CPU`s where some are equipped with one or more GPU`s. Both the CPU and the GPU have their own memory which are connected by a data link. The bandwidth of this link is called Memory Bandwidth. We name the capacity of the CPU Memory Bandwidth $B_{CPU}$ and the GPU Memory Bandwidth $B_{GPU}$. Furthermore we have a separate data link between the CPU and the GPU memory which is in some cases called PCI express, NVLink (for modern NVidia GPU`s) among others. We will refer to it as $I_{GC}$. In systems with multiple CPU there is a link between the individiual CPU which we denote as $I_{CC}$. Finally we denote the link between GPUs as $I_{GG}$.
 
 \begin{figure}[H]
 	\begin{center}
@@ -1016,12 +1019,10 @@ A computing system consists of several nodes, where each node has one or more CP
 	\end{center}
 \end{figure}
 
-We now sketch out various implementation ideas, derive for each a formula to estimate its runtime and finally insert datapoints from our target computing systems.
-We assume that the data is stored in the CPU memory initially and we define the size of the data as $s$. 
-
 \subsection{Datapoints of Supercomputers}
 
-We will compare the performance with the datapoints of Piz Daint, Summit and Alps which is a part of Eiger. We choose Piz Daint because we have the possibility to test the Code on its systems. We choose Eiger because we can also access its systems and it will give us a good reference values, due to it being a non hybrid supercomputer, meaning the nodes to not have GPU. Finally we analyse its performance on Summit, as its at the time of writing this thesis, one of the most capable supercomputers in the world.
+
+In this section we introduce a table which lists all important data points for Piz Daint, Summit and Alps. We have choosen Piz Daint because we have the possibility to test the Code on its systems, Eiger because we can also access its systems and it will give us a good reference values, due to non hybrid architecture, meaning the nodes to not have GPU. Finally we analyse its performance on Summit, as its at the time of writing this thesis, one of the most capable supercomputers in the world.
 
 \small
 \begin{figure}[H]
@@ -1039,6 +1040,7 @@ We will compare the performance with the datapoints of Piz Daint, Summit and Alp
 			Base $GHZ_C$ & 2.9 GHZ & 4 GHZ & 2.25 GHZ\\
 			Max $GHZ_C$ & 3.8 GHZ & 4 GHZ & 3.4 GHZ\\
 			\# Cores & 12 & 22 & 64 \\
+			Architexture & Haswell & & AMD Infinity Architecture \\
 			Max AVX & AVX2 & ? & AVX2 \\ 
 			\# GPUs & 1 & 6 & 0 \\
 			GPU Model & NVIDIA P100 \cite{TESLAP100} & NVIDIA V100s \cite{NVIDIAV100} & - \\
@@ -1057,24 +1059,130 @@ We will compare the performance with the datapoints of Piz Daint, Summit and Alp
 
 \subsection{Model parameters}
 
-In order to estimate the runtime of the algorithms we denote the number of particles as $N$. Furthermore we assume a precision $p$ of 32. We only look at $x$ for the runtime analysis, where it follows that the total storage of all particles is $32 \times 3 \times N bits = 4 \times 3 \times N Bytes = 12 \times N Bytes$. Furthermore we assume $d = 1024$ and $N=10^9$.
+\begin{comment}
+If we investigate the operations which are needed for the binary cut algorithm, we notice that the actual operations completed inside the loop, are only very few. When comparing the CPU implementation with GPU one, we need to not only consider benefits from increased parallelism in GPU hardware, which will lead to a higher tflops, but also possible speed-ups reached by higher bandwidths in GPU memory than CPU memory. On the other hand we need to mitigate the very low bandwidths between the GPU and CPU, which cannot be avoided altogether, as the data needs to be sent from the CPU to GPU before we can process it on the graphics processor.
+\end{comment}
+
+In order to estimate the runtime of the algorithms we denote the number of particles as $N$. Furthermore we assume a precision $p$ of 32, which is general standard for both integers and floats, furthermore its a sensible assumption for astrophysical simulations. We only look at $x$ for the runtime analysis, where it follows that the total storage of all particles is $32 \times 3 \times N bits = 4 \times 3 \times N Bytes = 12 \times N Bytes$. Furthermore we assume $d = 1024$ and $N=10^9$.
+
+
+\subsection{Roofline Performance Model}
+
+We test the our hypothesis, that ORB is, for the most part, memory bandwidth bound using the roofline model. In the roofline model, we compare the operational density, which is measured in FLOPS / per byte against the number number of flops per minute. 
+
+For modern hardware, its fairly uncommon to release a peak flops value. Since 2008 Intel has introduced AVX (Advanced Vector Extensions), tflops benchmarks largely depend upon the compiled assembly instructions. AVX enables the processing of several floating point precision (32 bit) numbers simultaneously. The first version of AVX , enabled a 4 such operations, with AVX2 this was extended to 8 and finally AVX512 pushed the limit to 16 operations. AVX furthermore has the capability to process $c = a + b$ operations, where as some older SIMD instructions were only able to process $a = a + b$ type operations. 
+
+Most architecture models are able to complete add AVX instructions with a CPI (cycles per instructions) of 2. For our equation we assume a perfect parallelization, meaning that gflops linearly scale with the number of processors. 
+
+We define in equation \ref{eq:avx}, a function to estimate the number of gigaflops for a given hardware. We define GHZ as the gigahertz which can be reached by the CPU, meanwhile $NF$ is the number of floats which can be processed simultaneously using AVX. $CPI$ is as mentioned the cycles per instructions for the AVX instruction set. Finally we have $np$ which is the number of processors.
+
+\begin{center}
+	\begin{equation}
+		gflops = GHZ * NF * CPI * np
+	\end{equation}
+\label{eq:avx}
+\end{center}
+
+In terms of arithmetic intensity, we take a look at the code for the conditional reduction of the binary cut algorithm. We ignore other parts of the code for now, as optimizing this part is one of the main targets for the thesis. The part where we count the number of particles which are to the left of a cut position, essentially comes down to this loop:
+
+\begin{lstlisting}[language=c++]
+	for(auto p= startPtr; p<endPtr; ++p) nLeft += *p < cut;
+\end{lstlisting}
+
+Where $p$ is a C-style array which stores the particles position and $nLeft$ gives the number of particles which are left of the $cut$. In terms of arithmetic intensity, we have 2 operations, a comparison and and addition. Since a single float is stored with 4 bytes, we have 0.5 operations per byte. 
+
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+			\begin{axis}[
+				height=7cm,width=10cm, 
+				xlabel={FLOPS / byte},
+				ylabel={GFLOPS},
+				xmin = 0.1, xmax = 10, ymin= 0.25, ymax=400,
+				legend style={at={(0.6,0.3)},anchor=west}]
+				
+		
+				\addplot+[name path = A, domain = 0.25:64, mark=none] {
+					3.8 * 8 * 2
+				};	
+				
+				\addlegendentryexpanded{3.8 GHZ \& AVX2 \& np=1};
+				
+				\addplot+[name path = A, domain = 0.25:64, mark=none] {
+					3.8 * 8 * 2 * 4
+				};	
+				
+				
+				\addlegendentryexpanded{3.8 GHZ \& AVX2 \& np=4};
+				
+				\addplot+[name path = A, domain = 0.25:64, mark=none] {
+					68 * \x
+				};	
+				
+				\addlegendentryexpanded{68 GB/s};
+				
+			\end{axis}
+		\end{tikzpicture}
+	\end{center}
+	\caption{Roofline Model for Piz Daint}
+	\label{fig:modelcpu}
+\end{figure}
 
 
 
-\subsection{Roofline performance model}
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+			\begin{axis}[
+				height=7cm,width=10cm, 
+				xlabel={FLOPS / byte},
+				ylabel={GFLOPS},
+				xmin = 0.1, xmax = 10, ymin= 0.25, ymax=400,
+				legend style={at={(0.6,0.3)},anchor=west}]
+				
+				
+				\addplot+[name path = A, domain = 0.25:64, mark=none] {
+					4 * 8 * 2
+				};	
+				
+				\addlegendentryexpanded{4 GHZ \& AVX2 \& np=1};
+				
+				\addplot+[name path = A, domain = 0.25:64, mark=none] {
+					4 * 8 * 2 * 4
+				};	
+				
+				
+				\addlegendentryexpanded{4 GHZ \& AVX2 \& np=4};
+				
+				\addplot+[name path = A, domain = 0.25:64, mark=none] {
+					170 * \x
+				};	
+				
+				\addlegendentryexpanded{170 GB/s};
+				
+			\end{axis}
+		\end{tikzpicture}
+	\end{center}
+	\caption{Roofline Model for Piz Daint}
+	\label{fig:modelcpu}
+\end{figure}
 
+\def\N{1}
+\def\Bytes{12}
+\def\s{12}
+\def\d{8096}
+\def\p{32}
+In figure \ref{fig:modelcpu} We can 
 
-In order to prove or disprove our assumption, about the performance of the ORB algorithm being memory bound, we introduce a theoretical model and also make a few measurements to support the claim. 
-To make a proper model for the CPU version, we also need to consider AVX. With AVX enabled, the compare and 
-
-We consider a minimal C++ code to investigate this issue. We use the -S flag along with the g++ compiler to generate and read the generated assembly code. In this case startPtr is a pointer which indicated the first address where we want to start out iteration process. Consequently endPtr is the memory of the last entry we want to access. For testing purposes all entries in the array are set to random values between 0 and 1, and cut is set to 0.5. 
+We consider a minimal C++ to make measurements which can prove or disprove our assumption. We use the -S flag along with the g++ compiler to generate assembly code from the c++ source code. In this case startPtr is a pointer which indicated the first address where we want to start out iteration process. Consequently endPtr is the memory of the last entry we want to access. For testing purposes all entries in the array are set to random values between 0 and 1, and cut is set to 0.5. 
 
 \begin{lstlisting}
 for(auto p= startPtr; p<endPtr; ++p) nLeft += *p < cut;
 \end{lstlisting}
 
-We not compile our program, once with the g++ compiler and the optimizer set to -O3. 
-When compiling to assembly instructions we can identify the loop and see the following instructions:
+In a first test, we do enable AVX, but turn on $O3$. The generated assembly code looks as follows:
+
 \begin{lstlisting}
 .L18:
 	movups	(%rax), %xmm0
@@ -1098,7 +1206,7 @@ When compiling to assembly instructions we can identify the loop and see the fol
 .L16:
 \end{lstlisting}
 
-If we additionally set the flag -march=native we can enable AVX. This yields the following assembly instructions, where we can identify the vcmplpts and vsubd commands, which are both packaged AVX instructions. This means we have a code which can be compiled to leverage hardware in an optimal way.
+If we additionally set the compile flag -march=native we can enable AVX. This yields the following assembly instructions, where we can identify the vcmplpts and vsubd commands, which are both packaged AVX instructions. This means we have a code which can be compiled to leverage hardware in an optimal way.
 
 \begin{lstlisting}
 	
@@ -1127,85 +1235,9 @@ If we additionally set the flag -march=native we can enable AVX. This yields the
 
 \end{lstlisting}
 
-In theory we can estimate the number of tflops with the following formula:
-
-\begin{center}
-	\begin{equation}
-		tflops = GHZ * AVX * CPI * np / 1000
-	\end{equation}
-\end{center}
-
-Where GHZ are the gigahertz which can be reached by the CPU, the AVX is the number of floats which can be packaged by AVX2. CPI is the cycles per instructions, which is equal to 2 for the AVX commands. Finally we have np which is the number of processors. Note that we assume a perfect parallelization, which is reasonable in this case.
-
 The following test results were achieved from a Intel(R) Core(TM) i9-10885H CPU @ 2.40GHz
 processor. We perform the conditional reduction on  $2^{27}$ particles. The reduction takes 244420 microseconds. This means we have a throughput of $2^{27} / 10^{12} * 10^6 / 24420 = 0.00549 tflops$. This of course does not lie anywhere near the theoretical maximum, which even for a single processor ($np = 1$) is $2.4 * 8 * 2 * 1 / 1000 = 0.0384 tflops.$. This is a strong indication, that already with a single processor solutions, we are in the realm of bandwidth limited algorithms. This effect becomes even stronger when considering parallelism. 
 
-We can back this claim by comparing tflops with 
-\TODO{If there is time, build simple MPI version to backup model with data.}
-
-\TODO{Try to integrate: https://zsmith.co/bandwidth.php}
-	
-\def\N{1}
-\def\Bytes{12}
-\def\s{12}
-\def\d{8096}
-\def\p{32}
-
-\begin{figure}[H]
-	\begin{center}
-		\begin{tikzpicture}
-			\begin{axis}[
-				height=10cm,width=10cm, 
-				xlabel={\# Processors},
-				ylabel={tflops},
-				xmin = 1, xmax = 16, ymin= -0.02, ymax=0.3,
-				legend style={at={(0.6,0.3)},anchor=west}]
-				
-				\addplot+[name path = A, domain = 1:16, mark=none] {
-					4.5 * 8 * 2* \x / 1000
-				};	
-	
-				\addlegendentryexpanded{4.5 GHZ, $100\%$ parallel}
-				
-				\addplot+[name path = B, domain = 1:16, mark=none] {
-					2.5 * 8 * 2 * (0.8 * \x + 0.2) / 1000
-				};	
-			
-	
-				\addlegendentryexpanded{2.5 GHZ, $80\%$ parallel}
-			
-				\addplot+[mark=none] coordinates {(0,0.002) (16,0.002)};
-				\addlegendentry{$B_{C}$ Intel}
-				
-				\addplot+[mark=none] coordinates {(0,0.005) (16,0.005)};
-				\addlegendentry{$B_{C}$ IBM}
-				
-				\addplot+[mark=none] coordinates {(0,0.0062) (16,0.0062)};
-				\addlegendentry{$B_{C}$ AMD}
-				
-				
-				\addplot[gray!50] fill between[of=A and B];
-				
-
-				%\node[label={Intel E5-2690 v3},circle,fill,inner sep=2pt] at (axis cs:12,45.6) {};
-				
-				%\node[label={AMD EPYC},circle,fill,inner sep=2pt] at (axis cs:64,217.6) {};
-				
-				%\node[label={IBM Power 9},circle,fill,inner sep=2pt] at (axis cs:22,88) {};
-				
-	
-
-			
-			\end{axis}
-		\end{tikzpicture}
-	\end{center}
-	\caption{Operations per second for different GHZ and number of processors}
-	\label{fig:modelcpu}
-\end{figure}
-
-In figure \ref{fig:modelcpu} We can 
-
-Finish this argumentation and explain why we only consider memory access times as they far outweigh tflops. 
 
 
 \subsubsection{Naive implementation}

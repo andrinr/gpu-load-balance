@@ -96,6 +96,8 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
             const int nBlocks = (int) ceil((float) n / (N_THREADS * ELEMENTS_PER_THREAD));
             const bool leq = true;
 
+            // Kernel launches are serialzed within stream !
+            // increase number of streams per thread
             reduce<N_THREADS, leq>
             <<<
                     nBlocks,

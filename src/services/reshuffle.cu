@@ -15,25 +15,25 @@ static_assert(std::is_void<ServiceReshuffle::output>() || std::is_trivial<Servic
 // https://github.com/NVIDIA/cuda-samples/tree/master/Samples/2_Concepts_and_Techniques/scan
 // https://onlinelibrary.wiley.com/doi/epdf/10.1002/cpe.3611
 
-__global__ void prescan(volatile uint * s_idata, float *g_idata, int n) {
-    extern __shared__ float temp[];  // allocated on invocation
-    int thid = threadIdx.x;
-    int offset = 1;
-    temp[2*thid] = g_idata[2*thid]; // load input into shared memory
-    temp[2*thid+1] = g_idata[2*thid+1];
+#define SHARED_MEMORY_BANKS 32
+#define LOG_MEM_BANKS 4
+#define CONFLICT_FREE_OFFSET(n) ((n) >> NUM_BANKS + (n) >> (2 * LOG_NUM_BANKS))
 
-    for (int d = n>>1; d > 0; d >>= 1) {             // build sum in place up the tree
+template <unsigned int blockSize>
+__global__ void prescan(volatile uint * s_idata, uint thid, int n) {
+
+    for (int d = n>>1; d > 0; d >>= 1) { // build sum in place up the tree
         __syncthreads();
         if (thid < d) {
             int ai = offset*(2*thid+1)-1;
             int bi = offset*(2*thid+2)-1;
-            temp[bi] += temp[ai];
+            s_idata[bi] += s_idata[ai];
         }
         offset *= 2;
     }
-    if (thid == 0) {
-        temp[n - 1] = 0;
-    } // clear the last element
+    if (thid==0) {
+        s_idata[n - 1 + CONFLICT_FREE_OFFSET(n - 1)] = 0;
+    }
 
     for (int d = 1; d < n; d *= 2) {// traverse down tree & build scan
         offset >>= 1;
@@ -41,29 +41,13 @@ __global__ void prescan(volatile uint * s_idata, float *g_idata, int n) {
         if (thid < d) {
             int ai = offset*(2*thid+1)-1;
             int bi = offset*(2*thid+2)-1;
-            float t = temp[ai]; temp[ai] = temp[bi]; temp[bi] += t;
+            float t = s_idata[ai];
+            s_idata[ai] = s_idata[bi];
+            s_idata[bi] += t;
         }
     }  __syncthreads();
-
-    g_odata[2*thid] = temp[2*thid]; // write results to device memory
-    g_odata[2*thid+1] = temp[2*thid+1];
 }
 
-template <unsigned int blockSize>
-inline __device__ uint scan(volatile uint * s_idata, uint tid) {
-
-    // y & ( x - 1) equal to y % x
-    uint pos = 2 * tid - (tid & (blockSize - 1));
-    pos += size;
-    s_idata[pos] = idata;
-
-    for (uint offset = 1; offset < blockSize; offset <<= 1) {
-        __syncthreads();
-        s_Data[pos] += s_Data[pos - offset];
-    }
-
-    return s_Data[pos];
-}
 
 template <unsigned int blockSize>
 __global__ void reshuffle(int offsetLeq, int offsetG, float * g_data, float pivot) {
@@ -72,13 +56,16 @@ __global__ void reshuffle(int offsetLeq, int offsetG, float * g_data, float pivo
     extern __shared__ float s_res[];
 
     unsigned int tid = threadIdx.x;
-    unsigned int iStart = blockIdx.x * blockSize;
-    unsigned int i = blockIdx.x*(blockSize)+threadIdx.x;
-    unsigned int gridSize = blockSize*gridDim.x;
+    unsigned int i = blockIdx.x*(blockSize * 2)+threadIdx.x;
+    unsigned int gridSize = blockSize*2*gridDim.x;
 
     uint f = g_data[i] < pivot
-    s_lqPivot[tid].x = f;
-    s_gPivot[tid].y = 1-f;
+    s_lqPivot[2 * tid].x = f;
+    s_gPivot[2 * tid].y = 1-f;
+
+    uint f = g_data[i + blockSize] < pivot
+    s_lqPivot[2 * tid + 1].x = f;
+    s_gPivot[2 * tid + 1].y = 1-f;
 
     __syncthreads();
 
