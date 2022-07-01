@@ -1,7 +1,7 @@
 #include "copyToDevice.cuh"
 #include <blitz/array.h>
 #include <vector>
-
+#include "../constants.h"
 // Make sure that the communication structure is "trivial" so that it
 // can be moved around with "memcpy" which is required for MDL.
 static_assert(std::is_void<ServiceCopyToDevice::input>()  || std::is_trivial<ServiceCopyToDevice::input>());
@@ -13,12 +13,13 @@ int ServiceCopyToDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
 
     int nParticles = lcl->particles.rows();
     // We only need the first nParticles, since axis 0 is axis where cuts need to be found
+
     cudaMemcpyAsync(
             lcl->d_particles,
             lcl->particlesAxis.data(),
             sizeof (float) * nParticles,
             cudaMemcpyHostToDevice,
-            pst->lcl->stream
+            pst->lcl->streams(0)
     );
 
     return sizeof(output);

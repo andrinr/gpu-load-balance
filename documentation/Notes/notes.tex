@@ -1811,7 +1811,7 @@ In the context of CUDA, we apply a decomposition and run each subproblem on a si
 
 There are several key points which need to be addressed in order make the algorithm as efficient as possible. 
 
-\begin{enumerate}
+\begin{itemize}
 	\item \textbf{Shared Memory} 
 	In the code depicted in figure \ref{cuda:reduction} on line 3 we invocate the shared memory, where its size is dynamic as marked with the extern keyword. In a next step (lines 10-13) we apply our condition and copy the results to shared memory. This allows us to work exclusively with shared memory, reducing the amount of costly accesses performed on global memory.
 	
@@ -1822,7 +1822,9 @@ There are several key points which need to be addressed in order make the algori
 	\item \textbf{Shared Memory Bank Conflicts} In order to decrease the bank conflicts in the shared memory we want to aim for coalesced memory access. This means there should not be any or at least no large gaps between individual read / write operations on shared memory. We can observe on lines 18, 23, 38 how we all threads write to a continuous memory segment without any gaps.
 	
 	\item \textbf{Warp divergence} Each time we we have an control statement in the code, we introduce a divergence. On the GPU these divergences become especially bad when they are introduced inside a warp. This means that any of the threads of the 32 threads in a warp, have to execute a different code than the rest. For this reason, the $warpReduce$ method as seen in figure \ref{cuda:warp-device} is introduced. We can see on line 32 in figure \ref{cuda:reduction} that this method is only executed when we reach 32 elements in the shared memory, which remain to be added together. Inside the warp reduce method, we again encounter an unrolled loop, but in this case we have no if statements that could generate a divergence. The if statements which are present, are as mentioned, evaluated at compile time only. Inside a warp we are also not dependent on synchronization, thus the thread synchronization call can be omitted as well. Note that this implementation will perform many unnecessary operations, but this does not affect the performance negatively.
-\end{enumerate}
+	
+	\item \textbf{Streams} In order to maintain a high warp occupancy, we have to make sure to reduce 
+\end{itemize}
 
 In our case we invoke the reduction for each cell once, where we distribute the particles within the cell among a number of blocks. The number of blocks can be determined by the number of particles in this cell $n_{cell}$ divided by the number of threads per block which is set to 512 and finally we devide this further by the number of elements per thread $r$. This of course makes the implementation straight forward but we have to pay attention to keep the number of particles large enough. As we increase the number of cells, we make more calls to the reduction kernel, where each call processes less elements. At some point a single cell may not even have enough elements left to keep a single block busy. This will results in a lot of unused warps and hinder performance. Even if we do not reach this point, as we increase the number of cells, in theory we can have an almost unoccupied block for each cell. Considering 1024 cells this is considerable and leads to a reduced warp occupancy. 
 

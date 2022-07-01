@@ -80,6 +80,9 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
         out[cellPtrOffset] = 0;
     }
 
+    // Make sure memcopy is done for this thread
+    // Could also improved but seems complicated
+    CUDA_CHECK(cudaStreamSynchronize,(lcl->streams(0)));
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
         auto cell = static_cast<Cell>(*(in + cellPtrOffset));
 
@@ -98,18 +101,26 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
 
             // Kernel launches are serialzed within stream !
             // increase number of streams per thread
+
             reduce<N_THREADS, leq>
             <<<
                     nBlocks,
                     N_THREADS,
                     N_THREADS * sizeof (uint),
-                    lcl->stream
+                    lcl->streams(cellPtrOffset % N_STREAMS)
             >>> (
                     lcl->d_particles + beginInd,
                     lcl->d_resultsA + blockOffset,
                     cut,
                     n
             );
+
+            CUDA_CHECK(cudaMemcpyAsync,(
+                lcl->h_resultsA + blockOffset,
+                lcl->d_resultsA + blockOffset,
+                sizeof (uint) * nBlocks,
+                cudaMemcpyDeviceToHost,
+                lcl->streams(cellPtrOffset % N_STREAMS)));
 
             blockOffset += nBlocks;
         }
@@ -129,18 +140,13 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
         offsets[cellPtrOffset+1] = blockOffset;
     }
 
-    CUDA_CHECK(cudaMemcpyAsync,(
-            lcl->h_resultsA,
-            lcl->d_resultsA,
-            sizeof (uint) * blockOffset,
-            cudaMemcpyDeviceToHost,
-            lcl->stream));
-
-    CUDA_CHECK(cudaStreamSynchronize,(lcl->stream));
-
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
         int begin = offsets[cellPtrOffset];
         int end = offsets[cellPtrOffset + 1];
+
+        if (cellPtrOffset < N_STREAMS) {
+            CUDA_CHECK(cudaStreamSynchronize,(lcl->streams(cellPtrOffset % N_STREAMS)));
+        }
 
         for (int i = begin; i < end; ++i) {
             out[cellPtrOffset] += lcl->h_resultsA[i];

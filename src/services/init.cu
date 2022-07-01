@@ -17,7 +17,16 @@ int ServiceInitGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     printf("nCounts %i \n", nCounts);
     CUDA_CHECK(cudaMalloc, (&lcl->d_resultsA, sizeof (uint) * nCounts));
     CUDA_CHECK(cudaMalloc, (&lcl->d_resultsB, sizeof (uint) * nCounts));
-    CUDA_CHECK(cudaStreamCreate, (&lcl->stream));
+
+    auto streams = blitz::Array<cudaStream_t , 1>(N_STREAMS);
+
+    for (int i = 0; i < N_STREAMS; i++) {
+        cudaStream_t stream;
+        CUDA_CHECK(cudaStreamCreate, (&stream));
+        streams(i) = stream;
+    }
+
+    lcl->streams.reference(streams);
 
     return 0;
 }
