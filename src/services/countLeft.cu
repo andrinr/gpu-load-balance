@@ -115,13 +115,6 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
                     n
             );
 
-            CUDA_CHECK(cudaMemcpyAsync,(
-                lcl->h_resultsA + blockOffset,
-                lcl->d_resultsA + blockOffset,
-                sizeof (uint) * nBlocks,
-                cudaMemcpyDeviceToHost,
-                lcl->streams(cellPtrOffset % N_STREAMS)));
-
             blockOffset += nBlocks;
         }
         else {
@@ -140,13 +133,22 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
         offsets[cellPtrOffset+1] = blockOffset;
     }
 
+    for (int i = 0; i < N_STREAMS; i++) {
+        CUDA_CHECK(cudaStreamSynchronize,(lcl->streams(i)));
+    }
+
+    CUDA_CHECK(cudaMemcpyAsync,(
+            lcl->h_resultsA,
+                    lcl->d_resultsA,
+                    sizeof (uint) * blockOffset,
+                    cudaMemcpyDeviceToHost,
+                    lcl->streams(0)));
+
+    CUDA_CHECK(cudaStreamSynchronize,(lcl->streams(0)));
+
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
         int begin = offsets[cellPtrOffset];
         int end = offsets[cellPtrOffset + 1];
-
-        if (cellPtrOffset < N_STREAMS) {
-            CUDA_CHECK(cudaStreamSynchronize,(lcl->streams(cellPtrOffset % N_STREAMS)));
-        }
 
         for (int i = begin; i < end; ++i) {
             out[cellPtrOffset] += lcl->h_resultsA[i];
