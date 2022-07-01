@@ -1089,43 +1089,115 @@ In terms of arithmetic intensity, we take a look at the code for the conditional
 	for(auto p= startPtr; p<endPtr; ++p) nLeft += *p < cut;
 \end{lstlisting}
 
-Where $p$ is a C-style array which stores the particles position and $nLeft$ gives the number of particles which are left of the $cut$. In terms of arithmetic intensity, we have 2 operations, a comparison and and addition. Since a single float is stored with 4 bytes, we have 0.5 operations per byte. 
+Where $p$ is a C-style array which stores the particles position and $nLeft$ gives the number of particles which are left of the $cut$. In terms of arithmetic intensity, we have the following operations
 
+\begin{enumerate}
+	\item Compare particle to cut
+	\item Add result to nLeft
+	\item Increment i
+	\item Compare i
+\end{enumerate}
+
+Which results in a total of 4 operations. Since a single float is stored using 4 bytes, we receive 1.0 operations per byte. Note that AVX or any SIMD instructions do not influence the arithmetic intensity, as the number of floating point operations per byte remains the same. We simply perform a set of operations concurrently. What is however influenced by AVX is the maximum number of GFLOPS which can be processed by the hardware. If we were to ignore AVX, the algorithm would clearly not be bound by memory, as its performance would lack behind the memory bandwidth. For this reason we do include AVX in all GFLOPS estimates.
 
 \begin{figure}[H]
 	\begin{center}
 		\begin{tikzpicture}
 			\begin{axis}[
-				height=7cm,width=10cm, 
+				xmode=log,
+				ymode=log,
+				log basis x={2},
+				log basis y={2},
+				height=8cm,width=10cm, 
 				xlabel={FLOPS / byte},
 				ylabel={GFLOPS},
-				xmin = 0.1, xmax = 10, ymin= 0.25, ymax=400,
-				legend style={at={(0.6,0.3)},anchor=west}]
-				
+				%x filter/.code=\pgfmathparse{#1 + 6.90775527898214},
+				xmin = 0.125, xmax = 64, ymin= 8, ymax=1024,
+				legend style={at={(1.05,0.6)},anchor=west}]
 		
-				\addplot+[name path = A, domain = 0.25:64, mark=none] {
+				\addplot+[name path = A, domain = 0.125:64, mark=none] {
 					3.8 * 8 * 2
 				};	
 				
-				\addlegendentryexpanded{3.8 GHZ \& AVX2 \& np=1};
+				\addlegendentryexpanded{3.8 GHZ \& np=1};
 				
-				\addplot+[name path = A, domain = 0.25:64, mark=none] {
+				\addplot+[name path = A, domain = 0.125:64, mark=none] {
 					3.8 * 8 * 2 * 4
 				};	
 				
+				\addlegendentryexpanded{3.8 GHZ \& np=4};
 				
-				\addlegendentryexpanded{3.8 GHZ \& AVX2 \& np=4};
+				\addplot+[name path = A, domain = 0.125:64, mark=none] {
+					3.8 * 8 * 2 * 8
+				};	
 				
-				\addplot+[name path = A, domain = 0.25:64, mark=none] {
+				\addlegendentryexpanded{3.8 GHZ \& np=8};
+				
+				\addplot+[name path = A, domain = 0.125:64, mark=none] {
 					68 * \x
 				};	
 				
 				\addlegendentryexpanded{68 GB/s};
 				
+				\draw[dashed] (axis cs:1,8) -- node[left]{Count Left} (axis cs:1,1024);
+				
 			\end{axis}
 		\end{tikzpicture}
 	\end{center}
 	\caption{Roofline Model for Piz Daint}
+	\label{fig:modelcpu}
+\end{figure}
+
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+			\begin{axis}[
+				xmode=log,
+				ymode=log,
+				log basis x={2},
+				log basis y={2},
+				height=8cm,width=10cm, 
+				xlabel={FLOPS / byte},
+				ylabel={GFLOPS},
+				%x filter/.code=\pgfmathparse{#1 + 6.90775527898214},
+				xmin = 0.125, xmax = 64, ymin= 8, ymax=1024,
+				legend style={at={(1.05,0.6)},anchor=west}]
+				
+				
+				\addplot+[name path = A, domain = 0.125:64, mark=none] {
+					4 * 8 * 2
+				};	
+				
+				\addlegendentryexpanded{4 GHZ \& np=1};
+				
+				\addplot+[name path = A, domain = 0.125:64, mark=none] {
+					4 * 8 * 2 * 4
+				};	
+				
+				
+				\addlegendentryexpanded{4 GHZ \& np=4};
+				
+				\addplot+[name path = A, domain = 0.125:64, mark=none] {
+					4 * 8 * 2 * 8
+				};	
+				
+				
+				\addlegendentryexpanded{4 GHZ \& np=8};
+				
+				\addplot+[name path = A, domain = 0.125:64, mark=none] {
+					170 * \x
+				};	
+				
+				\addlegendentryexpanded{170 GB/s};
+				
+				\draw[dashed] (axis cs:1,8) -- node[left]{Count Left} (axis cs:1,1024);
+			
+				
+			\end{axis}
+		\end{tikzpicture}
+	\end{center}
+	\caption{Roofline Model for Summit}
 	\label{fig:modelcpu}
 \end{figure}
 
@@ -1135,45 +1207,46 @@ Where $p$ is a C-style array which stores the particles position and $nLeft$ giv
 	\begin{center}
 		\begin{tikzpicture}
 			\begin{axis}[
-				height=7cm,width=10cm, 
+				xmode=log,
+				ymode=log,
+				log basis x={2},
+				log basis y={2},
+				height=8cm,width=10cm, 
 				xlabel={FLOPS / byte},
 				ylabel={GFLOPS},
-				xmin = 0.1, xmax = 10, ymin= 0.25, ymax=400,
-				legend style={at={(0.6,0.3)},anchor=west}]
+				%x filter/.code=\pgfmathparse{#1 + 6.90775527898214},
+				xmin = 0.125, xmax = 64, ymin= 8, ymax=1024,
+				legend style={at={(1.05,0.6)},anchor=west}]
 				
 				
-				\addplot+[name path = A, domain = 0.25:64, mark=none] {
-					4 * 8 * 2
+				\addplot+[name path = A, domain = 0.125:64, mark=none] {
+					3.4 * 8 * 2
 				};	
 				
-				\addlegendentryexpanded{4 GHZ \& AVX2 \& np=1};
+				\addlegendentryexpanded{3.4 GHZ \& np=1};
 				
-				\addplot+[name path = A, domain = 0.25:64, mark=none] {
-					4 * 8 * 2 * 4
+				\addplot+[name path = A, domain = 0.125:64, mark=none] {
+					3.4 * 8 * 2 * 4
 				};	
 				
 				
-				\addlegendentryexpanded{4 GHZ \& AVX2 \& np=4};
+				\addlegendentryexpanded{3.4 GHZ \& np=4};
 				
-				\addplot+[name path = A, domain = 0.25:64, mark=none] {
-					170 * \x
+				\addplot+[name path = A, domain = 0.125:64, mark=none] {
+					204.8 * \x
 				};	
 				
-				\addlegendentryexpanded{170 GB/s};
+				\addlegendentryexpanded{204.8 GB/s};
+				
+				\draw[dashed] (axis cs:1,8) -- node[left]{Count Left} (axis cs:1,1024);
+				
 				
 			\end{axis}
 		\end{tikzpicture}
 	\end{center}
-	\caption{Roofline Model for Piz Daint}
+	\caption{Roofline Model for Alps}
 	\label{fig:modelcpu}
 \end{figure}
-
-\def\N{1}
-\def\Bytes{12}
-\def\s{12}
-\def\d{8096}
-\def\p{32}
-In figure \ref{fig:modelcpu} We can 
 
 We consider a minimal C++ to make measurements which can prove or disprove our assumption. We use the -S flag along with the g++ compiler to generate assembly code from the c++ source code. In this case startPtr is a pointer which indicated the first address where we want to start out iteration process. Consequently endPtr is the memory of the last entry we want to access. For testing purposes all entries in the array are set to random values between 0 and 1, and cut is set to 0.5. 
 
@@ -1183,7 +1256,8 @@ for(auto p= startPtr; p<endPtr; ++p) nLeft += *p < cut;
 
 In a first test, we do enable AVX, but turn on $O3$. The generated assembly code looks as follows:
 
-\begin{lstlisting}
+\begin{figure}
+	\begin{lstlisting}
 .L18:
 	movups	(%rax), %xmm0
 	addq	$16, %rax
@@ -1191,49 +1265,28 @@ In a first test, we do enable AVX, but turn on $O3$. The generated assembly code
 	psubd	%xmm0, %xmm1
 	cmpq	%rdx, %rax
 	jne	.L18
-	movdqa	%xmm1, %xmm0
-	movq	%rcx, %rax
-	psrldq	$8, %xmm0
-	andq	$-4, %rax
-	paddd	%xmm0, %xmm1
-	leaq	(%rbx,%rax,4), %rbx
-	movdqa	%xmm1, %xmm0
-	psrldq	$4, %xmm0
-	paddd	%xmm0, %xmm1
-	movd	%xmm1, %r12d
-	cmpq	%rax, %rcx
-	je	.L15
-.L16:
-\end{lstlisting}
+
+	\end{lstlisting}
+\caption{Reduction Assembler Code without AVX}
+\label{fig:assembler}
+\end{figure}
 
 If we additionally set the compile flag -march=native we can enable AVX. This yields the following assembly instructions, where we can identify the vcmplpts and vsubd commands, which are both packaged AVX instructions. This means we have a code which can be compiled to leverage hardware in an optimal way.
 
+\begin{figure}
 \begin{lstlisting}
-	
 .L19:
 	vmovups	(%rax), %ymm3
 	addq	$32, %rax
 	vcmpltps	%ymm2, %ymm3, %ymm0
 	vpsubd	%ymm0, %ymm1, %ymm1
 	cmpq	%rdx, %rax
-	jne	.L19
-	vmovdqa	%xmm1, %xmm0
-	vextracti128	$0x1, %ymm1, %xmm1
-	vpaddd	%xmm1, %xmm0, %xmm1
-	vpsrldq	$8, %xmm1, %xmm0
-	vpaddd	%xmm0, %xmm1, %xmm1
-	vpsrldq	$4, %xmm1, %xmm0
-	movq	%rsi, %rax
-	vpaddd	%xmm0, %xmm1, %xmm1
-	andq	$-8, %rax
-	vmovd	%xmm1, %r12d
-	leaq	(%rbx,%rax,4), %rbx
-	cmpq	%rax, %rsi
-	je	.L27
-	vzeroupper
-.L17:	
+	jne	.L19	
 
 \end{lstlisting}
+\caption{Reduction Assembler Code without AVX}
+\label{fig:assembler-avx}
+\end{figure}
 
 The following test results were achieved from a Intel(R) Core(TM) i9-10885H CPU @ 2.40GHz
 processor. We perform the conditional reduction on  $2^{27}$ particles. The reduction takes 244420 microseconds. This means we have a throughput of $2^{27} / 10^{12} * 10^6 / 24420 = 0.00549 tflops$. This of course does not lie anywhere near the theoretical maximum, which even for a single processor ($np = 1$) is $2.4 * 8 * 2 * 1 / 1000 = 0.0384 tflops.$. This is a strong indication, that already with a single processor solutions, we are in the realm of bandwidth limited algorithms. This effect becomes even stronger when considering parallelism. 
@@ -1245,6 +1298,7 @@ processor. We perform the conditional reduction on  $2^{27}$ particles. The redu
 \begin{center}
 	\begin{equation}
 			log(d) \times \left ( p \times \frac{ s }{B_{C}} \right ) = t
+			\label{eq:cpu}
 	\end{equation}
 \end{center}
 
@@ -1299,6 +1353,11 @@ Since for most computer the Interconnect bandwidth is greatly smaller than the M
 
 \TODO{Add plots?}
 
+\newcommand\s{12}
+
+\newcommand\p{32}
+
+%\newcommand\d{1024}
 
 \normalfont
 \subsection{Piz Daint} 
@@ -1308,7 +1367,7 @@ Let us plugin the values from Figure \ref{fig:datapoints} into the corresponding
 \subsubsection{Naive implementation}
 The naive implementation yields the following speeds for the naive CPU  implementation:
 
-\pgfmathsetmacro\cpuPiz{ln(\d) / ln(2) * (\p * \s / 68)}
+\pgfmathsetmacro\cpuPiz{ln(1024) / ln(2) * (\p * \s / 68)}
 
 \begin{center}
 	\begin{equation}
@@ -1318,7 +1377,7 @@ The naive implementation yields the following speeds for the naive CPU  implemen
 
 
 And the corresponding GPU implementation:
-\pgfmathsetmacro\gpuPizN{ ln(\d) / ln(2) * (\p * \s / 732 + \s / 32 + \s / 68)}
+\pgfmathsetmacro\gpuPizN{ ln(1024) / ln(2) * (\p * \s / 732 + \s / 32 + \s / 68)}
 \begin{center}
 	\begin{equation}
 		log(\d) \times \left ( 32 \times \frac{12 GB}{732 GB/s} + \frac{12 GB}{32 GB/s}  + \frac{12 GB}{68 GB/s} \right )=  \gpuPizN s
@@ -1337,7 +1396,7 @@ This yields in a speed-up of:
 \subsubsection{GPU Tree Building}
 
 And the corresponding GPU implementation:
-\pgfmathsetmacro\gpuPizT{ ln(\d)/ln(2) * (\p * \s / 732)  + \s / 32 + \s / 68}
+\pgfmathsetmacro\gpuPizT{ ln(1024)/ln(2) * (\p * \s / 732)  + \s / 32 + \s / 68}
 And the corresponding GPU implementation:
 \begin{center}
 	\begin{equation}
@@ -1363,21 +1422,21 @@ Let us plugin the values from Figure \ref{fig:datapoints} into the corresponding
 \subsubsection{Naive implementation}
 The naive implementation yields the following speeds for the naive CPU  implementation:
 
-\pgfmathsetmacro\cpuSummit{ln(\d) / ln(2) * (\p * \s / (170 * 2)}
+\pgfmathsetmacro\cpuSummit{ln(1024) / ln(2) * (\p * \s / (170 * 2)}
 \begin{center}
 	\begin{equation}
-		log(\d) \times \left ( \p \times \frac{ \s GB }{170 GB/s \times 2} \right ) = \cpuSummit s
+		log(1024) \times \left ( \p \times \frac{ \s GB }{170 GB/s \times 2} \right ) = \cpuSummit s
 	\end{equation}
 \end{center}
 
 And the corresponding GPU implementation:
-\pgfmathsetmacro\gpuSummitN{ln(\d) / ln(2) * (
+\pgfmathsetmacro\gpuSummitN{ln(1024) / ln(2) * (
 		(\p * \s / (900 * 6) + 
 		\s / (50 * 6) + \s /(170 * 2)
 	)}
 \begin{center}
 	\begin{equation}
-		log(\d) \times \left ( \p \times \frac{\s GB}{900 GB/s \times 6} + \frac{\s GB}{50 GB/s \times 6}  + \frac{\s GB}{170 GB/s \ \times 2} \right )= \gpuSummitN s
+		log(1024) \times \left ( \p \times \frac{\s GB}{900 GB/s \times 6} + \frac{\s GB}{50 GB/s \times 6}  + \frac{\s GB}{170 GB/s \ \times 2} \right )= \gpuSummitN s
 	\end{equation}
 \end{center}
 
@@ -1393,7 +1452,7 @@ This yields in a speed-up of:
 \subsubsection{GPU Tree Building}
 
 And the corresponding GPU implementation:
-\pgfmathsetmacro\gpuSummitT{ln(\d) / ln(2) * 
+\pgfmathsetmacro\gpuSummitT{ln(1024) / ln(2) * 
 		(\p * \s / (900 * 6))
 	 +  \s / (50 * 6) + \s /(170 * 2)}
  
@@ -1417,7 +1476,7 @@ This yields in a speed-up of:
 
 \subsection{Eiger}
 
-\pgfmathsetmacro\cpuEiger{ln(\d) / ln(2) * (\p * \s / (204.8 * 2)}
+\pgfmathsetmacro\cpuEiger{ln(1024) / ln(2) * (\p * \s / (204.8 * 2)}
 
 \begin{center}
 	\begin{equation}
@@ -1474,10 +1533,10 @@ We conclude that the GPU version with GPU Tree building enabled yields the best 
 \begin{center}
 \begin{tikzpicture}
 \begin{axis}[xmin = -1, xmax = 13, ymin=-1, ymax=6]
-\addplot[domain = 0:12,blue] {ln(\d) / ln(2) * 
+\addplot[domain = 0:12,blue] {ln(1024) / ln(2) * 
 (\p * x / (900 * 6))
 +  x / (50 * 6) + x /(170 * 2)};
-\addplot[domain = 0:12,blue] {ln(\d * 16) / ln(2) * 
+\addplot[domain = 0:12,blue] {ln(1024 * 16) / ln(2) * 
 (\p * x / (900 * 6))
 +  x / (50 * 6) + x /(170 * 2)};
 \end{axis}
