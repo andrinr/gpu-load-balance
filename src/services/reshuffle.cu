@@ -19,8 +19,9 @@ static_assert(std::is_void<ServiceReshuffle::output>() || std::is_trivial<Servic
 #define LOG_MEM_BANKS 4
 #define CONFLICT_FREE_OFFSET(n) ((n) >> NUM_BANKS + (n) >> (2 * LOG_NUM_BANKS))
 
+// 2 data elements per thread
 template <unsigned int blockSize>
-__global__ void partition(volatile uint * s_idata, uint thid, int n) {
+__global__ void scan(volatile uint * s_idata, uint thid, int n) {
 
     for (int d = n>>1; d > 0; d >>= 1) { // build sum in place up the tree
         __syncthreads();
@@ -50,7 +51,7 @@ __global__ void partition(volatile uint * s_idata, uint thid, int n) {
 
 
 template <unsigned int blockSize>
-__global__ void reshuffle(int offsetLeq, int offsetG, float * g_data, float pivot) {
+__global__ void partition(int offsetLeq, int offsetG, float * g_idata, float * g_odata, float pivot) {
     extern __shared__ uint s_lqPivot[];
     extern __shared__ uint s_gPivot[];
     extern __shared__ float s_res[];
@@ -59,11 +60,11 @@ __global__ void reshuffle(int offsetLeq, int offsetG, float * g_data, float pivo
     unsigned int i = blockIdx.x*(blockSize * 2)+threadIdx.x;
     unsigned int gridSize = blockSize*2*gridDim.x;
 
-    uint f = g_data[i] < pivot
+    uint f = g_idata[2*i] < pivot
     s_lqPivot[2 * tid] = f;
     s_gPivot[2 * tid] = 1-f;
 
-    uint f = g_data[i + blockSize] < pivot
+    f = g_idata[2 * i + 1] < pivot
     s_lqPivot[2 * tid + 1] = f;
     s_gPivot[2 * tid + 1] = 1-f;
 
@@ -74,8 +75,11 @@ __global__ void reshuffle(int offsetLeq, int offsetG, float * g_data, float pivo
 
     __syncthreads();
 
-    g_data[s_lqPivot[tid] + offsetLeq] = g_idata[i];
-    g_data[s_lqPivot[tid] + offsetG] = g_idata[i];
+    g_odata[s_lqPivot[tid] + offsetLeq] = g_idata[2*i];
+    g_odata[s_lqPivot[tid] + offsetG] = g_idata[2*i];
+
+    g_odata[s_lqPivot[tid] + offsetLeq] = g_idata[i];
+    g_odata[s_lqPivot[tid] + offsetG] = g_idata[i];
 
 }
 

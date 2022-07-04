@@ -1116,10 +1116,10 @@ Which results in a total of 4 operations. Since a single float is stored using 4
 				legend style={at={(1.05,0.6)},anchor=west}]
 		
 				\addplot+[name path = A, domain = 0.125:64, mark=none] {
-					3.8 * 8 * 2
+					3.8 * 8 * 2 * 2
 				};	
 				
-				\addlegendentryexpanded{3.8 GHZ \& np=1};
+				\addlegendentryexpanded{3.8 GHZ \& np=2};
 				
 				\addplot+[name path = A, domain = 0.125:64, mark=none] {
 					3.8 * 8 * 2 * 4
@@ -1139,13 +1139,14 @@ Which results in a total of 4 operations. Since a single float is stored using 4
 				
 				\addlegendentryexpanded{68 GB/s};
 				
+	
 				\draw[dashed] (axis cs:1,8) -- node[left]{Count Left} (axis cs:1,1024);
 				
 			\end{axis}
 		\end{tikzpicture}
 	\end{center}
 	\caption{Roofline Model for Piz Daint}
-	\label{fig:modelcpu}
+	\label{fig:roofdaint}
 \end{figure}
 
 
@@ -1166,10 +1167,10 @@ Which results in a total of 4 operations. Since a single float is stored using 4
 				
 				
 				\addplot+[name path = A, domain = 0.125:64, mark=none] {
-					4 * 8 * 2
+					4 * 8 * 2 * 2
 				};	
 				
-				\addlegendentryexpanded{4 GHZ \& np=1};
+				\addlegendentryexpanded{4 GHZ \& np=2};
 				
 				\addplot+[name path = A, domain = 0.125:64, mark=none] {
 					4 * 8 * 2 * 4
@@ -1191,6 +1192,7 @@ Which results in a total of 4 operations. Since a single float is stored using 4
 				
 				\addlegendentryexpanded{170 GB/s};
 				
+				
 				\draw[dashed] (axis cs:1,8) -- node[left]{Count Left} (axis cs:1,1024);
 			
 				
@@ -1198,10 +1200,8 @@ Which results in a total of 4 operations. Since a single float is stored using 4
 		\end{tikzpicture}
 	\end{center}
 	\caption{Roofline Model for Summit}
-	\label{fig:modelcpu}
+	\label{fig:roofsummit}
 \end{figure}
-
-
 
 \begin{figure}[H]
 	\begin{center}
@@ -1220,17 +1220,22 @@ Which results in a total of 4 operations. Since a single float is stored using 4
 				
 				
 				\addplot+[name path = A, domain = 0.125:64, mark=none] {
-					3.4 * 8 * 2
+					3.4 * 8 * 2 * 2
 				};	
 				
-				\addlegendentryexpanded{3.4 GHZ \& np=1};
+				\addlegendentryexpanded{3.4 GHZ \& np=2};
 				
 				\addplot+[name path = A, domain = 0.125:64, mark=none] {
 					3.4 * 8 * 2 * 4
 				};	
 				
-				
 				\addlegendentryexpanded{3.4 GHZ \& np=4};
+				
+				\addplot+[name path = A, domain = 0.125:64, mark=none] {
+					3.4 * 8 * 2 * 8
+				};	
+				
+				\addlegendentryexpanded{3.4 GHZ \& np=8};
 				
 				\addplot+[name path = A, domain = 0.125:64, mark=none] {
 					204.8 * \x
@@ -1245,8 +1250,10 @@ Which results in a total of 4 operations. Since a single float is stored using 4
 		\end{tikzpicture}
 	\end{center}
 	\caption{Roofline Model for Alps}
-	\label{fig:modelcpu}
+	\label{fig:roofalps}
 \end{figure}
+
+As we can see in figure \ref{fig:roofdaint}, \ref{fig:roofsummit} and \ref{fig:roofalps} all three computer are memory bound, at least starting from a certain level of parallelization.
 
 We consider a minimal C++ to make measurements which can prove or disprove our assumption. We use the -S flag along with the g++ compiler to generate assembly code from the c++ source code. In this case startPtr is a pointer which indicated the first address where we want to start out iteration process. Consequently endPtr is the memory of the last entry we want to access. For testing purposes all entries in the array are set to random values between 0 and 1, and cut is set to 0.5. 
 
@@ -1289,9 +1296,11 @@ If we additionally set the compile flag -march=native we can enable AVX. This yi
 \end{figure}
 
 The following test results were achieved from a Intel(R) Core(TM) i9-10885H CPU @ 2.40GHz
-processor. We perform the conditional reduction on  $2^{27}$ particles. The reduction takes 244420 microseconds. This means we have a throughput of $2^{27} / 10^{12} * 10^6 / 24420 = 0.00549 tflops$. This of course does not lie anywhere near the theoretical maximum, which even for a single processor ($np = 1$) is $2.4 * 8 * 2 * 1 / 1000 = 0.0384 tflops.$. This is a strong indication, that already with a single processor solutions, we are in the realm of bandwidth limited algorithms. This effect becomes even stronger when considering parallelism. 
+processor. We perform the conditional reduction on  $2^{27}$ particles. The reduction takes 244420 microseconds. This means we have a throughput of $2^{27} / 10^{12} * 10^6 / 24420 = 0.00549 tflops$. This of course does not lie anywhere near the theoretical maximum, which even for a single processor ($np = 1$) is $2.4 * 8 * 2 * 1 / 1000 = 0.0384 tflops.$. This is a strong indication, that already with a single processor solutions, we are in the realm of bandwidth limited algorithms. This effect of course, would become even stronger when including parallelism.
 
+But regardless if the app is actually memory bound or not, fact is that the GPU outperforms the CPU by a factor of 10-20 $\times$, thus even if it were bound by the chip architecture, there is still an improvement to be expected when porting the code to the GPU. 
 
+In the section we will assume our algorithm is fully memory bound, meaning that speed ups from a GPU implementation will mainly come from higher memory bandwidths.
 
 \subsubsection{Naive implementation}
 
@@ -1776,35 +1785,15 @@ for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset){
 
 CUDA is programming language, allowing us to access the GPU, without having to translate algorithms and concepts into shaders, which are largely designed for graphics processing, as it was the case with Shader Programming in OpenGL. Even though compute sharers allowed for increased flexibility, it was still far from easy to port even the most simple codes from c++ to glsl. In this section will provide a quick introduction into the relevant CUDA concepts, which were applied while writing GPU code.
 
-\vspace{0.5cm}
+\subsubsection{Relevant CUDA Concepts}
 
-CUDA gives us the ability to launch kernels, which are written in C with some additional CUDA specific syntax. These kernel can be run from the CPU, commonly refereed to as the host, and will be executed on the GPU, also known as the device. The device and the host have a separate memory and as seen in section \ref{sec:gmm} the transfer $I_{CG}$ rates between the GPU and CPU are generally slower, under performing $I_{C}$ and $I_G$ speeds. Therefore one of key the challenges when rewriting CPU code to GPU code is to limit data transfers between the GPU and CPU as much as possible.
+CUDA gives us the ability to launch kernels, which are written in C with some additional CUDA specific syntax. These kernel can be run from the CPU, commonly refereed to as the host, and are then executed on the GPU, also known as the device. The device and the host have a separate memory and as seen in section \ref{sec:gmm} the transfer $I_{CG}$ rates between the GPU and CPU are generally slower, under performing $I_{C}$ and $I_G$ speeds. Therefore one of key the challenges when rewriting CPU code to GPU code is to limit data transfers between the GPU and CPU as much as possible.
 
-Each kernel is executed exactly once for every kernel and has private local memory, only accessible by the thread. Furthermore each kernel is part of a block, where a all threads within a block can be synchronized. However we can launch a kernel across multiple blocks, in this case the blocks cannot be synchronized on the device level, the only way to make sure all blocks have finished a task before executing a consecutive task, is to wait for the completion of the kernel, meaning the completion of all blocks associated with this kernel, on the host side. The number of blocks and the number of threads per block can be defined during runtime from the host. 
+Each kernel is executed exactly once for every thread and has private local memory, only accessible by the thread. Furthermore each kernel is part of a block, where a all threads within a block can be synchronized. We are also able to launch a kernel across multiple blocks, in this case however, the blocks cannot be synchronized on the device level. The only way to make sure all blocks have finished a task before executing a consecutive task, is to wait for the completion of the kernel, meaning the completion of all blocks associated with this kernel, on the host side. The number of blocks and the number of threads per block can be defined during runtime from the host. Since the GPU is limited in its computing and also memory capabilities, the number of blocks which are run in parallel are limited, therefore CUDA does not give us any guarantee, weather a set of blocks are run serially or in parallel.  
 
-Since the GPU is limited in its computing and also memory capabilities, the number of blocks which are run in parallel are limited, therefore CUDA does not give us any guarantee, weather a set of blocks are run serially or in parallel.  
+Each block has access to shared memory register, the capacity of this register can also be defined at runtime by the host, however its specific size depends on the actual hardware. Data in the shared memory exists only as long as the kernel exists and it cannot be accessed across different blocks. Kernel code can perform fast read and write operations on the shared memory. Additionally to the shared memory, there exists global memory. Global memory is persistent even after a block or a kernel has finished. This allows for memory to be copied from the host to device, and reused over a long time period and across different blocks. Global memory is however a lot slower than shared memory and its generally advised to copy data from global memory to shared memory before performing actual computations. After the computations have finished, the results can be written back to global memory.
 
-Each block has access to shared memory register, the capacity of this register can also be defined at runtime by the host, however its limited and its specific size depends on the actual hardware. Data in the shared memory exists only as long as the kernel exists and it cannot be accessed across different blocks. Kernel code can perform fast read and write operations on the shared memory. Additionally to the shared memory, there exists global memory. Global memory is persistent even after a block or a kernel has finished. This allows for memory to be copied from the host to device, and reused over a long time period and across different blocks. Global memory is however a lot slower than shared memory and its generally advised to copy data from global memory to shared memory before performing actual computations. After the computations have finished, the results can be written back to global memory.
-
-\begin{comment}
-\begin{figure}
-	\begin{center}
-		\begin{tikzpicture}
-\draw [fill=red!20](0.0,0.0) rectangle (10.0 cm, 7.0 cm);
-
-\foreach \i in {0,...,4}
-{
-	\foreach \j in {0,...,3}
-	{
-		 \draw [fill=red!20](\i * 0.25 cm, \j * 0.25 cm) 
-		 rectangle ((\i+1) * 0.25 cm, (\j+1) * 0.25 cm);	
-	};
-};
-		\end{tikzpicture}
-	\end{center}
-\end{figure}
-\end{comment}
-Another important concept are warps. Each warp consists of 32 threads and all thread within a warp are executed in parallel, given that there is no warp divergence. Because warps are executed in parallel, there is no need for synchronization. A warp divergence can occur, if we have control statements within a warp, where two or more threads from the same warp execute a different code. This leads to a decrease in performance and should be avoided whenever possible, this can be ensured by letting each consecutive group of 32 threads execute the same code. 
+Another important concept are warps. Each warp consists of 32 threads and all threads within a warp are executed in parallel, given that there is no warp divergence. Because warps are executed in parallel, there is no need for synchronization. A warp divergence can occur, if there is a control statements within a warp, where two or more threads from the same warp execute a different code. This leads to a decrease in performance and should be avoided whenever possible.
 
 \begin{figure}
 	\begin{center}
