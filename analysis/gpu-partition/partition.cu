@@ -42,7 +42,13 @@ __device__ void d_scan(volatile uint * s_idata, uint thid, int n) {
 
 
 template <unsigned int blockSize>
-__global__ void partition(int totalLeft, int totalRight, uint *  offsetLeq, uint *  offsetG, float * g_idata, float * g_odata, float pivot) {
+__global__ void partition(
+        int g_totalLeft,
+        int g_totalRight,
+        float * g_idata,
+        float * g_odata,
+        float pivot,
+        int nLeft) {
     extern __shared__ uint s_lqPivot[];
     extern __shared__ uint s_gPivot[];
     extern __shared__ float s_res[];
@@ -53,15 +59,6 @@ __global__ void partition(int totalLeft, int totalRight, uint *  offsetLeq, uint
     unsigned int tid = threadIdx.x;
     unsigned int i = blockIdx.x*(blockSize * 2)+threadIdx.x;
     unsigned int gridSize = blockSize*2*gridDim.x;
-
-    uint l_offsetLeq = offsetLeq[blockIdx.x];
-    uint l_offsetG = offsetG[blockIdx.x];
-
-    // Avoid another kernel
-    if (tid == 0) {
-        offsetLeq = atomicAdd(&totalLeft, l_offsetLeq);
-        offsetG = atomicAdd(&totalRight, l_offsetG);
-    }
 
     uint f1 = g_idata[2*i] < pivot
     s_lqPivot[2 * tid] = f;
@@ -78,72 +75,24 @@ __global__ void partition(int totalLeft, int totalRight, uint *  offsetLeq, uint
 
     __syncthreads();
 
-    // avoiding branch divergence
-    g_odata[
-            (s_lqPivot[2*tid] + offsetLeq) * f1 +
-            (s_gPivot[2*tid] + offsetG) * (1-f1)] = g_idata[2*i];
-
-    g_odata[
-            (s_lqPivot[2*tid+1] + offsetLeq) * f2 +
-            (s_gPivot[2*tid+1] + offsetG) * (1-f2)] = g_idata[2*i+1];
-
-}
-
-
-
-template <unsigned int blockSize>
-extern __device__ void warpReduce(volatile int *sdata, unsigned int tid) {
-    if (blockSize >= 64) sdata[tid] += sdata[tid + 32];
-    if (blockSize >= 32) sdata[tid] += sdata[tid + 16];
-    if (blockSize >= 16) sdata[tid] += sdata[tid + 8];
-    if (blockSize >= 8) sdata[tid] += sdata[tid + 4];
-    if (blockSize >= 4) sdata[tid] += sdata[tid + 2];
-    if (blockSize >= 2) sdata[tid] += sdata[tid + 1];
-}
-
-template <unsigned int blockSize, bool leq>
-extern __global__ void reduce(float *g_idata, uint *g_odata, float cut, int n) {
-    extern __shared__ int sdata[];
-
-    unsigned int tid = threadIdx.x;
-    unsigned int i = blockIdx.x*(blockSize) + threadIdx.x;
-    unsigned int gridSize = blockSize*gridDim.x;
-    sdata[tid] = 0;
-
-    if (leq){
-        sdata[2*tid] += (g_idata[2*i] <= cut);
-        sdata[2*tid+1] += (g_idata[2*i+1] <= cut);
-    } else {
-        sdata[2*tid] += (g_idata[2*i] > cut);
-        sdata[2*tid+1] += (g_idata[2*i+1] > cut);
+    // Avoid another kernel
+    if (tid == 0) {
+        offsetLeq = atomicAdd(&g_totalLeft, offLq);
+        offsetG = atomicAdd(&g_totalRight, offG);
     }
 
     __syncthreads();
 
-    if (blockSize >= 512) {
-        if (tid < 256) {
-            sdata[tid] += sdata[tid + 256];
-        }
-        __syncthreads();
-    }
-    if (blockSize >= 256) {
-        if (tid < 128) {
-            sdata[tid] += sdata[tid + 128];
-        } __syncthreads();
-    }
-    if (blockSize >= 128) {
-        if (tid < 64) {
-            sdata[tid] += sdata[tid + 64];
-        } __syncthreads();
-    }
-    if (tid < 32) {
-        warpReduce<blockSize>(sdata, tid);
-    }
-    if (tid == 0) {
-        g_odata[blockIdx.x] = sdata[0];
-    }
-}
+    // avoiding branch divergence
+    g_odata[
+            (s_lqPivot[2*tid] + offsetLeq) * f1 +
+            (s_gPivot[2*tid] + offsetG + nLeft) * (1-f1)] = g_idata[2*i];
 
+    g_odata[
+            (s_lqPivot[2*tid+1] + offsetLeq) * f2 +
+            (s_gPivot[2*tid+1] + offsetG + nLeft) * (1-f2)] = g_idata[2*i+1];
+
+}
 
 
 int main(int argc, char** argv) {
@@ -156,11 +105,13 @@ int main(int argc, char** argv) {
     cudaEventCreate(&stop);
 
     int n = 1 << 13;
+    int nLeft = 0;
     float cut = 0.5;
 
     float * pos = (float*)malloc(n);
     for (int i = 0; i < n; i++) {
-        pos[i] = i;
+        pos[i] = (float)(rand())/(float)(RAND_MAX);
+        nLeft += pos[i] < cut;
     }
 
     // Can increase speed by another factor of around two
@@ -174,64 +125,49 @@ int main(int argc, char** argv) {
     cudaMalloc(&d_odata, sizeof (float) * n);
     cudaMemcpy(d_idata, pos, sizeof (float ) * n, cudaMemcpyHostToDevice);
 
-    uint * countA = (uint*)malloc(nBlocks * sizeof(uint));
-    uint * countB = (uint*)malloc(nBlocks * sizeof(uint));
+    uint d_totalLeq;
+    uint d_totalG;
+
+    cudaMalloc(&d_totalLeq, sizeof(uint));
+    cudaMalloc(&d_totalG, sizeof(uint));
+
+    cudaMemset(&d_totalLeq, 0, sizeof(uint));
+    cudaMemset(&d_totalG, 0, sizeof(uint));
 
     cudaEventRecord(start);
-
-    reduce<N_THREADS, true>(
-            g_idata,
-            countA,
-            cut,
-            n,
-            nBlocks,
-            N_THREADS,
-            N_THREADS * sizeof (uint) * 2
-    );
-
-    reduce<N_THREADS, false>(
-            g_idata,
-            countB,
-            cut,
-            n,
-            nBlocks,
-            N_THREADS,
-            N_THREADS * sizeof (uint) * 2
-    );
 
     partition<nThreads><<<
             nBlocks,
             nThreads,
             nThreads * sizeof (uint) * 2 >>>(
-            countA,
-            countB,
-            g_idata,
-            g_odata,
-            cut;
+            d_totalLeq,
+            d_totalG,
+            d_idata,
+            d_odata,
+            cut,
+            nLeft>>>;
 
     cudaEventRecord(stop);
-    
+
     cudaEventSynchronize(stop);
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
 
     std::cout << milliseconds << "\n";
 
-    cudaMemcpy(h_sums, d_sums, sizeof (int ) * nBlocks, cudaMemcpyDeviceToHost);
+    cudaMemcpy(pos, g_odata, sizeof (float ) * n, cudaMemcpyDeviceToHost);
 
     int sum = 0;
 
-    for (int i = 0; i < nBlocks; ++i) {
-        printf("sum %i \n", sum);
-        sum += h_sums[i];
+    for (int i = 0; i < nLeft; ++i) {
+        static_assert(pos[i] < cut, "pos[i] < cut");
     }
 
     std::cout << "is " << sum << " should be " << n / 2 << " \n";
 
-    cudaFree(d_particles);
-    cudaFree(d_sums);
+    cudaFree(d_idata);
+    cudaFree(d_odata);
 
-    free(h_sums);
     free(pos);
 
     cudaDeviceReset();
