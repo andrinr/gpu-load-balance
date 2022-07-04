@@ -12,7 +12,7 @@
 
 // 2 data elements per thread
 template <unsigned int blockSize>
-__global__ void scan(volatile uint * s_idata, uint thid, int n) {
+__device__ void d_scan(volatile uint * s_idata, uint thid, int n) {
 
     for (int d = n>>1; d > 0; d >>= 1) { // build sum in place up the tree
         __syncthreads();
@@ -42,7 +42,7 @@ __global__ void scan(volatile uint * s_idata, uint thid, int n) {
 
 
 template <unsigned int blockSize>
-__global__ void partition(uint *  offsetLeq, uint *  offsetG, float * g_idata, float * g_odata, float pivot) {
+__global__ void partition(int totalLeft, int totalRight, uint *  offsetLeq, uint *  offsetG, float * g_idata, float * g_odata, float pivot) {
     extern __shared__ uint s_lqPivot[];
     extern __shared__ uint s_gPivot[];
     extern __shared__ float s_res[];
@@ -50,6 +50,12 @@ __global__ void partition(uint *  offsetLeq, uint *  offsetG, float * g_idata, f
     unsigned int tid = threadIdx.x;
     unsigned int i = blockIdx.x*(blockSize * 2)+threadIdx.x;
     unsigned int gridSize = blockSize*2*gridDim.x;
+
+    uint l_offsetLeq = offsetLeq[blockIdx.x];
+    uint l_offsetG = offsetG[blockIdx.x];
+
+    uint leftOffset = atomicAdd(&totalLeft, l_offsetLeq);
+    uint rightOffset = atomicAdd(&totalRight, l_offsetG);
 
     uint f1 = g_idata[2*i] < pivot
     s_lqPivot[2 * tid] = f;
@@ -66,21 +72,22 @@ __global__ void partition(uint *  offsetLeq, uint *  offsetG, float * g_idata, f
 
     __syncthreads();
 
-    uint l_offsetLeq = offsetLeq[blockIdx.x];
-    uint l_offsetG = offsetG[blockIdx.x];
     // avoiding branch divergence
     g_odata[
-            (s_lqPivot[2*tid] + l_offsetLeq) * f1 +
-            (s_gPivot[2*tid] + g_offsetG) * (1-f1)] = g_idata[2*i];
+            (s_lqPivot[2*tid] + leftOffset) * f1 +
+            (s_gPivot[2*tid] + righOffset) * (1-f1)] = g_idata[2*i];
 
     g_odata[
-            (s_lqPivot[2*tid+1] + l_offsetLeq) * f2 +
-            (s_gPivot[2*tid+1] + l_offsetG) * (1-f2)] = g_idata[2*i+1];
+            (s_lqPivot[2*tid+1] + leftOffset) * f2 +
+            (s_gPivot[2*tid+1] + righOffset) * (1-f2)] = g_idata[2*i+1];
 
 }
 
 
 int main(int argc, char** argv) {
+
+    const int N_THREADS = 512;
+    const int ELEMENTS_PER_THREAD = 32;
 
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
@@ -89,17 +96,15 @@ int main(int argc, char** argv) {
     int n = 1 << 13;
     float cut = 0.5;
 
-    float * pos = (float*)malloc(n, sizeof(float));
+    float * pos = (float*)malloc(n);
     for (int i = 0; i < n; i++) {
         pos[i] = i;
     }
 
-    const int nThreads = 256;
     // Can increase speed by another factor of around two
     int elementsPerThread = 32;
-    int nBlocks = (int) ceil((float) n / (nThreads * 2.0 * elementsPerThread));
+    int nBlocks = (int) ceil((float) n / (N_THREADS * 2.0));
     printf("nThreads %i, nBlocks %i, n %i \n", nThreads, nBlocks, n);
-
 
     float * d_idata;
     float * d_odata;
@@ -107,11 +112,12 @@ int main(int argc, char** argv) {
     cudaMalloc(&d_odata, sizeof (float) * n);
     cudaMemcpy(d_idata, pos, sizeof (float ) * n, cudaMemcpyHostToDevice);
 
-    const int nBlocks = (int) ceil((float) n / (N_THREADS *  ELEMENTS_PER_THREAD));
     uint * countA = (uint*)malloc(nBlocks * sizeof(uint));
     uint * countB = (uint*)malloc(nBlocks * sizeof(uint));
 
-    orbitUtils::conditionalReduce<N_THREADS, true>(
+    cudaEventRecord(start);
+
+    conditionalReduce<N_THREADS, true>(
             g_idata,
             countA,
             cut,
@@ -121,7 +127,7 @@ int main(int argc, char** argv) {
             N_THREADS * sizeof (uint) * 2
     );
 
-    orbitUtils::conditionalReduce<N_THREADS, false>(
+    conditionalReduce<N_THREADS, false>(
             g_idata,
             countB,
             cut,
@@ -131,11 +137,18 @@ int main(int argc, char** argv) {
             N_THREADS * sizeof (uint) * 2
     );
 
-    cudaEventRecord(start);
+
+
     partition<nThreads><<<
             nBlocks,
             nThreads,
-            nThreads * sizeof (int) >>>(d_particles, d_sums, cut, n);
+            nThreads * sizeof (uint) * 2 >>>(
+            countA,
+            countB,
+            g_idata,
+            g_odata,
+            cut;
+
     cudaEventRecord(stop);
 
     cudaEventSynchronize(stop);
