@@ -1851,6 +1851,15 @@ In order to resolve this, we have
 
 Another approach is to adapt the kernel, such that it directly iterates over all the particles. But this approach cannot be implemented easily and directly comes with other drawbacks. Since we need to know the total number of elements smaller than a value for each cell, we have to be very careful about where we store results, as there should not be any 
 
+\subsubsection{CUDA Partitioning}
+
+The partitioning is a subroutine, which is any implementation of a quick sort algorithm. We were thus able to implement the algorithm as described in the paper CUDA Quicksort. Furthermore we use the guide from NVIDIA GPU Gems for a efficient scan kernel. 
+
+\begin{enumerate}
+	\item 
+\end{enumerate}
+
+
 \begin{itemize}
 	\item As we increase the number of cells, we make more calls to the reduction kernel 
 	

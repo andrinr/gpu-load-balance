@@ -47,6 +47,9 @@ __global__ void partition(int totalLeft, int totalRight, uint *  offsetLeq, uint
     extern __shared__ uint s_gPivot[];
     extern __shared__ float s_res[];
 
+    extern __shared__ uint offsetLeq;
+    extern __shared__ uint offsetG;
+
     unsigned int tid = threadIdx.x;
     unsigned int i = blockIdx.x*(blockSize * 2)+threadIdx.x;
     unsigned int gridSize = blockSize*2*gridDim.x;
@@ -54,8 +57,11 @@ __global__ void partition(int totalLeft, int totalRight, uint *  offsetLeq, uint
     uint l_offsetLeq = offsetLeq[blockIdx.x];
     uint l_offsetG = offsetG[blockIdx.x];
 
-    uint leftOffset = atomicAdd(&totalLeft, l_offsetLeq);
-    uint rightOffset = atomicAdd(&totalRight, l_offsetG);
+    // Avoid another kernel
+    if (tid == 0) {
+        offsetLeq = atomicAdd(&totalLeft, l_offsetLeq);
+        offsetG = atomicAdd(&totalRight, l_offsetG);
+    }
 
     uint f1 = g_idata[2*i] < pivot
     s_lqPivot[2 * tid] = f;
@@ -74,14 +80,70 @@ __global__ void partition(int totalLeft, int totalRight, uint *  offsetLeq, uint
 
     // avoiding branch divergence
     g_odata[
-            (s_lqPivot[2*tid] + leftOffset) * f1 +
-            (s_gPivot[2*tid] + righOffset) * (1-f1)] = g_idata[2*i];
+            (s_lqPivot[2*tid] + offsetLeq) * f1 +
+            (s_gPivot[2*tid] + offsetG) * (1-f1)] = g_idata[2*i];
 
     g_odata[
-            (s_lqPivot[2*tid+1] + leftOffset) * f2 +
-            (s_gPivot[2*tid+1] + righOffset) * (1-f2)] = g_idata[2*i+1];
+            (s_lqPivot[2*tid+1] + offsetLeq) * f2 +
+            (s_gPivot[2*tid+1] + offsetG) * (1-f2)] = g_idata[2*i+1];
 
 }
+
+
+
+template <unsigned int blockSize>
+extern __device__ void warpReduce(volatile int *sdata, unsigned int tid) {
+    if (blockSize >= 64) sdata[tid] += sdata[tid + 32];
+    if (blockSize >= 32) sdata[tid] += sdata[tid + 16];
+    if (blockSize >= 16) sdata[tid] += sdata[tid + 8];
+    if (blockSize >= 8) sdata[tid] += sdata[tid + 4];
+    if (blockSize >= 4) sdata[tid] += sdata[tid + 2];
+    if (blockSize >= 2) sdata[tid] += sdata[tid + 1];
+}
+
+template <unsigned int blockSize, bool leq>
+extern __global__ void reduce(float *g_idata, uint *g_odata, float cut, int n) {
+    extern __shared__ int sdata[];
+
+    unsigned int tid = threadIdx.x;
+    unsigned int i = blockIdx.x*(blockSize) + threadIdx.x;
+    unsigned int gridSize = blockSize*gridDim.x;
+    sdata[tid] = 0;
+
+    if (leq){
+        sdata[2*tid] += (g_idata[2*i] <= cut);
+        sdata[2*tid+1] += (g_idata[2*i+1] <= cut);
+    } else {
+        sdata[2*tid] += (g_idata[2*i] > cut);
+        sdata[2*tid+1] += (g_idata[2*i+1] > cut);
+    }
+
+    __syncthreads();
+
+    if (blockSize >= 512) {
+        if (tid < 256) {
+            sdata[tid] += sdata[tid + 256];
+        }
+        __syncthreads();
+    }
+    if (blockSize >= 256) {
+        if (tid < 128) {
+            sdata[tid] += sdata[tid + 128];
+        } __syncthreads();
+    }
+    if (blockSize >= 128) {
+        if (tid < 64) {
+            sdata[tid] += sdata[tid + 64];
+        } __syncthreads();
+    }
+    if (tid < 32) {
+        warpReduce<blockSize>(sdata, tid);
+    }
+    if (tid == 0) {
+        g_odata[blockIdx.x] = sdata[0];
+    }
+}
+
 
 
 int main(int argc, char** argv) {
@@ -117,7 +179,7 @@ int main(int argc, char** argv) {
 
     cudaEventRecord(start);
 
-    conditionalReduce<N_THREADS, true>(
+    reduce<N_THREADS, true>(
             g_idata,
             countA,
             cut,
@@ -127,7 +189,7 @@ int main(int argc, char** argv) {
             N_THREADS * sizeof (uint) * 2
     );
 
-    conditionalReduce<N_THREADS, false>(
+    reduce<N_THREADS, false>(
             g_idata,
             countB,
             cut,
@@ -136,8 +198,6 @@ int main(int argc, char** argv) {
             N_THREADS,
             N_THREADS * sizeof (uint) * 2
     );
-
-
 
     partition<nThreads><<<
             nBlocks,
@@ -150,7 +210,7 @@ int main(int argc, char** argv) {
             cut;
 
     cudaEventRecord(stop);
-
+    
     cudaEventSynchronize(stop);
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
@@ -176,114 +236,3 @@ int main(int argc, char** argv) {
 
     cudaDeviceReset();
 }
-
-int ServiceReshuffle::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
-
-    auto lcl = pst->lcl;
-    auto in  = static_cast<input *>(vin);
-    auto out = static_cast<output *>(vout);
-    const int nCells = nIn / sizeof(input);
-    assert(nOut / sizeof(output) >= nCells);
-
-    //int bytes = nCounts * sizeof (uint);
-    // https://developer.nvidia.com/blog/how-overlap-data-transfers-cuda-cc/
-    int blockOffset = 0;
-    std::array<int, MAX_CELLS> offsets;
-    offsets[0] = 0;
-
-    int countLeq[nCells];
-    int countG[nCells];
-
-    for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
-        out[cellPtrOffset] = 0;
-    }
-
-    for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
-        auto cell = static_cast<Cell>(*(in + cellPtrOffset));
-
-        int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
-        int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
-        int n = endInd - beginInd;
-        float cut = cell.getCut();
-
-        const int nBlocks = (int) ceil((float) n / (N_THREADS *  ELEMENTS_PER_THREAD));
-
-        orbitUtils::conditionalReduce<N_THREADS, true>(
-                lcl->d_particles + beginInd,
-                lcl->d_resultsA + blockOffset,
-                cut,
-                n,
-                nBlocks,
-                N_THREADS,
-                N_THREADS * sizeof (uint),
-                lcl->stream
-        );
-
-        orbitUtils::conditionalReduce<N_THREADS, false>(
-                lcl->d_particles + beginInd,
-                lcl->d_resultsB + blockOffset,
-                cut,
-                n,
-                nBlocks,
-                N_THREADS,
-                N_THREADS * sizeof (uint),
-                lcl->stream
-        );
-
-        offsets[cellPtrOffset+1] = blockOffset;
-    }
-
-    CUDA_CHECK(cudaMemcpyAsync,(
-            lcl->h_resultsA,
-                    lcl->d_resultsA,
-                    sizeof (uint) * blockOffset,
-                    cudaMemcpyDeviceToHost,
-                    lcl->stream));
-
-    CUDA_CHECK(cudaMemcpyAsync,(
-            lcl->h_resultsB,
-                    lcl->d_resultsB,
-                    sizeof (uint) * blockOffset,
-                    cudaMemcpyDeviceToHost,
-                    lcl->stream));
-
-    CUDA_CHECK(cudaStreamSynchronize,(lcl->stream));
-
-    int totalLeqOffset = 0;
-    int totalGOffset = 0;
-    for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
-        int begin = offsets[cellPtrOffset];
-        int end = offsets[cellPtrOffset + 1];
-
-        for (int i = begin; i < end; ++i) {
-            totalLeqOffset += lcl->h_resultsA[i];
-            totalGOffset += lcl->h_resultsB[i];
-        }
-
-        const int nBlocks = (int) ceil((float) n / (N_THREADS *  ELEMENTS_PER_THREAD));
-
-        auto cell = static_cast<Cell>(*(in + cellPtrOffset));
-
-        int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
-        int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
-
-        // todo: pay attention to axis
-        pivotPrefixSum<N_THREADS>
-        <<<nBlocks,
-                N_THREADS,
-                N_THREADS * sizeof (uint) * 2 + N_THREADS * sizeof (float),
-                lcl->stream>>>(
-                totalLeqOffset,
-                        totalGOffset,
-                        lcl->d_particles + beginInd,
-                        cell.getCut()
-        );
-    }
-
-    CUDA_CHECK(cudaStreamSynchronize,(lcl->stream));
-    return 0;
-}
-
-
-
-
