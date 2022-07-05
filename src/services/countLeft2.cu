@@ -60,10 +60,10 @@ __device__ void warpReduce(volatile int *sdata, unsigned int tid, int nCells) {
 template <unsigned int blockSize, unsigned int numCells>
 __device__ void reduce(
         float * g_particles,
-        uint * g_cell,
-        uint * g_axis,
+        unsigned int* g_cell,
+        unsigned int* g_axis,
         float * g_cuts,
-        uint * g_counts,
+        unsigned int* g_counts,
         int n,
         int nCells)
 {
@@ -186,7 +186,7 @@ extern __device__ void warpReduce(volatile int *sdata, unsigned int tid) {
 }
 
 template <unsigned int blockSize, bool leq>
-extern __global__ void reduce(float *g_idata, uint *g_odata, float cut, int n) {
+extern __global__ void reduce(float *g_idata, unsigned int*g_odata, float cut, int n) {
     extern __shared__ int sdata[];
 
     unsigned int tid = threadIdx.x;
@@ -239,7 +239,7 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
 
     //int bytes = nCounts * sizeof (uint);
     // https://developer.nvidia.com/blog/how-overlap-data-transfers-cuda-cc/
-    uint blockOffset = 0;
+    unsigned intblockOffset = 0;
     std::array<uint, MAX_CELLS> offsets;
     offsets[0] = 0;
 

@@ -11,7 +11,7 @@ extern __device__ void warpReduce(volatile int *sdata, unsigned int tid) {
 }
 
 template <unsigned int blockSize, bool leq>
-extern __global__ void reduce(float *g_idata, uint *g_odata, float cut, int n) {
+extern __global__ void reduce(float *g_idata, unsigned int*g_odata, float cut, int n) {
     extern __shared__ int sdata[];
 
     unsigned int tid = threadIdx.x;
@@ -56,7 +56,7 @@ extern __global__ void reduce(float *g_idata, uint *g_odata, float cut, int n) {
 template <unsigned int blockSize, bool leq>
 void conditionalReduce(
         float *g_idata,
-        uint *g_odata,
+        unsigned int*g_odata,
         float cut,
         int n,
         int nBlocks,

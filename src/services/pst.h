@@ -12,10 +12,10 @@ public:
     blitz::Array<uint, 2> cellToRangeMap;
     blitz::Array<cudaStream_t , 1> streams;
     float * d_particles;
-    uint * d_resultsA;
-    uint * h_resultsA;
-    uint * d_resultsB;
-    uint * h_resultsB;
+    unsigned int* d_resultsA;
+    unsigned int* h_resultsA;
+    unsigned int* d_resultsB;
+    unsigned int* h_resultsB;
     int nThreads;
     int nBlocks;
 

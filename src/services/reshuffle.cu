@@ -21,7 +21,7 @@ static_assert(std::is_void<ServiceReshuffle::output>() || std::is_trivial<Servic
 
 // 2 data elements per thread
 template <unsigned int blockSize>
-__global__ void scan(volatile uint * s_idata, uint thid, int n) {
+__global__ void scan(volatile unsigned int* s_idata, unsigned intthid, int n) {
 
     for (int d = n>>1; d > 0; d >>= 1) { // build sum in place up the tree
         __syncthreads();
@@ -52,15 +52,15 @@ __global__ void scan(volatile uint * s_idata, uint thid, int n) {
 
 template <unsigned int blockSize>
 __global__ void partition(int offsetLeq, int offsetG, float * g_idata, float * g_odata, float pivot) {
-    extern __shared__ uint s_lqPivot[];
-    extern __shared__ uint s_gPivot[];
+    extern __shared__ unsigned ints_lqPivot[];
+    extern __shared__ unsigned ints_gPivot[];
     extern __shared__ float s_res[];
 
     unsigned int tid = threadIdx.x;
     unsigned int i = blockIdx.x*(blockSize * 2)+threadIdx.x;
     unsigned int gridSize = blockSize*2*gridDim.x;
 
-    uint f = g_idata[2*i] < pivot
+    unsigned intf = g_idata[2*i] < pivot
     s_lqPivot[2 * tid] = f;
     s_gPivot[2 * tid] = 1-f;
 
@@ -70,8 +70,8 @@ __global__ void partition(int offsetLeq, int offsetG, float * g_idata, float * g
 
     __syncthreads();
 
-    uint offLq = scan(s_lqPivot, tid);
-    uint offG = scan(s_gPivot, tid);
+    unsigned intoffLq = scan(s_lqPivot, tid);
+    unsigned intoffG = scan(s_gPivot, tid);
 
     __syncthreads();
 

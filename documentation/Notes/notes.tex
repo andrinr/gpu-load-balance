@@ -1785,6 +1785,7 @@ for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset){
 
 CUDA is programming language, allowing us to access the GPU, without having to translate algorithms and concepts into shaders, which are largely designed for graphics processing, as it was the case with Shader Programming in OpenGL. Even though compute sharers allowed for increased flexibility, it was still far from easy to port even the most simple codes from c++ to glsl. In this section will provide a quick introduction into the relevant CUDA concepts, which were applied while writing GPU code.
 
+Note that we are aware of the Thrust library an its implementation of partition, reductions and binary search. But the library does not allow us to manage the memory by ourselves, therefore we are forced to re-implement some concepts which are already introduced by thrust.
 \subsubsection{Relevant CUDA Concepts}
 
 CUDA gives us the ability to launch kernels, which are written in C with some additional CUDA specific syntax. These kernel can be run from the CPU, commonly refereed to as the host, and are then executed on the GPU, also known as the device. The device and the host have a separate memory and as seen in section \ref{sec:gmm} the transfer $I_{CG}$ rates between the GPU and CPU are generally slower, under performing $I_{C}$ and $I_G$ speeds. Therefore one of key the challenges when rewriting CPU code to GPU code is to limit data transfers between the GPU and CPU as much as possible.
@@ -1821,8 +1822,7 @@ Our primary focus for optimization is the binary cut algorithm, more specificall
 \subsubsection{CUDA Reduction}
 We have described a CPU implementation of the countLeftService. In this section we explain how we can port this problem to the GPU. In essence we can use a general reduction as a basis version, and implement it to specifically fit our needs, which in our case is summing up elements which fulfill a certain condition. The condition being smaller than a given value.
 
-Optimized reductions in CUDA are well documented and explained by the NVIDIA developer team. We make use of a reduction introduced by \TODO{Reference} and adapt it slightly to fit our needs.
-
+Optimized reductions in CUDA are well documented and explained by the NVIDIA developer team. We make use of a reduction introduced by \TODO{Reference} and adapt it slightly to fit our needs. 
 In a reduction we decompose the problem into smaller subproblem which can be run independently. In our case we decompose the array into smaller arrays, for each of which we apply the conditional summation. 
 
 In the context of CUDA, we apply a decomposition and run each subproblem on a single CUDA block, this allows us to leverage fast shared memory register, keep the number of operations per thread in a reasonable range and because the subproblems can be solved independently from each other, blocks can be executed in parallel or also serially without any conflicts or synchronization. In fact, since the number of blocks which can be run concurrently on the GPU is limited, some blocks will be forced to run serially with a problem size as large as ours. \TODO{Explain cuda blocks, threads, shared memory?} After running the conditional summation on each slice of the array, we end up with a an array of results. These results can then be summed together on CPU using a simple iterator, or we can invoke another sum reduction kernel for this task.

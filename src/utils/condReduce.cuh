@@ -2,7 +2,7 @@
 template <unsigned int blockSize, bool leq>
 void conditionalReduce(
         float *g_idata,
-        uint *g_odata,
+        unsigned int*g_odata,
         float cut,
         int n,
         int nBlocks,

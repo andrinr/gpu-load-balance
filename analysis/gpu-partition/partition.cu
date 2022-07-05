@@ -1,20 +1,29 @@
 #include <blitz/array.h>
 #include "../../src/utils/condReduce.cuh"
-
+#include "../../src/constants.h"
+#include <thrust/partition.h>
 // https://www.cse.chalmers.se/~tsigas/papers/GPU-Quicksort-jea.pdf
 // https://developer.nvidia.com/gpugems/gpugems3/part-vi-gpu-computing/chapter-39-parallel-prefix-sum-scan-cuda
 // https://github.com/NVIDIA/cuda-samples/tree/master/Samples/2_Concepts_and_Techniques/scan
 // https://onlinelibrary.wiley.com/doi/epdf/10.1002/cpe.3611
 
-#define SHARED_MEMORY_BANKS 32
-#define LOG_MEM_BANKS 4
-#define CONFLICT_FREE_OFFSET(n) ((n) >> NUM_BANKS + (n) >> (2 * LOG_NUM_BANKS))
-
+#define N_THREADS 256
+#define SHARED_MEMORY_BANKS 8
+#define LOG_MEM_BANKS 3
+#define CONFLICT_FREE_OFFSET(n) ((n) >> SHARED_MEMORY_BANKS + (n) >> (2 * LOG_MEM_BANKS))
 // 2 data elements per thread
 template <unsigned int blockSize>
-__device__ void d_scan(volatile uint * s_idata, uint thid, int n) {
+__device__ void scan(volatile unsigned int * s_idata, unsigned int thid) {
 
-    for (int d = n>>1; d > 0; d >>= 1) { // build sum in place up the tree
+    int ai = thid;
+    int bi = thid + (blockSize);
+    int bankOffsetA = CONFLICT_FREE_OFFSET(ai);
+    int bankOffsetB = CONFLICT_FREE_OFFSET(bi);
+    temp[ai + bankOffsetA] = g_idata[ai];
+    temp[bi + bankOffsetB] = g_idata[bi];
+
+    int offset = 1;
+    for (int d = blockSize>>1; d > 0; d >>= 1) { // build sum in place up the tree
         __syncthreads();
         if (thid < d) {
             int ai = offset*(2*thid+1)-1;
@@ -24,10 +33,10 @@ __device__ void d_scan(volatile uint * s_idata, uint thid, int n) {
         offset *= 2;
     }
     if (thid==0) {
-        s_idata[n - 1 + CONFLICT_FREE_OFFSET(n - 1)] = 0;
+        s_idata[blockSize - 1 + CONFLICT_FREE_OFFSET(blockSize * 2 - 1)] = 0;
     }
 
-    for (int d = 1; d < n; d *= 2) {// traverse down tree & build scan
+    for (int d = 1; d < blockSize; d *= 2) {// traverse down tree & build scan
         offset >>= 1;
         __syncthreads();
         if (thid < d) {
@@ -40,45 +49,44 @@ __device__ void d_scan(volatile uint * s_idata, uint thid, int n) {
     }  __syncthreads();
 }
 
-
 template <unsigned int blockSize>
 __global__ void partition(
-        int g_totalLeft,
-        int g_totalRight,
+        unsigned int * g_totalLeft,
+        unsigned int * g_totalRight,
         float * g_idata,
         float * g_odata,
         float pivot,
-        int nLeft) {
-    extern __shared__ uint s_lqPivot[];
-    extern __shared__ uint s_gPivot[];
+        unsigned int nLeft) {
+    extern __shared__ unsigned int s_lqPivot[];
+    extern __shared__ unsigned int s_gPivot[];
     extern __shared__ float s_res[];
 
-    extern __shared__ uint offsetLeq;
-    extern __shared__ uint offsetG;
+    extern __shared__ unsigned int offsetLeq;
+    extern __shared__ unsigned int offsetG;
 
     unsigned int tid = threadIdx.x;
     unsigned int i = blockIdx.x*(blockSize * 2)+threadIdx.x;
-    unsigned int gridSize = blockSize*2*gridDim.x;
+    //unsigned int gridSize = blockSize*2*gridDim.x;
 
-    uint f1 = g_idata[2*i] < pivot
-    s_lqPivot[2 * tid] = f;
-    s_gPivot[2 * tid] = 1-f;
+    unsigned int f1 = g_idata[2*i] < pivot;
+    s_lqPivot[2 * tid] = f1;
+    s_gPivot[2 * tid] = 1-f1;
 
-    uint f2 = g_idata[2 * i + 1] < pivot
-    s_lqPivot[2 * tid + 1] = f;
-    s_gPivot[2 * tid + 1] = 1-f;
+    unsigned int f2 = g_idata[2 * i + 1] < pivot;
+    s_lqPivot[2 * tid + 1] = f2;
+    s_gPivot[2 * tid + 1] = 1-f2;
 
     __syncthreads();
 
-    uint offLq = scan(s_lqPivot, tid);
-    uint offG = scan(s_gPivot, tid);
+    scan<blockSize>(s_lqPivot, tid);
+    scan<blockSize>(s_gPivot, tid);
 
     __syncthreads();
 
     // Avoid another kernel
     if (tid == 0) {
-        offsetLeq = atomicAdd(&g_totalLeft, offLq);
-        offsetG = atomicAdd(&g_totalRight, offG);
+        offsetLeq = atomicAdd(g_totalLeft, s_lqPivot[blockSize * 2 - 1]);
+        offsetG = atomicAdd(g_totalRight, s_gPivot[blockSize * 2 - 1]);
     }
 
     __syncthreads();
@@ -97,15 +105,12 @@ __global__ void partition(
 
 int main(int argc, char** argv) {
 
-    const int N_THREADS = 512;
-    const int ELEMENTS_PER_THREAD = 32;
-
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
 
     int n = 1 << 13;
-    int nLeft = 0;
+    unsigned int nLeft = 0;
     float cut = 0.5;
 
     float * pos = (float*)malloc(n);
@@ -114,19 +119,16 @@ int main(int argc, char** argv) {
         nLeft += pos[i] < cut;
     }
 
-    // Can increase speed by another factor of around two
-    int elementsPerThread = 32;
     int nBlocks = (int) ceil((float) n / (N_THREADS * 2.0));
-    printf("nThreads %i, nBlocks %i, n %i \n", nThreads, nBlocks, n);
 
     float * d_idata;
     float * d_odata;
-    cudaMalloc(&d_idata, sizeof (float) * n);
-    cudaMalloc(&d_odata, sizeof (float) * n);
+    CUDA_CHECK(cudaMalloc, (&d_idata, sizeof (float) * n));
+    CUDA_CHECK(cudaMalloc, (&d_odata, sizeof (float) * n));
     cudaMemcpy(d_idata, pos, sizeof (float ) * n, cudaMemcpyHostToDevice);
 
-    uint d_totalLeq;
-    uint d_totalG;
+    unsigned int * d_totalLeq;
+    unsigned int * d_totalG;
 
     cudaMalloc(&d_totalLeq, sizeof(uint));
     cudaMalloc(&d_totalG, sizeof(uint));
@@ -136,16 +138,16 @@ int main(int argc, char** argv) {
 
     cudaEventRecord(start);
 
-    partition<nThreads><<<
+    partition<N_THREADS><<<
             nBlocks,
-            nThreads,
-            nThreads * sizeof (uint) * 2 >>>(
+            N_THREADS,
+            N_THREADS * sizeof (uint) * 2 >>>(
             d_totalLeq,
             d_totalG,
             d_idata,
             d_odata,
             cut,
-            nLeft>>>;
+            nLeft);
 
     cudaEventRecord(stop);
 
@@ -155,12 +157,14 @@ int main(int argc, char** argv) {
 
     std::cout << milliseconds << "\n";
 
-    cudaMemcpy(pos, g_odata, sizeof (float ) * n, cudaMemcpyDeviceToHost);
+    cudaMemcpy(pos, d_odata, sizeof (float ) * n, cudaMemcpyDeviceToHost);
 
     int sum = 0;
 
     for (int i = 0; i < nLeft; ++i) {
-        static_assert(pos[i] < cut, "pos[i] < cut");
+        if (pos[i] > cut) {
+            throw std::runtime_error("Error");
+        }
     }
 
     std::cout << "is " << sum << " should be " << n / 2 << " \n";
