@@ -2,6 +2,8 @@
 #include <blitz/array.h>
 #include <limits>
 #include "../constants.h"
+#include "../data/tipsy.h"
+
 // Make sure that the communication structure is "trivial" so that it
 // can be moved around with "memcpy" which is required for MDL.
 static_assert(std::is_void<ServiceInit::input>()  || std::is_trivial<ServiceInit::input>());
@@ -38,6 +40,7 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     // x, y, z, cellId, tmp
     int k = 3;
 
+
     auto particles = blitz::Array<float, 2>(in.nParticles, k, storage);
 
     float * particlesAxisData = (float *)calloc(N, sizeof(float ));
@@ -49,6 +52,9 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
             blitz::deleteDataWhenDone);
     auto cellToRangeMap = blitz::Array<uint, 2>(MAX_CELLS, 2);
     float * d_particles;
+
+    //auto tipsy = TipsyIO("../data/tipsy/b0-final.std");
+    //tipsy.load()
 
     srand(pst->idSelf);
     int c = 0;
@@ -65,15 +71,10 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     cellToRangeMap(0, 0) = 0;
     cellToRangeMap(0, 1) = in.nParticles;
 
-    int nCounts = ((float) in.nParticles / (N_THREADS * ELEMENTS_PER_THREAD) + MAX_CELLS);
-    unsigned int* h_resultsA = (uint*)calloc(nCounts, sizeof(uint));
-    CUDA_CHECK(cudaMallocHost, ((void**)&h_resultsA, nCounts * sizeof (uint)));
+    unsigned int* h_results = (uint*)calloc(MAX_CELLS, sizeof(uint));
+    CUDA_CHECK(cudaMallocHost, ((void**)&h_results, MAX_CELLS * sizeof (uint)));
 
-    unsigned int* h_resultsB = (uint*)calloc(nCounts, sizeof(uint));
-    CUDA_CHECK(cudaMallocHost, ((void**)&h_resultsB, nCounts * sizeof (uint)));
-
-    lcl->h_resultsA = h_resultsA;
-    lcl->h_resultsB = h_resultsB;
+    lcl->h_results = h_results;
     lcl->particles.reference(particles);
     lcl->particlesAxis.reference(particlesAxis);
     lcl->d_particles = d_particles;

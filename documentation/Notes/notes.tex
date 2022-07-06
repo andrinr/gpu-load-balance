@@ -431,50 +431,19 @@ Let not apply the algorithm to our running example:
 
 \TODO{Insert step by step algorithm here}
 
-\subsection{Binary Search}
+\subsection{Root finding}
 
 
 %Finding the median of a large particle array is an essential step for ORB. We will thus explore different algorithms alongside their advantages and disadvantages for our specific use case.
 %Note that there exists approximation algorithms for example the median of medians algorithms. But the correctness guarantee of the median lying between 30\% and 70\% is not good enough in our case. If we were to implement such an approximation algorithms we would run into similar issues as described in \ref{sec:balancing}. But in this case the unequal memory balancing do not have the advantage of equal workload balancing, which in turn will worsen the performance and the maximum number of workable particles. Thus we will only consider approximation algorithms, if their approximation to the ideal values are very exact and can be determined.
 
- The binary search algorithm takes an array of particles, an axis, a left and right boundary as well as a percentage $r$ of particles which should be on the left side to the determined cut. Its goal is to return a position, such that the particles on the left side of the cut are equal to the percentage input parameter multiplied by all particles.
- 
- Due to time constraints we will not investigate the use of approximate algorithms and leave this open to further work.
+ The $cut$ algorithm takes an array of particles, an axis, a left and right boundary as well as a percentage $r$ of particles which should be on the left side to the determined cut. Its goal is to return a position, such that the particles on the left side of the cut are equal to the percentage input parameter multiplied by all particles. The problem is equivalent to a root finding procedure. Since we are operating on binary numbers with a limited precision, the bisection method is guaranteed to determine after a certain number of steps. 
+ Other approximate algorithms can converge quicker than the bisection method, however they are not guaranteed to converge.
 
-\subsubsection{Basic Binary Search}
+\subsubsection{Bisection Method}
 
 The first step is to make an estimation for a cut. In our case we simply assume it to be the exact middle of the domain boundaries. In principle the binary cut counts the number of particles on the left side of the of an initial cut. In case the particles are less than half of all particles, it clear that the cut was too far to the left, and the new right boundary of the domain is the cut. In case the particles are more than half, we set the the left boundary as the cut. This is repeated until we find a precise cut position.
 
-
-
-
-\begin{algorithm}[H]
-	\caption{Basic Binary search}\label{algo:cut}
-	\begin{algorithmic}[1]
-		\Procedure{cut}{$x, N_j, left, right, axis, percentage$}
-		\State $nLeft = 0$
-		\newline
-		\While{$abs(nLeft - N_j * percentage) > 0 $}
-		\State $cut = (right + left ) / 2 $
-		\State $nLeft\gets sum(x_{:,axis} < split)$
-		\newline
-		\If{$nLeft <= N_j * percentage$}
-		\State $left = cut$
-		\Else 
-		\State $right = cut$
-		\EndIf
-		\newline
-		\EndWhile\label{euclidendwhile}
-		\State \Return $cut$
-		\EndProcedure
-	\end{algorithmic}
-\end{algorithm}
-
-We analyse the runtime of the cut algorithm as follows: Inside the loop we count the number of particles on the left side of the cut and since the array is unordered, we need to sweep over elements once which results in a runtime of $O(N)$. Next we determine the maximum number of iterations our loop needs to repeated. With each iteration we cut in half the domain size.  \TODO{ Thus after the first iteration the domain size is $2^{31}$. It is therefore where easy to verify that a maximum of 32 repetitions can be performed before our domain reaches a size of $2^0$. In this case the cut cannot be improved as it has already reached the maximum precision. We conclude a worst case performance of $O(N \times 32)$. }
-
-\subsubsection{Improved Binary Search}
-
-In this version we will replace the while loop by a for loop, furthermore we will add an early stopping condition. We will show that this change (1) improves the runtime and (2) is actually necessary in some cases.
 
 \begin{algorithm}[H]
 	\caption{Deterministic find cut with early stopping}\label{algo:cut}
@@ -490,7 +459,7 @@ In this version we will replace the while loop by a for loop, furthermore we wil
 		\State Break
 		\EndIf
 		\newline
-
+		
 		\If{$nLeft <= N_j * percentage$}
 		\State $left = cut$
 		\Else 
@@ -502,6 +471,14 @@ In this version we will replace the while loop by a for loop, furthermore we wil
 		\EndProcedure
 	\end{algorithmic}
 \end{algorithm}
+
+\subsubsection{Runtime Analysis}
+
+We analyse the runtime of the cut algorithm as follows: On line 5 we count the number of particles on the left side of the cut position. Since the array is unordered, we need to sweep over all the elements once which results in a runtime of $O(N)$. All other operartions inside the for loop can be computed in a negligible constant time. The loop itself is repeated $p$ number of times, where $p$ corresponds to the precision of the array data. With each iteration we half the span in which the optimal solution lies. Thus we reach the precision limit after $p$ iterations. Note that due to the Break condition on line 7, the average runtime is not the same as the maximum runtime and depends a lot on the underlying data.
+
+The bisection method converges rather slowly, assuming its first guess for the cut position was almost correct, it will correct its next guess by $25\%$ of the entire domain size, thus the number of iterations need to approach the actual optimum again is rather high.  
+
+\subsubsection{Edge cases}
 
 Let us consider the following example particle distribution where $particle_1$ and $particle_2$ have identical x coordinates. 
 
@@ -1070,9 +1047,9 @@ In order to estimate the runtime of the algorithms we denote the number of parti
 
 We test the our hypothesis, that ORB is, for the most part, memory bandwidth bound using the roofline model. In the roofline model, we compare the operational density, which is measured in FLOPS / per byte against the number number of flops per minute. 
 
-For modern hardware, its fairly uncommon to release a peak flops value. Since 2008 Intel has introduced AVX (Advanced Vector Extensions), tflops benchmarks largely depend upon the compiled assembly instructions. AVX enables the processing of several floating point precision (32 bit) numbers simultaneously. The first version of AVX , enabled a 4 such operations, with AVX2 this was extended to 8 and finally AVX512 pushed the limit to 16 operations. AVX furthermore has the capability to process $c = a + b$ operations, where as some older SIMD instructions were only able to process $a = a + b$ type operations. 
+For modern hardware, its fairly uncommon to release a peak flops value. Since 2008 Intel has introduced AVX (Advanced Vector Extensions), tflops benchmarks largely depend upon the compiled assembly instructions, the specific instructions vary a lot between small c++ implementation details and can only be used on contiguous memory access. AVX enables the processing of several floating point precision (32 bit) numbers simultaneously. The first version of AVX , enabled a 4 such operations, with AVX2 this was extended to 8 and finally AVX512 pushed the limit to 16 operations. AVX furthermore has the capability to process $c = a + b$ operations, where as some older SIMD instructions were only able to process $a = a + b$ type operations. 
 
-Most architecture models are able to complete add AVX instructions with a CPI (cycles per instructions) of 2. For our equation we assume a perfect parallelization, meaning that gflops linearly scale with the number of processors. 
+Most architecture models are able to complete a single AVX instructions with a CPI (cycles per instructions) of 2. For our equation we assume a perfect parallelization, meaning that gflops linearly scale with the number of processors. 
 
 We define in equation \ref{eq:avx}, a function to estimate the number of gigaflops for a given hardware. We define GHZ as the gigahertz which can be reached by the CPU, meanwhile $NF$ is the number of floats which can be processed simultaneously using AVX. $CPI$ is as mentioned the cycles per instructions for the AVX instruction set. Finally we have $np$ which is the number of processors.
 
@@ -1089,7 +1066,7 @@ In terms of arithmetic intensity, we take a look at the code for the conditional
 	for(auto p= startPtr; p<endPtr; ++p) nLeft += *p < cut;
 \end{lstlisting}
 
-Where $p$ is a C-style array which stores the particles position and $nLeft$ gives the number of particles which are left of the $cut$. In terms of arithmetic intensity, we have the following operations
+Where $p$ is a C-style array which stores the particles position and $nLeft$ gives the number of particles which are left of the $cut$. In terms of arithmetic intensity, we have the following operations:
 
 \begin{enumerate}
 	\item Compare particle to cut
@@ -1098,7 +1075,7 @@ Where $p$ is a C-style array which stores the particles position and $nLeft$ giv
 	\item Compare i
 \end{enumerate}
 
-Which results in a total of 4 operations. Since a single float is stored using 4 bytes, we receive 1.0 operations per byte. Note that AVX or any SIMD instructions do not influence the arithmetic intensity, as the number of floating point operations per byte remains the same. We simply perform a set of operations concurrently. What is however influenced by AVX is the maximum number of GFLOPS which can be processed by the hardware. If we were to ignore AVX, the algorithm would clearly not be bound by memory, as its performance would lack behind the memory bandwidth. For this reason we do include AVX in all GFLOPS estimates.
+Which results in a total of 4 operations. Since a single float is stored using 4 bytes, we receive 1.0 operations per byte. Note that AVX or any SIMD instructions do not influence the arithmetic intensity, as the number of floating point operations per byte remains the same. We simply perform a set of operations concurrently. What is however influenced by AVX, is the maximum number of GFLOPS which can be processed by the hardware. If we were to ignore AVX, the algorithm would clearly not be bound by memory, as its performance would lack behind the memory bandwidth. For this reason it is so important to consider AVX.
 
 \begin{figure}[H]
 	\begin{center}
@@ -1255,13 +1232,13 @@ Which results in a total of 4 operations. Since a single float is stored using 4
 
 As we can see in figure \ref{fig:roofdaint}, \ref{fig:roofsummit} and \ref{fig:roofalps} all three computer are memory bound, at least starting from a certain level of parallelization.
 
-We consider a minimal C++ to make measurements which can prove or disprove our assumption. We use the -S flag along with the g++ compiler to generate assembly code from the c++ source code. In this case startPtr is a pointer which indicated the first address where we want to start out iteration process. Consequently endPtr is the memory of the last entry we want to access. For testing purposes all entries in the array are set to random values between 0 and 1, and cut is set to 0.5. 
+We consider a minimal C++ to make measurements which can prove the theoretical model. We use the -S flag along with the g++ compiler to generate assembly code from the c++ source code. In this case startPtr is a pointer which indicated the first address where we want to start out iteration process. Consequently endPtr is the memory of the last entry we want to access. For testing purposes all entries in the array are set to random values between 0 and 1, and cut is set to 0.5. 
 
 \begin{lstlisting}
 for(auto p= startPtr; p<endPtr; ++p) nLeft += *p < cut;
 \end{lstlisting}
 
-In a first test, we do enable AVX, but turn on $O3$. The generated assembly code looks as follows:
+In a first test, we do not enable AVX, but turn on $O3$. The generated assembly code looks as follows:
 
 \begin{figure}
 	\begin{lstlisting}
@@ -1277,7 +1254,7 @@ In a first test, we do enable AVX, but turn on $O3$. The generated assembly code
 \caption{Reduction Assembler Code without AVX}
 \label{fig:assembler}
 \end{figure}
-
+Clearly there are not AVX commands visible, since we have enable compiler optimization, 
 If we additionally set the compile flag -march=native we can enable AVX. This yields the following assembly instructions, where we can identify the vcmplpts and vsubd commands, which are both packaged AVX instructions. This means we have a code which can be compiled to leverage hardware in an optimal way.
 
 \begin{figure}
@@ -1291,7 +1268,7 @@ If we additionally set the compile flag -march=native we can enable AVX. This yi
 	jne	.L19	
 
 \end{lstlisting}
-\caption{Reduction Assembler Code without AVX}
+\caption{Reduction Assembler Code with AVX2}
 \label{fig:assembler-avx}
 \end{figure}
 

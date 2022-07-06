@@ -82,7 +82,8 @@ add_executable(
         src/services/reshuffle.cpp
         src/services/finalize.cu
         src/services/makeAxis.cpp
-        src/constants.h)
+        src/constants.h
+        src/data/tipsy.h)
 
 target_include_directories(orbit PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set_target_properties(orbit PROPERTIES

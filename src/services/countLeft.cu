@@ -20,7 +20,7 @@ extern __device__ void warpReduce(volatile int *sdata, unsigned int tid) {
 }
 
 template <unsigned int blockSize, bool leq>
-extern __global__ void reduce(float *g_idata, unsigned int*g_odata, float cut, int n) {
+extern __global__ void reduce(float *g_idata, unsigned int * g_odata, float cut, int n) {
     extern __shared__ int sdata[];
 
     unsigned int tid = threadIdx.x;
@@ -58,7 +58,7 @@ extern __global__ void reduce(float *g_idata, unsigned int*g_odata, float cut, i
         warpReduce<blockSize>(sdata, tid);
     }
     if (tid == 0) {
-        g_odata[blockIdx.x] = sdata[0];
+        atomicAdd(g_odata, sdata[0]);
     }
 }
 
@@ -73,24 +73,17 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
 
     //int bytes = nCounts * sizeof (uint);
     // https://developer.nvidia.com/blog/how-overlap-data-transfers-cuda-cc/
-    unsigned int blockOffset = 0;
-    std::array<uint, MAX_CELLS> offsets;
-    offsets[0] = 0;
 
-    for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
-        out[cellPtrOffset] = 0;
-    }
 
     // Make sure memcopy is done for this thread
     // Could also improved but seems complicated
+    CUDA_CHECK(cudaMemset, (lcl->d_results, 0, nCells * sizeof(unsigned int)));
     CUDA_CHECK(cudaStreamSynchronize,(lcl->streams(0)));
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
         auto cell = static_cast<Cell>(*(in + cellPtrOffset));
 
-        if (cell.foundCut) {
-            offsets[cellPtrOffset+1] = blockOffset;
-            continue;
-        }
+        if (cell.foundCut) continue;
+
         int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
         int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
         int n = endInd - beginInd;
@@ -111,12 +104,10 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
                     lcl->streams(cellPtrOffset % N_STREAMS)
             >>> (
                     lcl->d_particles + beginInd,
-                    lcl->d_resultsA + blockOffset,
+                    lcl->d_results + cellPtrOffset,
                     cut,
                     n
             );
-
-            blockOffset += nBlocks;
         }
         else {
             blitz::Array<float,1> particles =
@@ -130,8 +121,6 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
                 out[cellPtrOffset] += *p < cut;
             }
         }
-
-        offsets[cellPtrOffset+1] = blockOffset;
     }
 
     for (int i = 0; i < N_STREAMS; i++) {
@@ -139,21 +128,16 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     }
 
     CUDA_CHECK(cudaMemcpyAsync,(
-            lcl->h_resultsA,
-                    lcl->d_resultsA,
-                    sizeof (uint) * blockOffset,
-                    cudaMemcpyDeviceToHost,
-                    lcl->streams(0)));
+            lcl->h_results,
+            lcl->d_results,
+            sizeof (uint) * nCells,
+            cudaMemcpyDeviceToHost,
+            lcl->streams(0)));
 
     CUDA_CHECK(cudaStreamSynchronize,(lcl->streams(0)));
 
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
-        int begin = offsets[cellPtrOffset];
-        int end = offsets[cellPtrOffset + 1];
-
-        for (int i = begin; i < end; ++i) {
-            out[cellPtrOffset] += lcl->h_resultsA[i];
-        }
+        out[cellPtrOffset] = lcl->h_results[cellPtrOffset];
     }
 
     return nCells * sizeof(output);

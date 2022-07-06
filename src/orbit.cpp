@@ -113,7 +113,7 @@ int master(MDL vmdl,void *vpst) {
                     foundAll = false;
                 }
             }
-
+            printf("%i \n", j);
             //free(oCountLeft);
         }
 
@@ -131,8 +131,8 @@ int master(MDL vmdl,void *vpst) {
             cellHeap(cells(i).getLeftChildId()) = cellLeft;
             cellHeap(cells(i).getRightChildId()) = cellRight;
 
-            cellLeft.log();
-            cellRight.log();
+            //cellLeft.log();
+            //cellRight.log();
         }
 
         ServiceReshuffle::output oCutIndices[1];

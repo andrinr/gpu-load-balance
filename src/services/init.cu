@@ -13,10 +13,7 @@ int ServiceInitGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
 
     CUDA_CHECK(cudaMalloc,(&lcl->d_particles, sizeof (float) * in.nParticles));
 
-    int nCounts = (in.nParticles / (N_THREADS * 2 * ELEMENTS_PER_THREAD) + MAX_CELLS);
-    printf("nCounts %i \n", nCounts);
-    CUDA_CHECK(cudaMalloc, (&lcl->d_resultsA, sizeof (uint) * nCounts));
-    CUDA_CHECK(cudaMalloc, (&lcl->d_resultsB, sizeof (uint) * nCounts));
+    CUDA_CHECK(cudaMalloc, (&lcl->d_results, sizeof (uint) * MAX_CELLS));
 
     auto streams = blitz::Array<cudaStream_t , 1>(N_STREAMS);
 

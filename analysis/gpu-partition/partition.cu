@@ -38,63 +38,64 @@ __device__ void scan(volatile unsigned int * s_idata, unsigned int thid, unsigne
             s_idata[bi] += t;
         }
     }
-    __syncthreads();
 }
 
 template <unsigned int blockSize>
 __global__ void partition(
-        unsigned int * g_totalLeft,
-        unsigned int * g_totalRight,
+        unsigned int * g_offsetLessEquals,
+        unsigned int * g_offsetGreater,
         float * g_idata,
         float * g_odata,
         float pivot,
         unsigned int nLeft) {
-    extern __shared__ unsigned int s_lqPivot[];
-    extern __shared__ unsigned int s_gPivot[];
-    extern __shared__ float s_res[];
+    extern __shared__ unsigned int s_lessEquals[];
+    extern __shared__ unsigned int s_greater[];
 
-    __shared__ unsigned int offsetLeq;
-    __shared__ unsigned int offsetG;
+    __shared__ unsigned int s_offsetLessEquals;
+    __shared__ unsigned int s_offsetGreater;
 
     unsigned int tid = threadIdx.x;
-    unsigned int i = blockIdx.x*(blockSize * 2)+threadIdx.x;
     unsigned int n = blockSize * 2;
+    unsigned int i = blockIdx.x*n+threadIdx.x;
+    unsigned int j = blockIdx.x*n+threadIdx.x + blockSize;
     //unsigned int gridSize = blockSize*2*gridDim.x;
 
-    unsigned int f1 = g_idata[2*i] < pivot;
+    unsigned int f1 = g_idata[i] < pivot;
     // potential to avoid bank conflicts here
-    s_lqPivot[2*tid] = f1;
-    s_gPivot[2*tid] = 1-f1;
+    s_lessEquals[2*tid] = f1;
+    s_greater[2*tid] = 1-f1;
 
-    unsigned int f2 = g_idata[2*i+1] < pivot;
-    s_lqPivot[2*tid+1] = f2;
-    s_gPivot[2*tid+1] = 1-f2;
+    unsigned int f2 = g_idata[j] < pivot;
+    s_lessEquals[2*tid+1] = f2;
+    s_greater[2*tid+1] = 1-f2;
 
     __syncthreads();
 
-    scan(s_lqPivot, tid, n);
-    scan(s_gPivot, tid, n);
+    scan(s_lessEquals, tid, n);
+    scan(s_greater, tid, n);
 
     __syncthreads();
 
     // Avoid another kernel
     if (tid == 0) {
         // result shared among kernel
-        offsetLeq = atomicAdd(g_totalLeft, s_lqPivot[n - 1]);
-        offsetG = atomicAdd(g_totalRight, s_gPivot[n - 1]);
+        s_offsetLessEquals = atomicAdd(g_offsetLessEquals, s_lessEquals[n - 1]);
+        s_offsetGreater = atomicAdd(g_offsetGreater, s_greater[n - 1]);
     }
 
     __syncthreads();
 
     // avoiding branch divergence
-    unsigned int indexA = (s_lqPivot[2*tid] + offsetLeq) * f1 +
-                          (s_gPivot[2*tid] + offsetG + nLeft) * (1-f1);
-    unsigned int indexB = (s_lqPivot[2*tid+1] + offsetLeq) * f2 +
-                          (s_gPivot[2*tid+1] + offsetG + nLeft) * (1-f2);
+    unsigned int indexA = (s_lessEquals[2*tid] + s_offsetLessEquals) * f1 +
+                          (s_greater[2*tid] + s_offsetGreater + nLeft) * (1-f1);
+    unsigned int indexB = (s_lessEquals[2*tid+1] + s_offsetLessEquals) * f2 +
+                          (s_greater[2*tid+1] + s_offsetGreater + nLeft) * (1-f2);
 
-    g_odata[indexA] = g_idata[2*i];
-    g_odata[indexB] = g_idata[2*i+1];
+    //g_odata[indexA] = g_idata[i];
+    //g_odata[indexB] = g_idata[j];
 
+    g_odata[i] = (float) s_lessEquals[2*tid];
+    g_odata[j] = (float) s_lessEquals[2*tid+1];
 }
 
 int main(int argc, char** argv) {
@@ -126,24 +127,24 @@ int main(int argc, char** argv) {
     CUDA_CHECK(cudaMalloc, (&d_odata, sizeof (float) * n));
     cudaMemcpy(d_idata, h_idata, sizeof (float ) * n, cudaMemcpyHostToDevice);
 
-    unsigned int * d_totalLeq;
-    unsigned int * d_totalG;
+    unsigned int * d_offsetLessEquals;
+    unsigned int * d_offsetGreater;
 
-    CUDA_CHECK(cudaMalloc,(&d_totalLeq, sizeof(unsigned int)));
-    CUDA_CHECK(cudaMalloc,(&d_totalG, sizeof(unsigned int)));
+    CUDA_CHECK(cudaMalloc,(&d_offsetLessEquals, sizeof(unsigned int)));
+    CUDA_CHECK(cudaMalloc,(&d_offsetGreater, sizeof(unsigned int)));
 
-    CUDA_CHECK(cudaMemset,(d_totalLeq, 0, sizeof (unsigned int)));
-    CUDA_CHECK(cudaMemset,(d_totalG, 0, sizeof (unsigned int)));
+    CUDA_CHECK(cudaMemset,(d_offsetLessEquals, 0, sizeof (unsigned int)));
+    CUDA_CHECK(cudaMemset,(d_offsetGreater, 0, sizeof (unsigned int)));
 
     cudaEventRecord(start);
 
     partition<N_THREADS><<<
             nBlocks,
             N_THREADS,
-            N_THREADS * sizeof (unsigned int) * 4 + sizeof (unsigned int) * 2
+            N_THREADS * sizeof (unsigned int) * 8 + sizeof (unsigned int) * 2
             >>>(
-            d_totalLeq,
-            d_totalG,
+            d_offsetLessEquals,
+            d_offsetGreater,
             d_idata,
             d_odata,
             cut,
@@ -161,19 +162,19 @@ int main(int argc, char** argv) {
 
     int sum = 0;
 
-    for (int i = 0; i < nLeft; ++i) {
+    for (int i = 0; i < n; ++i) {
         printf("%f ", h_odata[i]);
-        if (h_odata[i] > cut) {
+        /*if (h_odata[i] > cut) {
             throw std::runtime_error("Partition failed");
-        }
+        }*/
     }
 
     printf("\n");
 
     cudaFree(d_idata);
     cudaFree(d_odata);
-    cudaFree(d_totalG);
-    cudaFree(d_totalLeq);
+    cudaFree(d_offsetGreater);
+    cudaFree(d_offsetLessEquals);
 
     free(h_idata);
     free(h_odata);
