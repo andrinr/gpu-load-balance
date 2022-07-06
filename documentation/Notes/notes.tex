@@ -1785,7 +1785,7 @@ for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset){
 
 CUDA is programming language, allowing us to access the GPU, without having to translate algorithms and concepts into shaders, which are largely designed for graphics processing, as it was the case with Shader Programming in OpenGL. Even though compute sharers allowed for increased flexibility, it was still far from easy to port even the most simple codes from c++ to glsl. In this section will provide a quick introduction into the relevant CUDA concepts, which were applied while writing GPU code.
 
-Note that we are aware of the Thrust library an its implementation of partition, reductions and binary search. But the library does not allow us to manage the memory by ourselves, therefore we are forced to re-implement some concepts which are already introduced by thrust.
+Note that we are aware of the Thrust library an its implementation of partition, reductions and binary search. But the library does not allow us to manage the memory by ourselves, therefore we are forced to re-implement some concepts which are already introduced by thrust. Furthermore we 
 \subsubsection{Relevant CUDA Concepts}
 
 CUDA gives us the ability to launch kernels, which are written in C with some additional CUDA specific syntax. These kernel can be run from the CPU, commonly refereed to as the host, and are then executed on the GPU, also known as the device. The device and the host have a separate memory and as seen in section \ref{sec:gmm} the transfer $I_{CG}$ rates between the GPU and CPU are generally slower, under performing $I_{C}$ and $I_G$ speeds. Therefore one of key the challenges when rewriting CPU code to GPU code is to limit data transfers between the GPU and CPU as much as possible.
