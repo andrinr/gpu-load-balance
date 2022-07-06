@@ -2,7 +2,6 @@
 #include <blitz/array.h>
 #include "cell.h"
 #include "mdl.h"
-#include "services/init.cuh"
 #include "services/count.h"
 #include "services/pst.h"
 #include "services/setadd.h"
@@ -42,10 +41,6 @@ int master(MDL vmdl,void *vpst) {
     ServiceInit::input iInit {N/mdl->Threads()};
     ServiceInit::output oInit[1];
     mdl->RunService(PST_INIT, sizeof (ServiceInit::input), &iInit, oInit);
-
-    ServiceInitGPU::input iInitGpu{mdl->Threads(), N/mdl->Threads()};
-    ServiceInitGPU::output oInitGpu[1];
-    mdl->RunService(PST_INITGPU, sizeof (ServiceInitGPU::input), &iInitGpu, oInitGpu);
 
     for (int l = 1; l < root.getNLevels(); ++l) {
 
@@ -156,7 +151,6 @@ void *worker_init(MDL vmdl) {
     mdl->AddService(std::make_unique<ServiceSetAdd>(pst));
     mdl->AddService(std::make_unique<ServiceCountLeft>(pst));
     mdl->AddService(std::make_unique<ServiceInit>(pst));
-    mdl->AddService(std::make_unique<ServiceInitGPU>(pst));
     mdl->AddService(std::make_unique<ServiceCount>(pst));
     mdl->AddService(std::make_unique<ServiceCopyToDevice>(pst));
     mdl->AddService(std::make_unique<ServiceCountLeftGPU>(pst));

@@ -75,7 +75,6 @@ add_executable(
         src/services/TraversePST.cpp
         src/services/countLeft.cpp
         src/services/count.cpp
-        src/services/init.cpp
         src/services/init.cu
         src/services/copyToDevice.cu
         src/services/countLeft.cu

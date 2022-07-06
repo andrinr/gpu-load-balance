@@ -9,11 +9,11 @@ public:
     blitz::Array<float, 1> particlesAxis;
     blitz::Array<int, 1> cell;
     blitz::Array<int, 1> axis;
-    blitz::Array<uint, 2> cellToRangeMap;
+    blitz::Array<unsigned int, 2> cellToRangeMap;
     blitz::Array<cudaStream_t , 1> streams;
     float * d_particles;
-    unsigned int* d_results;
-    unsigned int* h_results;
+    unsigned int * d_results;
+    unsigned int * h_results;
     int nThreads;
     int nBlocks;
 
