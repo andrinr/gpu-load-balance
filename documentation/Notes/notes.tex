@@ -1232,7 +1232,7 @@ Which results in a total of 4 operations. Since a single float is stored using 4
 
 As we can see in figure \ref{fig:roofdaint}, \ref{fig:roofsummit} and \ref{fig:roofalps} all three computer are memory bound, at least starting from a certain level of parallelization.
 
-We consider a minimal C++ to make measurements which can prove the theoretical model. We use the -S flag along with the g++ compiler to generate assembly code from the c++ source code. In this case startPtr is a pointer which indicated the first address where we want to start out iteration process. Consequently endPtr is the memory of the last entry we want to access. For testing purposes all entries in the array are set to random values between 0 and 1, and cut is set to 0.5. 
+We consider a minimal C++ to make measurements which can prove the theoretical model. We use the -S flag along with the g++ compiler to generate assembly code from the c++ source code and make sure that AVX commands are enabled. In this case startPtr is a pointer which indicated the first address where we want to start out iteration process. Consequently endPtr is the memory of the last entry we want to access. For testing purposes all entries in the array are set to random values between 0 and 1, and cut is set to 0.5. 
 
 \begin{lstlisting}
 for(auto p= startPtr; p<endPtr; ++p) nLeft += *p < cut;
@@ -1254,8 +1254,9 @@ In a first test, we do not enable AVX, but turn on $O3$. The generated assembly 
 \caption{Reduction Assembler Code without AVX}
 \label{fig:assembler}
 \end{figure}
-Clearly there are not AVX commands visible, since we have enable compiler optimization, 
-If we additionally set the compile flag -march=native we can enable AVX. This yields the following assembly instructions, where we can identify the vcmplpts and vsubd commands, which are both packaged AVX instructions. This means we have a code which can be compiled to leverage hardware in an optimal way.
+$psubd$ is a packaged instruction, meaning it already uses some form of SIMD instructions. The command is used in the MME and later the SSE2 instruction set. Since we can observe that the $xmm$ registers are used, we know its a SSE2 instruction. 
+
+If we additionally set the compile flag -march=native we end up with the following code:
 
 \begin{figure}
 \begin{lstlisting}
@@ -1271,6 +1272,8 @@ If we additionally set the compile flag -march=native we can enable AVX. This yi
 \caption{Reduction Assembler Code with AVX2}
 \label{fig:assembler-avx}
 \end{figure}
+
+We can identify $vmovups$, $vcomplpts$ and $vpsubd$ which are all AVX commands. Since they are using the ymm instead of the xmm registers, we know these are AVX2 and not AVX commands. For the chip architecture we have tested this on, AVX2 is the most optimal SIMD instruction set.
 
 The following test results were achieved from a Intel(R) Core(TM) i9-10885H CPU @ 2.40GHz
 processor. We perform the conditional reduction on  $2^{27}$ particles. The reduction takes 244420 microseconds. This means we have a throughput of $2^{27} / 10^{12} * 10^6 / 24420 = 0.00549 tflops$. This of course does not lie anywhere near the theoretical maximum, which even for a single processor ($np = 1$) is $2.4 * 8 * 2 * 1 / 1000 = 0.0384 tflops.$. This is a strong indication, that already with a single processor solutions, we are in the realm of bandwidth limited algorithms. This effect of course, would become even stronger when including parallelism.
@@ -1762,7 +1765,9 @@ for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset){
 
 CUDA is programming language, allowing us to access the GPU, without having to translate algorithms and concepts into shaders, which are largely designed for graphics processing, as it was the case with Shader Programming in OpenGL. Even though compute sharers allowed for increased flexibility, it was still far from easy to port even the most simple codes from c++ to glsl. In this section will provide a quick introduction into the relevant CUDA concepts, which were applied while writing GPU code.
 
-Note that we are aware of the Thrust library an its implementation of partition, reductions and binary search. But the library does not allow us to manage the memory by ourselves, therefore we are forced to re-implement some concepts which are already introduced by thrust. Furthermore we 
+Note that we are aware of the Thrust library an its implementation of partition, reductions and binary search. But the library does not allow us to manage the memory by ourselves, therefore we are forced to re-implement some concepts which are already introduced by thrust. 
+
+\TODO{Mention how the number of particles will be limited when implementing the GPU version}
 \subsubsection{Relevant CUDA Concepts}
 
 CUDA gives us the ability to launch kernels, which are written in C with some additional CUDA specific syntax. These kernel can be run from the CPU, commonly refereed to as the host, and are then executed on the GPU, also known as the device. The device and the host have a separate memory and as seen in section \ref{sec:gmm} the transfer $I_{CG}$ rates between the GPU and CPU are generally slower, under performing $I_{C}$ and $I_G$ speeds. Therefore one of key the challenges when rewriting CPU code to GPU code is to limit data transfers between the GPU and CPU as much as possible.
@@ -1793,7 +1798,6 @@ Another important concept are warps. Each warp consists of 32 threads and all th
 	\label{u}
 \end{figure}
 
-As of now the time
 Our primary focus for optimization is the binary cut algorithm, more specifically the counting method. Its implementation in CUDA is straight forward and performance improvement are guaranteed as shown in section \TODO{add reference}. 
 
 \subsubsection{CUDA Reduction}
@@ -1816,6 +1820,9 @@ There are several key points which need to be addressed in order make the algori
 
 	\item \textbf{Shared Memory Bank Conflicts} In order to decrease the bank conflicts in the shared memory we want to make sure that threads in the same warp do not try to access the same memory bank. Therefore we offset each memory access by the total gridSize as it can be seen on line 12 in figure \ref{cuda:reduction}
 	
+	\item \textbf{Coalesced Memory Access}
+	\TODO{Do}
+	
 	\item \textbf{Warp divergence} Each time we we have an control statement in the code, we introduce a divergence. On the GPU these divergences become especially bad when they are introduced inside a warp. This means that any of the threads of the 32 threads in a warp, have to execute a different code than the rest. For this reason, the $warpReduce$ method as seen in figure \ref{cuda:warp-device} is introduced. We can see on line 32 in figure \ref{cuda:reduction} that this method is only executed when we reach 32 elements in the shared memory, which remain to be added together. Inside the warp reduce method, we again encounter an unrolled loop, but in this case we have no if statements that could generate a divergence. The if statements which are present, are as mentioned, evaluated at compile time only. Inside a warp we are also not dependent on synchronization, thus the thread synchronization call can be omitted as well. Note that this implementation will perform many unnecessary operations, but this does not affect the performance negatively.
 	
 
@@ -1831,9 +1838,32 @@ Another approach is to adapt the kernel, such that it directly iterates over all
 
 \subsubsection{CUDA Partitioning}
 
-The partitioning is a subroutine, which is any implementation of a quick sort algorithm. We were thus able to implement the algorithm as described in the paper CUDA Quicksort. Furthermore we use the guide from NVIDIA GPU Gems for a efficient scan kernel. 
 
-In order to 
+We describe measurements which were done using the reduction in CUDA, we mention how the reduction cannot necessarily be improved a lot and that the data transfer between the GPU and CPU is the main bottleneck now. We mention how building the tree on the does not make a lot of sense. We explain why instead we focus our efforts to implement a GPU reshuffling method, which can improve runtime by reducing the reshuffling costs and also remove CPU GPU transfers between invocations of the binary cut algorithm altogether. 
+
+We add a timeline which is based on measurements with a CUDA enhanced binary cut algorithm. 
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+			% draw horizontal line   
+			\draw[thick, -Triangle] (0,0) -- (\textwidth,0) node[font=\scriptsize,below left=3pt and -8pt]{t};
+			\draw[darkgray, line width=4pt] 
+			(0.5,.5) -- +(1,0);
+			
+			\draw[red, line width=4pt] 
+			(1.5,1.0) -- +(3,0);
+			
+			\draw[green, line width=4pt] 
+			(4.5,1.5) -- +(3,0);
+			
+		\end{tikzpicture}
+	\end{center}
+	\caption{timeline}
+	\label{u}
+\end{figure}
+
+The partitioning algorithm is a widely used concept and there are various implementations used in different variants of the quick-sort algorithm. The overall design of the implementation is guided by \TODO{Insert ref} and the scan is taken from GPU Gems \TODO{Insert ref}. The main and probably only disadvantage of partitioning the particle array on the GPU, is that it cannot be done in place, thus we need another temporary array allocated on the GPU memory which further restricts the total number of particles. 
+Since 
 
 
 \begin{itemize}
@@ -1888,16 +1918,15 @@ __global__ void reduce(float *g_idata, uint *g_odata, float cut, int n) {
 
 \begin{figure}[H]
 	\begin{lstlisting}[language=c++]
-		template <unsigned int blockSize>
-		__device__ void warpReduce(volatile int *sdata, unsigned int tid) {
-			if (blockSize >= 64) sdata[tid] += sdata[tid + 32];
-			if (blockSize >= 32) sdata[tid] += sdata[tid + 16];
-			if (blockSize >= 16) sdata[tid] += sdata[tid + 8];
-			if (blockSize >= 8) sdata[tid] += sdata[tid + 4];
-			if (blockSize >= 4) sdata[tid] += sdata[tid + 2];
-			if (blockSize >= 2) sdata[tid] += sdata[tid + 1];
-		}
-		
+template <unsigned int blockSize>
+__device__ void warpReduce(volatile int *sdata, unsigned int tid) {
+	if (blockSize >= 64) sdata[tid] += sdata[tid + 32];
+	if (blockSize >= 32) sdata[tid] += sdata[tid + 16];
+	if (blockSize >= 16) sdata[tid] += sdata[tid + 8];
+	if (blockSize >= 8) sdata[tid] += sdata[tid + 4];
+	if (blockSize >= 4) sdata[tid] += sdata[tid + 2];
+	if (blockSize >= 2) sdata[tid] += sdata[tid + 1];
+}
 	\end{lstlisting}
 	\caption{Device warp reduction kernel}
 	\label{cuda:warp-device}
@@ -1910,7 +1939,7 @@ We can use several strategies in order to improve the performance of memory allo
 
 \begin{enumerate}
 	\item \textbf{Pinned Memory} As the GPU cannot access the default paged memory directly, when copying memory from the host to the device, the memory must first be copied to pinned memory. This means if we use pinned memory directly with $cudaMallocHost()$, data transfers can be around twice as fast. In our implementation we use pinned memory for all data, which need to be either sent from the host to device or vice versa.
-	\item \textbf{Reuse Memory} The most obvious choice is to avoid allocation and freeing commands altogether and instead reuse previously allocated memory whenever possible. In our implementation we allocate the memory in the very beginning, whereas we have a fixed number of particles and a fixed upper limit for the number of cells. 
+	\item \textbf{Reuse Memory} We can avoid allocation and freeing commands altogether and instead reuse previously allocated memory whenever possible. In our implementation we allocate the memory in the very beginning, whereas we have a fixed number of particles and a fixed upper limit for the number of cells. 
 	
 \end{enumerate}
 
@@ -1921,8 +1950,8 @@ We limit memory allocation and freeing to the very beginning and end of the orb 
 We can use several strategies in order to improve the performance of data transfers: 
 
 \begin{enumerate}
-	\item \textbf{Reuse Data} The most obvious choice is to avoid transfers altogether and and instead reuse previously sent data whenever possible. 
-	\item \textbf{Reduce Data} 
+	\item \textbf{Reuse Data} We can avoid data transfers, by writing kernels out of code which was done on the CPU before. In our case we send the particle data from the host to device once
+	\item \textbf{Reduce Data} We can reduce the data 
 	\item \textbf{CUDA Streams} 
 	\item \textbf{Data Batches}
 	
@@ -1932,35 +1961,9 @@ Most importantly we try to reduce the overhead generated
 
 \subsubsection{CUDA streams}
 
-Cuda streams can be leveraged to improve the performance of data-intensive applications by allowing different tasks to be executed in parallel on the GPU. This can be used to overlap data transfers with computation, or to execute multiple kernels concurrently. Some GPU's have several Kernel engines, this means that the execution of kernel code can be overlapped when we make use of streams.
-
-\subsubsection{Reshuffling on the GPU}
-
-We describe measurements which were done using the reduction in CUDA, we mention how the reduction cannot necessarily be improved a lot and that the data transfer between the GPU and CPU is the main bottleneck now. We mention how building the tree on the does not make a lot of sense. We explain why instead we focus our efforts to implement a GPU reshuffling method, which can improve runtime by reducing the reshuffling costs and also remove CPU GPU transfers between invocations of the binary cut algorithm altogether. 
-
-We add a timeline which is based on measurements with a CUDA enhanced binary cut algorithm. 
-\begin{figure}[H]
-	\begin{center}
-		\begin{tikzpicture}
-			% draw horizontal line   
-			\draw[thick, -Triangle] (0,0) -- (\textwidth,0) node[font=\scriptsize,below left=3pt and -8pt]{t};
-			\draw[darkgray, line width=4pt] 
-			(0.5,.5) -- +(1,0);
-			
-			\draw[red, line width=4pt] 
-			(1.5,1.0) -- +(3,0);
-			
-			\draw[green, line width=4pt] 
-			(4.5,1.5) -- +(3,0);
-			
-		\end{tikzpicture}
-	\end{center}
-	\caption{timeline}
-	\label{u}
-\end{figure}
-
-We mention how the partitioning algorithm can be taken from quick sort implementations, where the most performance critical part is the scan algorithm. 
+Cuda streams can be leveraged to improve the performance of data-intensive applications by allowing different tasks to be executed in parallel on the GPU. This can be used to overlap data transfers with computation, or to execute multiple kernels concurrently. Some GPU's have several Kernel engines, this means that the execution of kernel code can be overlapped when 
 \newpage
+
 \subsection{Integration into PKDGRAV}
 
 
