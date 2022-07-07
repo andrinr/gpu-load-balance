@@ -10,77 +10,118 @@ namespace cg = cooperative_groups;
 static_assert(std::is_void<ServiceReshuffle::input>()  || std::is_trivial<ServiceReshuffle::input>());
 static_assert(std::is_void<ServiceReshuffle::output>() || std::is_trivial<ServiceReshuffle::output>());
 
-// https://www.cse.chalmers.se/~tsigas/papers/GPU-Quicksort-jea.pdf
-// https://developer.nvidia.com/gpugems/gpugems3/part-vi-gpu-computing/chapter-39-parallel-prefix-sum-scan-cuda
-// https://github.com/NVIDIA/cuda-samples/tree/master/Samples/2_Concepts_and_Techniques/scan
-// https://onlinelibrary.wiley.com/doi/epdf/10.1002/cpe.3611
-
-#define SHARED_MEMORY_BANKS 32
-#define LOG_MEM_BANKS 4
-#define CONFLICT_FREE_OFFSET(n) ((n) >> NUM_BANKS + (n) >> (2 * LOG_NUM_BANKS))
-
-// 2 data elements per thread
-template <unsigned int blockSize>
-__global__ void scan(volatile unsigned int* s_idata, unsigned intthid, int n) {
-
-    for (int d = n>>1; d > 0; d >>= 1) { // build sum in place up the tree
+__device__ void scan(volatile unsigned int * s_idata, unsigned int thid, unsigned int n) {
+    unsigned int offset = 1;
+    for (unsigned int d = n>>1; d > 0; d >>= 1) // build sum in place up the tree
+    {
         __syncthreads();
-        if (thid < d) {
-            int ai = offset*(2*thid+1)-1;
-            int bi = offset*(2*thid+2)-1;
+        if (thid < d)
+        {
+            unsigned int ai = offset*(2*thid+1)-1;
+            unsigned int bi = offset*(2*thid+2)-1;
             s_idata[bi] += s_idata[ai];
         }
         offset *= 2;
     }
-    if (thid==0) {
-        s_idata[n - 1 + CONFLICT_FREE_OFFSET(n - 1)] = 0;
-    }
-
-    for (int d = 1; d < n; d *= 2) {// traverse down tree & build scan
+    if (thid == 0) { s_idata[n - 1] = 0; } // clear the last element
+    for (unsigned int d = 1; d < n; d *= 2) // traverse down tree & build scan
+    {
         offset >>= 1;
         __syncthreads();
-        if (thid < d) {
-            int ai = offset*(2*thid+1)-1;
-            int bi = offset*(2*thid+2)-1;
-            float t = s_idata[ai];
+        if (thid < d)
+        {
+            unsigned int ai = offset*(2*thid+1)-1;
+            unsigned int bi = offset*(2*thid+2)-1;
+            unsigned int t = s_idata[ai];
             s_idata[ai] = s_idata[bi];
             s_idata[bi] += t;
         }
-    }  __syncthreads();
+    }
 }
 
-
 template <unsigned int blockSize>
-__global__ void partition(int offsetLeq, int offsetG, float * g_idata, float * g_odata, float pivot) {
-    extern __shared__ unsigned ints_lqPivot[];
-    extern __shared__ unsigned ints_gPivot[];
-    extern __shared__ float s_res[];
+__global__ void partition(
+        unsigned int * g_offsetLessEquals,
+        unsigned int * g_offsetGreater,
+        float * g_idata,
+        float * g_odata,
+        float pivot,
+        unsigned int nLeft,
+        unsigned int n) {
+    __shared__ unsigned int s_lessEquals[blockSize * 2];
+    __shared__ unsigned int s_greater[blockSize * 2];
+
+    __shared__ unsigned int s_offsetLessEquals;
+    __shared__ unsigned int s_offsetGreater;
 
     unsigned int tid = threadIdx.x;
-    unsigned int i = blockIdx.x*(blockSize * 2)+threadIdx.x;
-    unsigned int gridSize = blockSize*2*gridDim.x;
 
-    unsigned intf = g_idata[2*i] < pivot
-    s_lqPivot[2 * tid] = f;
-    s_gPivot[2 * tid] = 1-f;
+    unsigned int i = blockIdx.x * blockSize * 2 + 2 * tid;
+    unsigned int j = blockIdx.x * blockSize * 2 + 2 * tid + 1;
+    //unsigned int gridSize = blockSize*2*gridDim.x;
 
-    f = g_idata[2 * i + 1] < pivot
-    s_lqPivot[2 * tid + 1] = f;
-    s_gPivot[2 * tid + 1] = 1-f;
+    bool f1, f2;
+    if (i < n) {
+        f1 = g_idata[i] <= pivot;
+        f2 = not f1;
+        // potential to avoid bank conflicts here
+        s_lessEquals[2*tid] = f1;
+        s_greater[2*tid] = f2;
+    }
+    else {
+        f1 = false;
+        f2 = false;
+        s_lessEquals[2*tid] = 0;
+        s_greater[2*tid] = 0;
+    }
+
+    bool f3, f4;
+    if (j < n) {
+        f3 = g_idata[j] <= pivot;
+        f4 = not f3;
+        // potential to avoid bank conflicts here
+        s_lessEquals[2*tid+1] = f3;
+        s_greater[2*tid+1] = f4;
+    }
+    else {
+        f3 = false;
+        f4 = false;
+        s_lessEquals[2*tid+1] = 0;
+        s_greater[2*tid+1] = 0;
+    }
 
     __syncthreads();
 
-    unsigned intoffLq = scan(s_lqPivot, tid);
-    unsigned intoffG = scan(s_gPivot, tid);
+    scan(s_lessEquals, tid, blockSize * 2 );
+    scan(s_greater, tid, blockSize * 2);
 
     __syncthreads();
 
-    g_odata[s_lqPivot[tid] + offsetLeq] = g_idata[2*i];
-    g_odata[s_lqPivot[tid] + offsetG] = g_idata[2*i];
+    // Avoid another kernel
+    if (tid == blockSize - 1) {
+        // result shared among kernel
+        // atomicAdd returns old
+        // exclusive scan does not include the last element
+        s_offsetLessEquals = atomicAdd(g_offsetLessEquals, s_lessEquals[blockSize * 2 - 1] + f3);
+        s_offsetGreater = atomicAdd(g_offsetGreater, s_greater[blockSize * 2 - 1] + f4);
+    }
 
-    g_odata[s_lqPivot[tid] + offsetLeq] = g_idata[i];
-    g_odata[s_lqPivot[tid] + offsetG] = g_idata[i];
+    __syncthreads();
 
+    // avoiding warp divergence
+    unsigned int indexA = (s_lessEquals[2*tid] + s_offsetLessEquals) * f1 +
+                          (s_greater[2*tid] + s_offsetGreater + nLeft) * f2;
+
+    unsigned int indexB = (s_lessEquals[2*tid+1] + s_offsetLessEquals) * f3 +
+                          (s_greater[2*tid+1] + s_offsetGreater + nLeft) * f4;
+
+    if (i < n) {
+        g_odata[indexA] = g_idata[i];
+    }
+
+    if (j < n) {
+        g_odata[indexB] = g_idata[j];
+    }
 }
 
 int ServiceReshuffle::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
@@ -114,29 +155,6 @@ int ServiceReshuffle::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
 
         const int nBlocks = (int) ceil((float) n / (N_THREADS *  ELEMENTS_PER_THREAD));
 
-        orbitUtils::conditionalReduce<N_THREADS, true>(
-                lcl->d_particles + beginInd,
-                lcl->d_resultsA + blockOffset,
-                cut,
-                n,
-                nBlocks,
-                N_THREADS,
-                N_THREADS * sizeof (uint),
-                lcl->stream
-        );
-
-        orbitUtils::conditionalReduce<N_THREADS, false>(
-                lcl->d_particles + beginInd,
-                lcl->d_resultsB + blockOffset,
-                cut,
-                n,
-                nBlocks,
-                N_THREADS,
-                N_THREADS * sizeof (uint),
-                lcl->stream
-        );
-
-        offsets[cellPtrOffset+1] = blockOffset;
     }
 
     CUDA_CHECK(cudaMemcpyAsync,(

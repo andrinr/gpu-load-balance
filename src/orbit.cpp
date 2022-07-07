@@ -15,6 +15,12 @@
 
 #include "constants.h"
 
+enum variant {
+    CPU,
+    GPU_COUNT,
+    GPU_COUNT_PARTITION
+};
+
 int master(MDL vmdl,void *vpst) {
     auto mdl = static_cast<mdl::mdlClass *>(vmdl);
     auto pst = reinterpret_cast<PST*>(vpst);
@@ -25,6 +31,8 @@ int master(MDL vmdl,void *vpst) {
 
     float lower[3] = {-0.5, -0.5, -0.5};
     float upper[3] = {0.5, 0.5, 0.5};
+
+    const variant variant = GPU_COUNT_PARTITION;
 
     // user code
     Cell root(0, d, lower, upper);
@@ -53,15 +61,19 @@ int master(MDL vmdl,void *vpst) {
         blitz::Array<Cell, 1> cells = cellHeap(blitz::Range(a, b));
         ServiceCount::input *iCells = cells.data();
 
-        ServiceReshuffle::output oSwaps[1];
-        mdl->RunService(PST_AXISSWAP, nCells * sizeof(ServiceReshuffle::input), iCells, oSwaps);
+        if (variant == GPU_COUNT) {
+            ServiceReshuffle::output oSwaps[1];
+            mdl->RunService(PST_AXISSWAP, nCells * sizeof(ServiceReshuffle::input), iCells, oSwaps);
+        }
 
         ServiceCount::output oCount[nCells];
         mdl->RunService(PST_COUNT, nCells * sizeof(ServiceCount::input), iCells, oCount);
 
-        ServiceCopyToDevice::input iCopy[1];
-        ServiceCopyToDevice::output oCopy[1];
-        mdl->RunService(PST_COPYTODEVICE, sizeof (int), iCopy, oCopy);
+        if (variant == GPU_COUNT) {
+            ServiceCopyToDevice::input iCopy[1];
+            ServiceCopyToDevice::output oCopy[1];
+            mdl->RunService(PST_COPYTODEVICE, sizeof (int), iCopy, oCopy);
+        }
 
         // Loop
         bool foundAll = false;
@@ -73,8 +85,20 @@ int master(MDL vmdl,void *vpst) {
             foundAll = true;
 
             ServiceCountLeft::output oCountLeft[nCells];
-            //mdl->RunService(PST_COUNTLEFT, nCells * sizeof(ServiceCountLeft::input), iCells, oCountLeft);
-            mdl->RunService(PST_COUNTLEFTGPU, nCells * sizeof(ServiceCountLeft::input), iCells, oCountLeft);
+            if (variant == GPU_COUNT || variant == GPU_COUNT_PARTITION) {
+                mdl->RunService(
+                        PST_COUNTLEFTGPU,
+                        nCells * sizeof(ServiceCountLeft::input),
+                        iCells,
+                        oCountLeft);
+            }
+            else {
+                mdl->RunService(
+                        PST_COUNTLEFT,
+                        nCells * sizeof(ServiceCountLeft::input),
+                        iCells,
+                        oCountLeft);
+            }
 
             for (int i = 0; i < nCells; ++i) {
                 if (cells(i).foundCut) continue;
@@ -130,8 +154,14 @@ int master(MDL vmdl,void *vpst) {
             //cellRight.log();
         }
 
-        ServiceReshuffle::output oCutIndices[1];
-        mdl->RunService(PST_RESHUFFLE, nCells * sizeof(ServiceReshuffle::input), iCells, oCutIndices);
+        if (variant == GPU_COUNT_PARTITION) {
+
+        }
+        else {
+            ServiceReshuffle::output oCutIndices[1];
+            mdl->RunService(PST_RESHUFFLE, nCells * sizeof(ServiceReshuffle::input), iCells, oCutIndices);
+        }
+
     }
 
     ServiceFreeDevice::input iFree[1];

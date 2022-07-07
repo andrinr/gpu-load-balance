@@ -121,8 +121,6 @@ __global__ void partition(
     if (j < n) {
         g_odata[indexB] = g_idata[j];
     }
-    //g_odata[i] = indexA;
-    //g_odata[j] = indexB;
 }
 
 int main(int argc, char** argv) {
