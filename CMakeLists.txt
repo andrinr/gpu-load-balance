@@ -79,6 +79,7 @@ add_executable(
         src/services/copyToDevice.cu
         src/services/countLeft.cu
         src/services/partition.cpp
+        src/services/partition.cu
         src/services/finalize.cu
         src/services/makeAxis.cpp
         src/constants.h

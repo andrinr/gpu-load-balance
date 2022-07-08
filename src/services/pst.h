@@ -15,6 +15,7 @@ public:
     float * d_particlesX;
     float * d_particlesY;
     float * d_particlesZ;
+    unsigned int * d_permutations;
     unsigned int * d_results;
     unsigned int * h_results;
     int nThreads;

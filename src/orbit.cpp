@@ -27,7 +27,7 @@ int master(MDL vmdl,void *vpst) {
     float lower[3] = {-0.5, -0.5, -0.5};
     float upper[3] = {0.5, 0.5, 0.5};
 
-    const GPU_ACCELERATION acceleration = COUNT;
+    const GPU_ACCELERATION acceleration = COUNT_PARTITION;
 
     // user code
     Cell root(0, d, lower, upper);
@@ -150,7 +150,8 @@ int master(MDL vmdl,void *vpst) {
         }
 
         if (acceleration == COUNT_PARTITION) {
-
+            ServicePartition::output oCutIndices[1];
+            mdl->RunService(PST_PARTITIONGPU, nCells * sizeof(ServicePartitionGPU::input), iCells, oCutIndices);
         }
         else {
             ServicePartition::output oCutIndices[1];
@@ -182,6 +183,7 @@ void *worker_init(MDL vmdl) {
     mdl->AddService(std::make_unique<ServiceCopyToDevice>(pst));
     mdl->AddService(std::make_unique<ServiceCountLeftGPU>(pst));
     mdl->AddService(std::make_unique<ServicePartition>(pst));
+    mdl->AddService(std::make_unique<ServicePartitionGPU>(pst));
     mdl->AddService(std::make_unique<ServiceFinalize>(pst));
     mdl->AddService(std::make_unique<ServiceMakeAxis>(pst));
 

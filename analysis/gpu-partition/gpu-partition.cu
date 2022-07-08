@@ -169,7 +169,7 @@ int main(int argc, char** argv) {
     partition<N_THREADS><<<
             nBlocks,
             N_THREADS,
-            (N_THREADS + 2) * sizeof (unsigned int) * 4 + sizeof (unsigned int) * 2
+            (N_THREADS) * sizeof (unsigned int) * 4 + sizeof (unsigned int) * 2
             >>>(
             d_offsetLessEquals,
             d_offsetGreater,

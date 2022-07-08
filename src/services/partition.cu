@@ -2,9 +2,7 @@
 #include "../cell.h"
 #include <blitz/array.h>
 #include "../utils/condReduce.cuh"
-#include <cooperative_groups.h>
 
-namespace cg = cooperative_groups;
 // Make sure that the communication structure is "trivial" so that it
 // can be moved around with "memcpy" which is required for MDL.
 static_assert(std::is_void<ServicePartitionGPU::input>()  || std::is_trivial<ServicePartitionGPU::input>());
@@ -45,6 +43,7 @@ __global__ void partition(
         unsigned int * g_offsetGreater,
         float * g_idata,
         float * g_odata,
+        unsigned int * g_permutations,
         float pivot,
         unsigned int nLeft,
         unsigned int n) {
@@ -117,10 +116,50 @@ __global__ void partition(
 
     if (i < n) {
         g_odata[indexA] = g_idata[i];
+        g_permutations[i] = indexA;
     }
 
     if (j < n) {
-        g_odata[indexB] = g_idata[j];
+        g_odata[indexB] = g_odata[j];
+        g_permutations[j] = indexB;
+    }
+}
+
+template <unsigned int blockSize>
+__global__ void permute(
+        float * g_idata,
+        float * g_odata,
+        unsigned int * g_permutations,
+        int n) {
+    unsigned int tid = threadIdx.x;
+
+    unsigned int i = blockIdx.x * blockSize * 2 + 2 * tid;
+    unsigned int j = blockIdx.x * blockSize * 2 + 2 * tid + 1;
+    //unsigned int gridSize = blockSize*2*gridDim.x;
+
+    if (i < n) {
+        g_odata[g_permutations[i]] = g_idata[i];
+    }
+
+    if (j < n) {
+        g_odata[g_permutations[j]] = g_odata[j];
+    }
+}
+
+template <unsigned int blockSize>
+__global__ void copy(
+        float * g_idata,
+        float * g_odata,
+        unsigned int n) {
+    unsigned int tid = threadIdx.x;
+    unsigned int i = blockIdx.x * blockSize * 2 + 2 * tid;
+    unsigned int j = blockIdx.x * blockSize * 2 + 2 * tid + 1;
+
+    if (i < n) {
+        g_odata[i] = g_idata[i];
+    }
+    if (j < n) {
+        g_odata[j] = g_idata[j];
     }
 }
 
@@ -155,56 +194,214 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
 
         const int nBlocks = (int) ceil((float) n / (N_THREADS *  ELEMENTS_PER_THREAD));
 
-    }
+        unsigned int * d_offsetLessEquals;
+        unsigned int * d_offsetGreater;
 
-    CUDA_CHECK(cudaMemcpyAsync,(
-            lcl->h_resultsA,
-                    lcl->d_resultsA,
-                    sizeof (uint) * blockOffset,
-                    cudaMemcpyDeviceToHost,
-                    lcl->stream));
+        CUDA_CHECK(cudaMalloc,(&d_offsetLessEquals, sizeof(unsigned int)));
+        CUDA_CHECK(cudaMalloc,(&d_offsetGreater, sizeof(unsigned int)));
 
-    CUDA_CHECK(cudaMemcpyAsync,(
-            lcl->h_resultsB,
-                    lcl->d_resultsB,
-                    sizeof (uint) * blockOffset,
-                    cudaMemcpyDeviceToHost,
-                    lcl->stream));
+        CUDA_CHECK(cudaMemset,(d_offsetLessEquals, 0, sizeof (unsigned int)));
+        CUDA_CHECK(cudaMemset,(d_offsetGreater, 0, sizeof (unsigned int)));
 
-    CUDA_CHECK(cudaStreamSynchronize,(lcl->stream));
+        // Case axis X
+        if (cell.cutAxis == 0) {
+            partition<N_THREADS><<<
+                nBlocks,
+                N_THREADS,
+                N_THREADS * sizeof (uint) * 4 + sizeof (unsigned int) * 2
+            >>>(
+                d_offsetLessEquals,
+                d_offsetGreater,
+                lcl->d_particlesX + beginInd,
+                lcl->d_particlesT + beginInd,
+                lcl->d_permutations + beginInd,
+                cell.getCut(),
+                lcl->h_results[cellPtrOffset],
+                n
+            );
 
-    int totalLeqOffset = 0;
-    int totalGOffset = 0;
-    for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
-        int begin = offsets[cellPtrOffset];
-        int end = offsets[cellPtrOffset + 1];
+            copy<N_THREADS><<<
+                nBlocks,
+                N_THREADS
+            >>>(
+                    lcl->d_particlesT + beginInd,
+                    lcl->d_particlesX + beginInd,
+                    n
+            );
 
-        for (int i = begin; i < end; ++i) {
-            totalLeqOffset += lcl->h_resultsA[i];
-            totalGOffset += lcl->h_resultsB[i];
+            permute<N_THREADS><<<
+                nBlocks,
+                N_THREADS
+            >>>(
+                lcl->d_particlesY + beginInd,
+                lcl->d_particlesT + beginInd,
+                lcl->d_permutations + beginInd,
+                n
+            );
+
+            copy<N_THREADS><<<
+                nBlocks,
+                N_THREADS
+            >>>(
+                    lcl->d_particlesT + beginInd,
+                    lcl->d_particlesY + beginInd,
+                    n
+            );
+
+            permute<N_THREADS><<<
+                nBlocks,
+                N_THREADS
+            >>>(
+                lcl->d_particlesZ + beginInd,
+                lcl->d_particlesT + beginInd,
+                lcl->d_permutations + beginInd,
+                n
+            );
+
+            copy<N_THREADS><<<
+                nBlocks,
+                N_THREADS
+            >>>(
+                lcl->d_particlesT + beginInd,
+                lcl->d_particlesZ + beginInd,
+                n
+            );
         }
 
-        const int nBlocks = (int) ceil((float) n / (N_THREADS *  ELEMENTS_PER_THREAD));
-
-        auto cell = static_cast<Cell>(*(in + cellPtrOffset));
-
-        int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
-        int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
-
-        // todo: pay attention to axis
-        pivotPrefixSum<N_THREADS>
-                <<<nBlocks,
+        // case axis Y
+        if (cell.cutAxis == 1) {
+            partition<N_THREADS><<<
+                nBlocks,
                 N_THREADS,
-                N_THREADS * sizeof (uint) * 2 + N_THREADS * sizeof (float),
-                lcl->stream>>>(
-                    totalLeqOffset,
-                    totalGOffset,
-                    lcl->d_particles + beginInd,
-                    cell.getCut()
-                );
+                N_THREADS * sizeof (uint) * 4 + sizeof (unsigned int) * 2
+            >>>(
+                d_offsetLessEquals,
+                d_offsetGreater,
+                lcl->d_particlesY + beginInd,
+                lcl->d_particlesT + beginInd,
+                lcl->d_permutations + beginInd,
+                cell.getCut(),
+                lcl->h_results[cellPtrOffset],
+                n
+            );
+
+            copy<N_THREADS><<<
+                nBlocks,
+                N_THREADS
+            >>>(
+                lcl->d_particlesT + beginInd,
+                lcl->d_particlesY + beginInd,
+                n
+            );
+
+            permute<N_THREADS><<<
+                nBlocks,
+                N_THREADS
+            >>>(
+                lcl->d_particlesX + beginInd,
+                lcl->d_particlesT + beginInd,
+                lcl->d_permutations + beginInd,
+                n
+            );
+
+            copy<N_THREADS><<<
+                nBlocks,
+                N_THREADS
+            >>>(
+                    lcl->d_particlesT + beginInd,
+                    lcl->d_particlesX + beginInd,
+                    n
+            );
+
+            permute<N_THREADS><<<
+                nBlocks,
+                N_THREADS
+            >>>(
+                lcl->d_particlesZ + beginInd,
+                lcl->d_particlesT + beginInd,
+                lcl->d_permutations + beginInd,
+                n
+            );
+
+            copy<N_THREADS><<<
+                nBlocks,
+                N_THREADS
+            >>>(
+                    lcl->d_particlesT + beginInd,
+                    lcl->d_particlesZ + beginInd,
+                    n
+            );
+        }
+
+        // case axis Z
+        if (cell.cutAxis == 2) {
+            partition<N_THREADS><<<
+                nBlocks,
+                N_THREADS,
+                N_THREADS * sizeof (uint) * 4 + sizeof (unsigned int) * 2
+            >>>(
+                d_offsetLessEquals,
+                d_offsetGreater,
+                lcl->d_particlesZ + beginInd,
+                lcl->d_particlesT + beginInd,
+                lcl->d_permutations + beginInd,
+                cell.getCut(),
+                lcl->h_results[cellPtrOffset],
+                n
+            );
+
+            copy<N_THREADS><<<
+                nBlocks,
+                N_THREADS
+            >>>(
+                    lcl->d_particlesT + beginInd,
+                    lcl->d_particlesZ + beginInd,
+                    n
+            );
+
+            permute<N_THREADS><<<
+                nBlocks,
+                N_THREADS
+            >>>(
+                lcl->d_particlesX + beginInd,
+                lcl->d_particlesT + beginInd,
+                lcl->d_permutations + beginInd,
+                n
+            );
+
+            copy<N_THREADS><<<
+                nBlocks,
+                N_THREADS
+            >>>(
+                lcl->d_particlesT + beginInd,
+                lcl->d_particlesX + beginInd,
+                n
+            );
+
+            permute<N_THREADS><<<
+                nBlocks,
+                N_THREADS
+            >>>(
+                lcl->d_particlesY + beginInd,
+                lcl->d_particlesT + beginInd,
+                lcl->d_permutations + beginInd,
+                n
+            );
+
+            copy<N_THREADS><<<
+                nBlocks,
+                N_THREADS
+            >>>(
+                lcl->d_particlesT + beginInd,
+                lcl->d_particlesY + beginInd,
+                n
+            );
+        }
+
+        cudaFree(d_offsetGreater);
+        cudaFree(d_offsetLessEquals);
     }
 
-    CUDA_CHECK(cudaStreamSynchronize,(lcl->stream));
     return 0;
 }
 
