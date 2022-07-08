@@ -1,10 +1,12 @@
 #include "TraversePST.h"
 #include "cell.h"
+#include "../constants.h"
 
 class ServiceInit : public TraverseCombinePST {
 public:
     struct input {
         int nParticles;
+        GPU_ACCELERATION acceleration;
     };
     typedef int output;
     explicit ServiceInit(PST pst)

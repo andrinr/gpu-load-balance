@@ -6,12 +6,12 @@
 class LocalData {
 public:
     blitz::Array<float, 2> particles;
-    blitz::Array<float, 1> particlesAxis;
+    blitz::Array<float, 1> particlesT;
     blitz::Array<int, 1> cell;
     blitz::Array<int, 1> axis;
     blitz::Array<unsigned int, 2> cellToRangeMap;
     blitz::Array<cudaStream_t , 1> streams;
-    float * d_particles;
+    float * d_particlesT;
     float * d_particlesX;
     float * d_particlesY;
     float * d_particlesZ;
@@ -54,9 +54,10 @@ enum pst_service {
     PST_COPYTODEVICE,
     PST_COUNTLEFTGPU,
     PST_COUNTLEFT,
-    PST_RESHUFFLE,
+    PST_PARTITION,
+    PST_PARTITIONGPU,
     PST_COUNT,
-    PST_FREE,
-    PST_AXISSWAP
+    PST_FINALIZE,
+    PST_MAKEAXIS
 };
 #endif

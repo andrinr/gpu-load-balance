@@ -109,7 +109,7 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
                     N_THREADS * sizeof (uint),
                     lcl->streams(0)
             >>> (
-                    lcl->d_particles + beginInd,
+                    lcl->d_particlesT + beginInd,
                     lcl->d_results + blockOffset,
                     cut,
                     n
@@ -119,7 +119,7 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
         }
         else {
             blitz::Array<float,1> particles =
-                    pst->lcl->particles(blitz::Range(beginInd, endInd), 0);
+                    pst->lcl->particlesT(blitz::Range(beginInd, endInd), 0);
 
             float * startPtr = particles.data();
             float * endPtr = startPtr + (endInd - beginInd);

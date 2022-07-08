@@ -23,7 +23,7 @@ int ServiceCountLeft::Service(PST pst, void *vin, int nIn, void *vout, int nOut)
         int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
 
         blitz::Array<float,1> particles =
-                pst->lcl->particlesAxis(blitz::Range(beginInd, endInd));
+                pst->lcl->particlesT(blitz::Range(beginInd, endInd));
 
         float * startPtr = particles.data();
         float * endPtr = startPtr + (endInd - beginInd);

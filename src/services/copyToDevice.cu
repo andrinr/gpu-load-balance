@@ -10,17 +10,51 @@ static_assert(std::is_void<ServiceCopyToDevice::output>() || std::is_trivial<Ser
 int ServiceCopyToDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     // store streams / initialize in local data
     auto lcl = pst->lcl;
+    ServiceCopyToDevice::input in = *static_cast<input *>(vin);
 
     int nParticles = lcl->particles.rows();
     // We only need the first nParticles, since axis 0 is axis where cuts need to be found
 
-    cudaMemcpyAsync(
-            lcl->d_particles,
-            lcl->particlesAxis.data(),
-            sizeof (float) * nParticles,
-            cudaMemcpyHostToDevice,
-            pst->lcl->streams(0)
-    );
+
+    if (in.acceleration == COUNT) {
+        cudaMemcpyAsync(
+                lcl->d_particlesT,
+                lcl->particlesT.data(),
+                sizeof (float) * nParticles,
+                cudaMemcpyHostToDevice,
+                pst->lcl->streams(0)
+        );
+    }
+
+    if (in.acceleration == COUNT_PARTITION) {
+        blitz::Array<float, 1> x = lcl->particles(blitz::Range::all(), 0);
+        blitz::Array<float, 1> y = lcl->particles(blitz::Range::all(), 1);
+        blitz::Array<float, 1> z = lcl->particles(blitz::Range::all(), 2);
+
+        cudaMemcpyAsync(
+                lcl->d_particlesX,
+                x.data(),
+                sizeof (float) * nParticles,
+                cudaMemcpyHostToDevice,
+                pst->lcl->streams(0)
+        );
+
+        cudaMemcpyAsync(
+                lcl->d_particlesY,
+                y.data(),
+                sizeof (float) * nParticles,
+                cudaMemcpyHostToDevice,
+                pst->lcl->streams(0)
+        );
+
+        cudaMemcpyAsync(
+                lcl->d_particlesZ,
+                z.data(),
+                sizeof (float) * nParticles,
+                cudaMemcpyHostToDevice,
+                pst->lcl->streams(0)
+        );
+    }
 
     return sizeof(output);
 }

@@ -1,4 +1,4 @@
-#include "init.h"
+#include "init.cuh"
 #include <blitz/array.h>
 #include <limits>
 #include "../constants.h"
@@ -40,20 +40,6 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     // x, y, z, cellId, tmp
     int k = 3;
     auto particles = blitz::Array<float, 2>(in.nParticles, k, storage);
-
-    float * particlesAxisData = (float *)calloc(N, sizeof(float ));
-    CUDA_CHECK(cudaMallocHost, ((void**)&particlesAxisData, N * sizeof (float )));
-
-    auto particlesAxis = blitz::Array<float, 1>(
-            particlesAxisData,
-            in.nParticles,
-            blitz::deleteDataWhenDone);
-    auto cellToRangeMap = blitz::Array<uint, 2>(MAX_CELLS, 2);
-    float * d_particles;
-
-    //auto tipsy = TipsyIO("../data/tipsy/b0-final.std");
-    //tipsy.load()
-
     srand(pst->idSelf);
     int c = 0;
     for (int i = 0; i < in.nParticles; i++) {
@@ -62,35 +48,51 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
             if (particles(i,d) < 0.0) c++;
         }
     }
+    lcl->particles.reference(particles);
 
-    printf("ServiceInit generated random numbers %d\n",pst->idSelf);
-
+    // Mapping from cellId to particle index
+    auto cellToRangeMap = blitz::Array<uint, 2>(MAX_CELLS, 2);
     cellToRangeMap(0, 0) = 0;
     cellToRangeMap(0, 1) = in.nParticles;
-
-    const int nBlocks = (int) ceil((float) in.nParticles / (N_THREADS * ELEMENTS_PER_THREAD)) + MAX_CELLS;
-    unsigned int* h_results = (unsigned int*)malloc(nBlocks * sizeof(unsigned int));
-    CUDA_CHECK(cudaMallocHost, ((void**)&h_results, nBlocks * sizeof (unsigned int)));
-
-    lcl->h_results = h_results;
-    lcl->particles.reference(particles);
-    lcl->particlesAxis.reference(particlesAxis);
-    lcl->d_particles = d_particles;
     lcl->cellToRangeMap.reference(cellToRangeMap);
 
-    CUDA_CHECK(cudaMalloc,(&lcl->d_particles, sizeof (float) * in.nParticles));
+    // Temporary array buffer on the CPU
+    if (in.acceleration == NONE) {
+        auto particlesT = blitz::Array<float, 1>(in.nParticles);
+        lcl->particlesT.reference(particlesT);
+    }
+    else if (in.acceleration == COUNT) {
+        float * particlesTData = (float *)malloc(N * sizeof(float ));
+        CUDA_CHECK(cudaMallocHost, ((void**)&particlesTData, N * sizeof (float )));
+        auto particlesT = blitz::Array<float, 1>(
+                particlesTData,
+                in.nParticles,
+                blitz::deleteDataWhenDone);
 
-    CUDA_CHECK(cudaMalloc, (&lcl->d_results, sizeof (unsigned int) * nBlocks));
-
-    auto streams = blitz::Array<cudaStream_t , 1>(N_STREAMS);
-
-    for (int i = 0; i < N_STREAMS; i++) {
-        cudaStream_t stream;
-        CUDA_CHECK(cudaStreamCreate, (&stream));
-        streams(i) = stream;
+        lcl->particlesT.reference(particlesT);
     }
 
-    lcl->streams.reference(streams);
+    if (in.acceleration == COUNT || in.acceleration == COUNT_PARTITION) {
+        // Results from counting on the GPU
+        const int nBlocks = (int) ceil((float) in.nParticles / (N_THREADS * ELEMENTS_PER_THREAD)) + MAX_CELLS;
+        CUDA_CHECK(cudaMalloc, (&lcl->d_results, sizeof (unsigned int) * nBlocks));
+
+        unsigned int* h_results = (unsigned int*)malloc(nBlocks * sizeof(unsigned int));
+        CUDA_CHECK(cudaMallocHost, ((void**)&h_results, nBlocks * sizeof (unsigned int)));
+        lcl->h_results = h_results;
+
+        // Temporary particle array on the GPU
+        CUDA_CHECK(cudaMalloc,(&lcl->d_particlesT, sizeof (float) * in.nParticles));
+
+        // Streams
+        auto streams = blitz::Array<cudaStream_t , 1>(N_STREAMS);
+        for (int i = 0; i < N_STREAMS; i++) {
+            cudaStream_t stream;
+            CUDA_CHECK(cudaStreamCreate, (&stream));
+            streams(i) = stream;
+        }
+        lcl->streams.reference(streams);
+    }
 
     printf("ServiceInit finished on thread %d\n",pst->idSelf);
 

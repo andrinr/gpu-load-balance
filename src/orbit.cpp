@@ -9,17 +9,12 @@
 #include "services/countLeft.cuh"
 #include "services/copyToDevice.cuh"
 #include "services/finalize.cuh"
-#include "services/reshuffle.cuh"
-#include "services/init.h"
+#include "services/partition.cuh"
+#include "services/partition.h"
+#include "services/init.cuh"
 #include "services/makeAxis.h"
 
 #include "constants.h"
-
-enum variant {
-    CPU,
-    GPU_COUNT,
-    GPU_COUNT_PARTITION
-};
 
 int master(MDL vmdl,void *vpst) {
     auto mdl = static_cast<mdl::mdlClass *>(vmdl);
@@ -32,7 +27,7 @@ int master(MDL vmdl,void *vpst) {
     float lower[3] = {-0.5, -0.5, -0.5};
     float upper[3] = {0.5, 0.5, 0.5};
 
-    const variant variant = GPU_COUNT_PARTITION;
+    const GPU_ACCELERATION acceleration = COUNT;
 
     // user code
     Cell root(0, d, lower, upper);
@@ -46,7 +41,7 @@ int master(MDL vmdl,void *vpst) {
 
     cellHeap(0) = root;
 
-    ServiceInit::input iInit {N/mdl->Threads()};
+    ServiceInit::input iInit {N/mdl->Threads(), acceleration};
     ServiceInit::output oInit[1];
     mdl->RunService(PST_INIT, sizeof (ServiceInit::input), &iInit, oInit);
 
@@ -61,18 +56,18 @@ int master(MDL vmdl,void *vpst) {
         blitz::Array<Cell, 1> cells = cellHeap(blitz::Range(a, b));
         ServiceCount::input *iCells = cells.data();
 
-        if (variant == GPU_COUNT) {
-            ServiceReshuffle::output oSwaps[1];
-            mdl->RunService(PST_AXISSWAP, nCells * sizeof(ServiceReshuffle::input), iCells, oSwaps);
+        if (acceleration == NONE || acceleration == COUNT) {
+            ServiceMakeAxis::output oSwaps[1];
+            mdl->RunService(PST_MAKEAXIS, nCells * sizeof(ServicePartition::input), iCells, oSwaps);
         }
 
         ServiceCount::output oCount[nCells];
         mdl->RunService(PST_COUNT, nCells * sizeof(ServiceCount::input), iCells, oCount);
 
-        if (variant == GPU_COUNT) {
-            ServiceCopyToDevice::input iCopy[1];
+        if (acceleration == COUNT || acceleration == COUNT_PARTITION) {
+            ServiceCopyToDevice::input iCopy {acceleration};
             ServiceCopyToDevice::output oCopy[1];
-            mdl->RunService(PST_COPYTODEVICE, sizeof (int), iCopy, oCopy);
+            mdl->RunService(PST_COPYTODEVICE, sizeof (ServiceCopyToDevice::input), &iCopy, oCopy);
         }
 
         // Loop
@@ -85,7 +80,7 @@ int master(MDL vmdl,void *vpst) {
             foundAll = true;
 
             ServiceCountLeft::output oCountLeft[nCells];
-            if (variant == GPU_COUNT || variant == GPU_COUNT_PARTITION) {
+            if (acceleration == COUNT || acceleration == COUNT_PARTITION) {
                 mdl->RunService(
                         PST_COUNTLEFTGPU,
                         nCells * sizeof(ServiceCountLeft::input),
@@ -154,19 +149,21 @@ int master(MDL vmdl,void *vpst) {
             //cellRight.log();
         }
 
-        if (variant == GPU_COUNT_PARTITION) {
+        if (acceleration == COUNT_PARTITION) {
 
         }
         else {
-            ServiceReshuffle::output oCutIndices[1];
-            mdl->RunService(PST_RESHUFFLE, nCells * sizeof(ServiceReshuffle::input), iCells, oCutIndices);
+            ServicePartition::output oCutIndices[1];
+            mdl->RunService(PST_PARTITION, nCells * sizeof(ServicePartition::input), iCells, oCutIndices);
         }
 
     }
 
-    ServiceFreeDevice::input iFree[1];
-    ServiceFreeDevice::output oFree[1];
-    mdl->RunService(PST_FREE, sizeof (int), iFree, oFree);
+    if (acceleration == COUNT || acceleration == COUNT_PARTITION) {
+        ServiceFinalize::input iFree[1];
+        ServiceFinalize::output oFree[1];
+        mdl->RunService(PST_FINALIZE, sizeof (int), iFree, oFree);
+    }
 
     return 0;
 }
@@ -184,9 +181,9 @@ void *worker_init(MDL vmdl) {
     mdl->AddService(std::make_unique<ServiceCount>(pst));
     mdl->AddService(std::make_unique<ServiceCopyToDevice>(pst));
     mdl->AddService(std::make_unique<ServiceCountLeftGPU>(pst));
-    mdl->AddService(std::make_unique<ServiceReshuffle>(pst));
-    mdl->AddService(std::make_unique<ServiceFreeDevice>(pst));
-    mdl->AddService(std::make_unique<ServiceAxisSwap>(pst));
+    mdl->AddService(std::make_unique<ServicePartition>(pst));
+    mdl->AddService(std::make_unique<ServiceFinalize>(pst));
+    mdl->AddService(std::make_unique<ServiceMakeAxis>(pst));
 
     return pst;
 }

@@ -1,4 +1,4 @@
-#include "reshuffle.cuh"
+#include "partition.cuh"
 #include "../cell.h"
 #include <blitz/array.h>
 #include "../utils/condReduce.cuh"
@@ -7,8 +7,8 @@
 namespace cg = cooperative_groups;
 // Make sure that the communication structure is "trivial" so that it
 // can be moved around with "memcpy" which is required for MDL.
-static_assert(std::is_void<ServiceReshuffle::input>()  || std::is_trivial<ServiceReshuffle::input>());
-static_assert(std::is_void<ServiceReshuffle::output>() || std::is_trivial<ServiceReshuffle::output>());
+static_assert(std::is_void<ServicePartitionGPU::input>()  || std::is_trivial<ServicePartitionGPU::input>());
+static_assert(std::is_void<ServicePartitionGPU::output>() || std::is_trivial<ServicePartitionGPU::output>());
 
 __device__ void scan(volatile unsigned int * s_idata, unsigned int thid, unsigned int n) {
     unsigned int offset = 1;
@@ -124,7 +124,7 @@ __global__ void partition(
     }
 }
 
-int ServiceReshuffle::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
+int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
 
     auto lcl = pst->lcl;
     auto in  = static_cast<input *>(vin);
@@ -208,6 +208,6 @@ int ServiceReshuffle::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     return 0;
 }
 
-int ServiceReshuffle::Combine(void *vout,void *vout2,int nIn,int nOut1,int nOut2) {
+int ServicePartitionGPU::Combine(void *vout,void *vout2,int nIn,int nOut1,int nOut2) {
     return 0;
 }

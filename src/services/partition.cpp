@@ -1,10 +1,10 @@
-#include "reshuffle.cuh"
+#include "partition.h"
 #include "../cell.h"
 #include <blitz/array.h>
 // Make sure that the communication structure is "trivial" so that it
 // can be moved around with "memcpy" which is required for MDL.
-static_assert(std::is_void<ServiceReshuffle::input>()  || std::is_trivial<ServiceReshuffle::input>());
-static_assert(std::is_void<ServiceReshuffle::output>() || std::is_trivial<ServiceReshuffle::output>());
+static_assert(std::is_void<ServicePartition::input>()  || std::is_trivial<ServicePartition::input>());
+static_assert(std::is_void<ServicePartition::output>() || std::is_trivial<ServicePartition::output>());
 
 
 static void swap(blitz::Array<float, 2> p, int a, int b) {
@@ -15,7 +15,7 @@ static void swap(blitz::Array<float, 2> p, int a, int b) {
     }
 };
 
-int ServiceReshuffle::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
+int ServicePartition::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
 
     auto lcl = pst->lcl;
     auto in  = static_cast<input *>(vin);
@@ -64,6 +64,6 @@ int ServiceReshuffle::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     return 0;
 }
 
-int ServiceReshuffle::Combine(void *vout,void *vout2,int nIn,int nOut1,int nOut2) {
+int ServicePartition::Combine(void *vout,void *vout2,int nIn,int nOut1,int nOut2) {
     return 0;
 }

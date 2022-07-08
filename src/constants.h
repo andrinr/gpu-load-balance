@@ -12,6 +12,12 @@ static const int N = 1 << 25;
 static const int d = 1 << 4;
 static const int N_STREAMS = 32;
 
+enum GPU_ACCELERATION {
+    NONE,
+    COUNT,
+    COUNT_PARTITION
+};
+
 inline void CUDA_Abort(cudaError_t rc, const char *fname, const char *file, int line) {
     fprintf(stderr,"%s error %d in %s(%d)\n%s\n", fname, rc, file, line, cudaGetErrorString(rc));
     exit(1);
