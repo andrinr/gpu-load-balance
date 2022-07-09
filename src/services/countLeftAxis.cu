@@ -1,12 +1,13 @@
-#include "countLeft.cuh"
+#include "countLeftAxis.cuh"
 #include <blitz/array.h>
 #include <array>
 #include "../utils/condReduce.cuh"
 
 // Make sure that the communication structure is "trivial" so that it
 // can be moved around with "memcpy" which is required for MDL.
-static_assert(std::is_void<ServiceCountLeftGPU::input>()  || std::is_trivial<ServiceCountLeftGPU::input>());
-static_assert(std::is_void<ServiceCountLeftGPU::output>() || std::is_trivial<ServiceCountLeftGPU::output>());
+static_assert(std::is_void<ServiceCountLeftAxisGPU::input>()  || std::is_trivial<ServiceCountLeftAxisGPU::input>());
+static_assert(std::is_void<ServiceCountLeftAxisGPU::output>() || std::is_trivial<ServiceCountLeftAxisGPU::output>());
+
 
 template <unsigned int blockSize>
 extern __device__ void warpReduce(volatile int *sdata, unsigned int tid) {
@@ -61,7 +62,7 @@ extern __global__ void reduce(float *g_idata, unsigned int*g_odata, float cut, i
     }
 }
 
-int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
+int ServiceCountLeftAxisGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     // store streams / initialize in local d
     // ata
     auto lcl = pst->lcl;
@@ -100,50 +101,19 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
 
             // Kernel launches are serialzed within stream !
             // increase number of streams per thread
-            if (cell.cutAxis == 0) {
-                reduce<N_THREADS, leq>
-                <<<
-                    nBlocks,
-                    N_THREADS,
-                    N_THREADS * sizeof (uint),
-                    lcl->streams(0)
-                >>> (
-                    lcl->d_particlesX + beginInd,
-                    lcl->d_results + blockOffset,
-                    cut,
-                    n
-                );
-            }
 
-            if (cell.cutAxis == 1) {
-                reduce<N_THREADS, leq>
-                <<<
-                    nBlocks,
-                    N_THREADS,
-                    N_THREADS * sizeof (uint),
-                    lcl->streams(1)
-                >>> (
-                    lcl->d_particlesY + beginInd,
-                    lcl->d_results + blockOffset,
-                    cut,
-                    n
-                );
-            }
-
-            if (cell.cutAxis == 2) {
-                reduce<N_THREADS, leq>
-                <<<
-                    nBlocks,
-                    N_THREADS,
-                    N_THREADS * sizeof (uint),
-                    lcl->streams(2)
-                >>> (
-                    lcl->d_particlesZ + beginInd,
-                    lcl->d_results + blockOffset,
-                    cut,
-                    n
-                );
-            }
+            reduce<N_THREADS, leq>
+            <<<
+                nBlocks,
+                N_THREADS,
+                N_THREADS * sizeof (uint),
+                lcl->streams(0)
+            >>> (
+                lcl->d_particlesT + beginInd,
+                lcl->d_results + blockOffset,
+                cut,
+                n
+            );
 
             blockOffset += nBlocks;
         }
@@ -179,12 +149,13 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
         for (int i = begin; i < end; ++i) {
             out[cellPtrOffset] += lcl->h_results[i];
         }
+        lcl->h_countsLeft(cellPtrOffset) = out[cellPtrOffset];
     }
 
     return nCells * sizeof(output);
 }
 
-int ServiceCountLeftGPU::Combine(void *vout,void *vout2,int nIn,int nOut1,int nOut2) {
+int ServiceCountLeftAxisGPU::Combine(void *vout,void *vout2,int nIn,int nOut1,int nOut2) {
     auto out  = static_cast<output *>(vout);
     auto out2 = static_cast<output *>(vout2);
     int nCounts = nIn / sizeof(input);

@@ -1767,7 +1767,14 @@ CUDA is programming language, allowing us to access the GPU, without having to t
 
 Note that we are aware of the Thrust library an its implementation of partition, reductions and binary search. But the library does not allow us to manage the memory by ourselves, therefore we are forced to re-implement some concepts which are already introduced by thrust. 
 
-\TODO{Mention how the number of particles will be limited when implementing the GPU version}
+We will implement two GPU accelerated versions:
+\begin{itemize}
+	\item GPU Accelerated Count Left
+	\item GPU Accelerated Count Left and Partition
+\end{itemize}
+
+Note that the total number of particles, which can be simulated, will be reduced, as the GPU memory is a lot smaller than the CPU memory. How much less particles can be simulated, depends a lot on the implementation and will vary between the two implementations.
+
 \subsubsection{Relevant CUDA Concepts}
 
 CUDA gives us the ability to launch kernels, which are written in C with some additional CUDA specific syntax. These kernel can be run from the CPU, commonly refereed to as the host, and are then executed on the GPU, also known as the device. The device and the host have a separate memory and as seen in section \ref{sec:gmm} the transfer $I_{CG}$ rates between the GPU and CPU are generally slower, under performing $I_{C}$ and $I_G$ speeds. Therefore one of key the challenges when rewriting CPU code to GPU code is to limit data transfers between the GPU and CPU as much as possible.
@@ -1800,7 +1807,7 @@ Another important concept are warps. Each warp consists of 32 threads and all th
 
 Our primary focus for optimization is the binary cut algorithm, more specifically the counting method. Its implementation in CUDA is straight forward and performance improvement are guaranteed as shown in section \TODO{add reference}. 
 
-\subsubsection{CUDA Reduction}
+\subsubsection{GPU Accelerated Count Left}
 We have described a CPU implementation of the countLeftService. In this section we explain how we can port this problem to the GPU. In essence we can use a general reduction as a basis version, and implement it to specifically fit our needs, which in our case is summing up elements which fulfill a certain condition. The condition being smaller than a given value.
 
 Optimized reductions in CUDA are well documented and explained by the NVIDIA developer team. We make use of a reduction introduced by \TODO{Reference} and adapt it slightly to fit our needs. 
@@ -1836,8 +1843,9 @@ Nevertheless it leads to reduced warp occupancy rate. However compared to earlie
 
 Another approach is to adapt the kernel, such that it directly iterates over all the particles. But this approach cannot be implemented easily and directly comes with other drawbacks. Since we need to know the total number of elements smaller than a value for each cell, we have to be very careful about where we store results, as there should not be any 
 
-\subsubsection{CUDA Partitioning}
+\subsubsection{GPU Accelerated Partitioning}
 
+On the main bottlenecks of the optimized code, is the data transfer which is needed to transfer the correct axis between the 
 
 We describe measurements which were done using the reduction in CUDA, we mention how the reduction cannot necessarily be improved a lot and that the data transfer between the GPU and CPU is the main bottleneck now. We mention how building the tree on the does not make a lot of sense. We explain why instead we focus our efforts to implement a GPU reshuffling method, which can improve runtime by reducing the reshuffling costs and also remove CPU GPU transfers between invocations of the binary cut algorithm altogether. 
 
@@ -1951,7 +1959,7 @@ We can use several strategies in order to improve the performance of data transf
 
 \begin{enumerate}
 	\item \textbf{Reuse Data} We can avoid data transfers, by writing kernels out of code which was done on the CPU before. In our case we send the particle data from the host to device once
-	\item \textbf{Reduce Data} We can reduce the data 
+	\item \textbf{Reduce Data} We can reduce the total number of data, which needs to be sent to the GPU. We do this 
 	\item \textbf{CUDA Streams} 
 	\item \textbf{Data Batches}
 	

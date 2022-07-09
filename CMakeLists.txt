@@ -78,6 +78,7 @@ add_executable(
         src/services/init.cu
         src/services/copyToDevice.cu
         src/services/countLeft.cu
+        src/services/countLeftAxis.cu
         src/services/partition.cpp
         src/services/partition.cu
         src/services/finalize.cu

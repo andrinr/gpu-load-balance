@@ -7,6 +7,7 @@
 #include "services/setadd.h"
 #include "services/countLeft.h"
 #include "services/countLeft.cuh"
+#include "services/countLeftAxis.cuh"
 #include "services/copyToDevice.cuh"
 #include "services/finalize.cuh"
 #include "services/partition.cuh"
@@ -80,9 +81,16 @@ int master(MDL vmdl,void *vpst) {
             foundAll = true;
 
             ServiceCountLeft::output oCountLeft[nCells];
-            if (acceleration == COUNT || acceleration == COUNT_PARTITION) {
+            if (acceleration == COUNT_PARTITION) {
                 mdl->RunService(
                         PST_COUNTLEFTGPU,
+                        nCells * sizeof(ServiceCountLeft::input),
+                        iCells,
+                        oCountLeft);
+            }
+            else if (acceleration == COUNT) {
+                mdl->RunService(
+                        PST_COUNTLEFTAXISGPU,
                         nCells * sizeof(ServiceCountLeft::input),
                         iCells,
                         oCountLeft);
@@ -182,6 +190,7 @@ void *worker_init(MDL vmdl) {
     mdl->AddService(std::make_unique<ServiceCount>(pst));
     mdl->AddService(std::make_unique<ServiceCopyToDevice>(pst));
     mdl->AddService(std::make_unique<ServiceCountLeftGPU>(pst));
+    mdl->AddService(std::make_unique<ServiceCountLeftAxisGPU>(pst));
     mdl->AddService(std::make_unique<ServicePartition>(pst));
     mdl->AddService(std::make_unique<ServicePartitionGPU>(pst));
     mdl->AddService(std::make_unique<ServiceFinalize>(pst));

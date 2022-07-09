@@ -216,7 +216,7 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
                 lcl->d_particlesT + beginInd,
                 lcl->d_permutations + beginInd,
                 cell.getCut(),
-                lcl->h_results[cellPtrOffset],
+                lcl->h_countsLeft(cellPtrOffset),
                 n
             );
 
@@ -281,7 +281,7 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
                 lcl->d_particlesT + beginInd,
                 lcl->d_permutations + beginInd,
                 cell.getCut(),
-                lcl->h_results[cellPtrOffset],
+                lcl->h_countsLeft(cellPtrOffset),
                 n
             );
 
@@ -346,7 +346,7 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
                 lcl->d_particlesT + beginInd,
                 lcl->d_permutations + beginInd,
                 cell.getCut(),
-                lcl->h_results[cellPtrOffset],
+                lcl->h_countsLeft(cellPtrOffset),
                 n
             );
 
@@ -397,6 +397,15 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
                 n
             );
         }
+
+        printf("%d\n", lcl->h_countsLeft(cellPtrOffset));
+        lcl->cellToRangeMap(cell.getLeftChildId(), 0) =
+                lcl->cellToRangeMap(cell.id, 0);
+        lcl->cellToRangeMap(cell.getLeftChildId(), 1) = lcl->h_countsLeft(cellPtrOffset);
+
+        lcl->cellToRangeMap(cell.getRightChildId(), 0) = lcl->h_countsLeft(cellPtrOffset);
+        lcl->cellToRangeMap(cell.getRightChildId(), 1) =
+                lcl->cellToRangeMap(cell.id, 1);
 
         cudaFree(d_offsetGreater);
         cudaFree(d_offsetLessEquals);
