@@ -76,10 +76,6 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     std::array<unsigned int, MAX_CELLS> offsets;
     offsets[0] = 0;
 
-    for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
-        out[cellPtrOffset] = 0;
-    }
-
     // Make sure memcopy is done for this thread
     // Could also improved but seems complicated
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
@@ -89,12 +85,14 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
             offsets[cellPtrOffset+1] = blockOffset;
             continue;
         }
+
+        out[cellPtrOffset] = 0;
         int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
         int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
         int n = endInd - beginInd;
         float cut = cell.getCut();
 
-        if (n > 1 << 12) {
+        if (n > 1){ //N_THREADS * ELEMENTS_PER_THREAD) {
             const int nBlocks = (int) ceil((float) n / (N_THREADS * ELEMENTS_PER_THREAD));
             const bool leq = true;
 
@@ -114,14 +112,13 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
                     n
                 );
             }
-
-            if (cell.cutAxis == 1) {
+            else if (cell.cutAxis == 1) {
                 reduce<N_THREADS, leq>
                 <<<
                     nBlocks,
                     N_THREADS,
                     N_THREADS * sizeof (uint),
-                    lcl->streams(1)
+                    lcl->streams(0)
                 >>> (
                     lcl->d_particlesY + beginInd,
                     lcl->d_results + blockOffset,
@@ -129,14 +126,13 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
                     n
                 );
             }
-
-            if (cell.cutAxis == 2) {
+            else if (cell.cutAxis == 2) {
                 reduce<N_THREADS, leq>
                 <<<
                     nBlocks,
                     N_THREADS,
                     N_THREADS * sizeof (uint),
-                    lcl->streams(2)
+                    lcl->streams(0)
                 >>> (
                     lcl->d_particlesZ + beginInd,
                     lcl->d_results + blockOffset,
@@ -158,6 +154,7 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
             {
                 out[cellPtrOffset] += *p < cut;
             }
+            lcl->h_countsLeft(cellPtrOffset) = out[cellPtrOffset];
         }
 
         offsets[cellPtrOffset+1] = blockOffset;
@@ -173,12 +170,18 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     CUDA_CHECK(cudaStreamSynchronize,(lcl->streams(0)));
 
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
+
+        auto cell = static_cast<Cell>(*(in + cellPtrOffset));
+        if (cell.foundCut) {continue;}
+
         int begin = offsets[cellPtrOffset];
         int end = offsets[cellPtrOffset + 1];
 
         for (int i = begin; i < end; ++i) {
             out[cellPtrOffset] += lcl->h_results[i];
         }
+
+        lcl->h_countsLeft(cellPtrOffset) = out[cellPtrOffset];
     }
 
     return nCells * sizeof(output);

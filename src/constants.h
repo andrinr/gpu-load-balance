@@ -6,10 +6,10 @@
 #define GPU_LOAD_BALANCE_CONSTANTS_H
 
 static const int MAX_CELLS = 8192;
-static const int N_THREADS = 512;
-static const int ELEMENTS_PER_THREAD = 32;
-static const int N = 1 << 25;
-static const int d = 1 << 4;
+static const int N_THREADS = 256;
+static const int ELEMENTS_PER_THREAD = 16;
+static const int N = 1 << 20;
+static const int d = 1 << 5;
 static const int N_STREAMS = 32;
 
 enum GPU_ACCELERATION {

@@ -398,12 +398,11 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
             );
         }
 
-        printf("%d\n", lcl->h_countsLeft(cellPtrOffset));
         lcl->cellToRangeMap(cell.getLeftChildId(), 0) =
                 lcl->cellToRangeMap(cell.id, 0);
-        lcl->cellToRangeMap(cell.getLeftChildId(), 1) = lcl->h_countsLeft(cellPtrOffset);
+        lcl->cellToRangeMap(cell.getLeftChildId(), 1) = lcl->h_countsLeft(cellPtrOffset) + beginInd;
 
-        lcl->cellToRangeMap(cell.getRightChildId(), 0) = lcl->h_countsLeft(cellPtrOffset);
+        lcl->cellToRangeMap(cell.getRightChildId(), 0) = lcl->h_countsLeft(cellPtrOffset) + beginInd;
         lcl->cellToRangeMap(cell.getRightChildId(), 1) =
                 lcl->cellToRangeMap(cell.id, 1);
 

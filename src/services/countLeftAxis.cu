@@ -149,7 +149,6 @@ int ServiceCountLeftAxisGPU::Service(PST pst,void *vin,int nIn,void *vout, int n
         for (int i = begin; i < end; ++i) {
             out[cellPtrOffset] += lcl->h_results[i];
         }
-        lcl->h_countsLeft(cellPtrOffset) = out[cellPtrOffset];
     }
 
     return nCells * sizeof(output);
