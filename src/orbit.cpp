@@ -46,8 +46,16 @@ int master(MDL vmdl,void *vpst) {
     ServiceInit::output oInit[1];
     mdl->RunService(PST_INIT, sizeof (ServiceInit::input), &iInit, oInit);
 
+    // Only copy once
+    if (acceleration == COUNT_PARTITION) {
+        ServiceCopyToDevice::input iCopy {acceleration};
+        ServiceCopyToDevice::output oCopy[1];
+        mdl->RunService(PST_COPYTODEVICE, sizeof (ServiceCopyToDevice::input), &iCopy, oCopy);
+    }
+
     for (int l = 1; l < root.getNLevels(); ++l) {
 
+        printf("done part root 2 \n");
         int a = std::pow(2, (l - 1)) - 1;
         int b = std::min(
                root.getNCellsOnLastLevel(),
@@ -62,10 +70,13 @@ int master(MDL vmdl,void *vpst) {
             mdl->RunService(PST_MAKEAXIS, nCells * sizeof(ServicePartition::input), iCells, oSwaps);
         }
 
+        printf("done part root 2.5 \n");
         ServiceCount::output oCount[nCells];
         mdl->RunService(PST_COUNT, nCells * sizeof(ServiceCount::input), iCells, oCount);
 
-        if (acceleration == COUNT || acceleration == COUNT_PARTITION) {
+        printf("done part root 3 \n");
+        // Copy with each iteration as partition is done on GPU
+        if (acceleration == COUNT) {
             ServiceCopyToDevice::input iCopy {acceleration};
             ServiceCopyToDevice::output oCopy[1];
             mdl->RunService(PST_COPYTODEVICE, sizeof (ServiceCopyToDevice::input), &iCopy, oCopy);
@@ -126,12 +137,12 @@ int master(MDL vmdl,void *vpst) {
                     // good optimization, but can it be proven to give a result?
                     // Take more constrained version of both, which should ensure it?
                     // Could maybe also be proven.
-                    cells(i).cutMarginRight -= diffPct * (cells(i).cutMarginRight - cells(i).cutMarginLeft);
-                    //cells(i).cutMarginRight = cells(i).getCut();
+                    //cells(i).cutMarginRight -= diffPct * (cells(i).cutMarginRight - cells(i).cutMarginLeft);
+                    cells(i).cutMarginRight = cells(i).getCut();
                     foundAll = false;
                 } else {
-                    cells(i).cutMarginLeft -= diffPct * (cells(i).cutMarginRight - cells(i).cutMarginLeft);
-                    //cells(i).cutMarginLeft = cells(i).getCut();
+                    //cells(i).cutMarginLeft -= diffPct * (cells(i).cutMarginRight - cells(i).cutMarginLeft);
+                    cells(i).cutMarginLeft = cells(i).getCut();
                     foundAll = false;
                 }
             }
@@ -158,14 +169,14 @@ int master(MDL vmdl,void *vpst) {
         }
 
         if (acceleration == COUNT_PARTITION) {
-            ServicePartition::output oCutIndices[1];
-            mdl->RunService(PST_PARTITIONGPU, nCells * sizeof(ServicePartitionGPU::input), iCells, oCutIndices);
+            ServicePartitionGPU::output oPartition[1];
+            mdl->RunService(PST_PARTITIONGPU, nCells * sizeof(ServicePartitionGPU::input), iCells, oPartition);
+            printf("done part root 1 \n");
         }
         else {
-            ServicePartition::output oCutIndices[1];
-            mdl->RunService(PST_PARTITION, nCells * sizeof(ServicePartition::input), iCells, oCutIndices);
+            ServicePartition::output oPartition[1];
+            mdl->RunService(PST_PARTITION, nCells * sizeof(ServicePartition::input), iCells, oPartition);
         }
-
     }
 
     if (acceleration == COUNT || acceleration == COUNT_PARTITION) {

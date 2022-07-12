@@ -120,7 +120,7 @@ __global__ void partition(
     }
 
     if (j < n) {
-        g_odata[indexB] = g_odata[j];
+        g_odata[indexB] = g_idata[j];
         g_permutations[j] = indexB;
     }
 }
@@ -142,24 +142,7 @@ __global__ void permute(
     }
 
     if (j < n) {
-        g_odata[g_permutations[j]] = g_odata[j];
-    }
-}
-
-template <unsigned int blockSize>
-__global__ void copy(
-        float * g_idata,
-        float * g_odata,
-        unsigned int n) {
-    unsigned int tid = threadIdx.x;
-    unsigned int i = blockIdx.x * blockSize * 2 + 2 * tid;
-    unsigned int j = blockIdx.x * blockSize * 2 + 2 * tid + 1;
-
-    if (i < n) {
-        g_odata[i] = g_idata[i];
-    }
-    if (j < n) {
-        g_odata[j] = g_idata[j];
+        g_odata[g_permutations[j]] = g_idata[j];
     }
 }
 
@@ -169,7 +152,6 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     auto in  = static_cast<input *>(vin);
     auto out = static_cast<output *>(vout);
     const int nCells = nIn / sizeof(input);
-    assert(nOut / sizeof(output) >= nCells);
 
     //int bytes = nCounts * sizeof (uint);
     // https://developer.nvidia.com/blog/how-overlap-data-transfers-cuda-cc/
@@ -180,223 +162,209 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     int countLeq[nCells];
     int countG[nCells];
 
+    // Primary axis to temporary
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
         out[cellPtrOffset] = 0;
-    }
 
+        auto cell = static_cast<Cell>(*(in + cellPtrOffset));
+
+        int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
+        int endInd = pst->lcl->cellToRangeMap(cell.id, 1);
+        int n = endInd - beginInd;
+        float cut = cell.getCut();
+
+        const int nBlocks = (int) ceil((float) n / (N_THREADS * 2.0));
+
+        if (pst->idSelf == 0) {
+            printf("n %i nBlocks %i b %i e %i\n", n, nBlocks, beginInd, endInd);
+        }
+
+        unsigned int *d_offsetLessEquals;
+        unsigned int *d_offsetGreater;
+
+        CUDA_CHECK(cudaMalloc, (&d_offsetLessEquals, sizeof(unsigned int)));
+        CUDA_CHECK(cudaMalloc, (&d_offsetGreater, sizeof(unsigned int)));
+
+        CUDA_CHECK(cudaMemset, (d_offsetLessEquals, 0, sizeof(unsigned int)));
+        CUDA_CHECK(cudaMemset, (d_offsetGreater, 0, sizeof(unsigned int)));
+
+        float * d_from;
+        float * d_to = lcl->d_particlesT + beginInd;
+
+        if (cell.cutAxis == 0) {
+            d_from = lcl->d_particlesX + beginInd;
+        }
+        else if (cell.cutAxis == 1) {
+            d_from = lcl->d_particlesY + beginInd;
+        }
+        else {
+            d_from = lcl->d_particlesZ + beginInd;
+        }
+
+        partition<N_THREADS><<<
+            nBlocks,
+            N_THREADS,
+            N_THREADS * sizeof(unsigned int) * 4 + sizeof(unsigned int) * 2,
+            lcl->streams(0)
+        >>>(
+                d_offsetLessEquals,
+                d_offsetGreater,
+                d_from,
+                d_to,
+                lcl->d_permutations + beginInd,
+                cell.getCut(),
+                lcl->h_countsLeft(cellPtrOffset),
+                n
+        );
+
+        cudaFree(d_offsetLessEquals);
+        cudaFree(d_offsetGreater);
+    };
+
+    // Temporary back to primary
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
         auto cell = static_cast<Cell>(*(in + cellPtrOffset));
 
         int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
-        int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
+        int endInd = pst->lcl->cellToRangeMap(cell.id, 1);
         int n = endInd - beginInd;
-        float cut = cell.getCut();
 
-        const int nBlocks = (int) ceil((float) n / (N_THREADS *  ELEMENTS_PER_THREAD));
+        float * d_from = lcl->d_particlesT + beginInd;
+        float * d_to;
 
-        unsigned int * d_offsetLessEquals;
-        unsigned int * d_offsetGreater;
-
-        CUDA_CHECK(cudaMalloc,(&d_offsetLessEquals, sizeof(unsigned int)));
-        CUDA_CHECK(cudaMalloc,(&d_offsetGreater, sizeof(unsigned int)));
-
-        CUDA_CHECK(cudaMemset,(d_offsetLessEquals, 0, sizeof (unsigned int)));
-        CUDA_CHECK(cudaMemset,(d_offsetGreater, 0, sizeof (unsigned int)));
-
-        // Case axis X
         if (cell.cutAxis == 0) {
-            partition<N_THREADS><<<
-                nBlocks,
-                N_THREADS,
-                N_THREADS * sizeof (uint) * 4 + sizeof (unsigned int) * 2
-            >>>(
-                d_offsetLessEquals,
-                d_offsetGreater,
-                lcl->d_particlesX + beginInd,
-                lcl->d_particlesT + beginInd,
-                lcl->d_permutations + beginInd,
-                cell.getCut(),
-                lcl->h_countsLeft(cellPtrOffset),
-                n
-            );
-
-            copy<N_THREADS><<<
-                nBlocks,
-                N_THREADS
-            >>>(
-                    lcl->d_particlesT + beginInd,
-                    lcl->d_particlesX + beginInd,
-                    n
-            );
-
-            permute<N_THREADS><<<
-                nBlocks,
-                N_THREADS
-            >>>(
-                lcl->d_particlesY + beginInd,
-                lcl->d_particlesT + beginInd,
-                lcl->d_permutations + beginInd,
-                n
-            );
-
-            copy<N_THREADS><<<
-                nBlocks,
-                N_THREADS
-            >>>(
-                    lcl->d_particlesT + beginInd,
-                    lcl->d_particlesY + beginInd,
-                    n
-            );
-
-            permute<N_THREADS><<<
-                nBlocks,
-                N_THREADS
-            >>>(
-                lcl->d_particlesZ + beginInd,
-                lcl->d_particlesT + beginInd,
-                lcl->d_permutations + beginInd,
-                n
-            );
-
-            copy<N_THREADS><<<
-                nBlocks,
-                N_THREADS
-            >>>(
-                lcl->d_particlesT + beginInd,
-                lcl->d_particlesZ + beginInd,
-                n
-            );
+            d_to = lcl->d_particlesX + beginInd;
+        }
+        else if (cell.cutAxis == 1) {
+            d_to = lcl->d_particlesY + beginInd;
+        }
+        else {
+            d_to = lcl->d_particlesZ + beginInd;
         }
 
-        // case axis Y
-        if (cell.cutAxis == 1) {
-            partition<N_THREADS><<<
-                nBlocks,
-                N_THREADS,
-                N_THREADS * sizeof (uint) * 4 + sizeof (unsigned int) * 2
-            >>>(
-                d_offsetLessEquals,
-                d_offsetGreater,
-                lcl->d_particlesY + beginInd,
-                lcl->d_particlesT + beginInd,
-                lcl->d_permutations + beginInd,
-                cell.getCut(),
-                lcl->h_countsLeft(cellPtrOffset),
-                n
-            );
+        cudaMemcpyAsync(d_to, d_from, sizeof(float) * n, cudaMemcpyDeviceToDevice, lcl->streams(0));
 
-            copy<N_THREADS><<<
-                nBlocks,
-                N_THREADS
-            >>>(
-                lcl->d_particlesT + beginInd,
-                lcl->d_particlesY + beginInd,
-                n
-            );
+    }
 
-            permute<N_THREADS><<<
-                nBlocks,
-                N_THREADS
-            >>>(
-                lcl->d_particlesX + beginInd,
-                lcl->d_particlesT + beginInd,
-                lcl->d_permutations + beginInd,
-                n
-            );
+    // Secondary to temporary
+    for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
+        auto cell = static_cast<Cell>(*(in + cellPtrOffset));
 
-            copy<N_THREADS><<<
-                nBlocks,
-                N_THREADS
-            >>>(
-                    lcl->d_particlesT + beginInd,
-                    lcl->d_particlesX + beginInd,
-                    n
-            );
+        int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
+        int endInd = pst->lcl->cellToRangeMap(cell.id, 1);
+        int n = endInd - beginInd;
 
-            permute<N_THREADS><<<
-                nBlocks,
-                N_THREADS
-            >>>(
-                lcl->d_particlesZ + beginInd,
-                lcl->d_particlesT + beginInd,
-                lcl->d_permutations + beginInd,
-                n
-            );
+        const int nBlocks = (int) ceil((float) n / (N_THREADS * 2.0));
 
-            copy<N_THREADS><<<
-                nBlocks,
-                N_THREADS
-            >>>(
-                    lcl->d_particlesT + beginInd,
-                    lcl->d_particlesZ + beginInd,
-                    n
-            );
+        float * d_from;
+        float * d_to = lcl->d_particlesT + beginInd;
+
+        if (cell.cutAxis == 0) {
+            d_from = lcl->d_particlesY + beginInd;
+        }
+        else if (cell.cutAxis == 1) {
+            d_from = lcl->d_particlesX + beginInd;
+        }
+        else {
+            d_from = lcl->d_particlesX + beginInd;
         }
 
-        // case axis Z
-        if (cell.cutAxis == 2) {
-            partition<N_THREADS><<<
-                nBlocks,
-                N_THREADS,
-                N_THREADS * sizeof (uint) * 4 + sizeof (unsigned int) * 2
-            >>>(
-                d_offsetLessEquals,
-                d_offsetGreater,
-                lcl->d_particlesZ + beginInd,
-                lcl->d_particlesT + beginInd,
-                lcl->d_permutations + beginInd,
-                cell.getCut(),
-                lcl->h_countsLeft(cellPtrOffset),
-                n
-            );
+        permute<N_THREADS><<<
+            nBlocks,
+            N_THREADS,
+            0,
+            lcl->streams(0)
+        >>>(
+            d_from,
+            d_to,
+            lcl->d_permutations + beginInd,
+            n
+        );
 
-            copy<N_THREADS><<<
-                nBlocks,
-                N_THREADS
-            >>>(
-                    lcl->d_particlesT + beginInd,
-                    lcl->d_particlesZ + beginInd,
-                    n
-            );
+    }
 
-            permute<N_THREADS><<<
-                nBlocks,
-                N_THREADS
-            >>>(
-                lcl->d_particlesX + beginInd,
-                lcl->d_particlesT + beginInd,
-                lcl->d_permutations + beginInd,
-                n
-            );
+    // Temporary back to secondary
+    for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
+        auto cell = static_cast<Cell>(*(in + cellPtrOffset));
 
-            copy<N_THREADS><<<
-                nBlocks,
-                N_THREADS
-            >>>(
-                lcl->d_particlesT + beginInd,
-                lcl->d_particlesX + beginInd,
-                n
-            );
+        int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
+        int endInd = pst->lcl->cellToRangeMap(cell.id, 1);
+        int n = endInd - beginInd;
 
-            permute<N_THREADS><<<
-                nBlocks,
-                N_THREADS
-            >>>(
-                lcl->d_particlesY + beginInd,
-                lcl->d_particlesT + beginInd,
-                lcl->d_permutations + beginInd,
-                n
-            );
+        float * d_from = lcl->d_particlesT + beginInd;
+        float * d_to;
 
-            copy<N_THREADS><<<
-                nBlocks,
-                N_THREADS
-            >>>(
-                lcl->d_particlesT + beginInd,
-                lcl->d_particlesY + beginInd,
-                n
-            );
+        if (cell.cutAxis == 0) {
+            d_to = lcl->d_particlesY + beginInd;
         }
+        else if (cell.cutAxis == 1) {
+            d_to = lcl->d_particlesX + beginInd;
+        }
+        else {
+            d_to = lcl->d_particlesX + beginInd;
+        }
+
+        cudaMemcpyAsync(d_to, d_from,  sizeof(float) * n, cudaMemcpyDeviceToDevice, lcl->streams(0));
+    }
+
+    // Tertiary to temporary
+    for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
+        auto cell = static_cast<Cell>(*(in + cellPtrOffset));
+
+        int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
+        int endInd = pst->lcl->cellToRangeMap(cell.id, 1);
+        int n = endInd - beginInd;
+
+        const int nBlocks = (int) ceil((float) n / (N_THREADS * 2.0));
+
+        float * d_from;
+        float * d_to = lcl->d_particlesT + beginInd;
+
+        if (cell.cutAxis == 0) {
+            d_from = lcl->d_particlesZ + beginInd;
+        }
+        else if (cell.cutAxis == 1) {
+            d_from = lcl->d_particlesZ + beginInd;
+        }
+        else {
+            d_from = lcl->d_particlesY + beginInd;
+        }
+
+        permute<N_THREADS><<<
+        nBlocks,
+        N_THREADS,
+        0,
+        lcl->streams(0)
+        >>>(
+                d_from,
+                d_to,
+                lcl->d_permutations + beginInd,
+                n
+        );
+    }
+
+    // Temporary back to tertiary
+    for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
+        auto cell = static_cast<Cell>(*(in + cellPtrOffset));
+
+        int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
+        int endInd = pst->lcl->cellToRangeMap(cell.id, 1);
+        int n = endInd - beginInd;
+
+        float * d_from = lcl->d_particlesT + beginInd;
+        float * d_to;
+
+        if (cell.cutAxis == 0) {
+            d_to = lcl->d_particlesZ + beginInd;
+        }
+        else if (cell.cutAxis == 1) {
+            d_to = lcl->d_particlesZ + beginInd;
+        }
+        else {
+            d_to = lcl->d_particlesY + beginInd;
+        }
+
+        cudaMemcpyAsync(d_to, d_from, sizeof(float) * n, cudaMemcpyDeviceToDevice, lcl->streams(0));
 
         lcl->cellToRangeMap(cell.getLeftChildId(), 0) =
                 lcl->cellToRangeMap(cell.id, 0);
@@ -405,10 +373,47 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
         lcl->cellToRangeMap(cell.getRightChildId(), 0) = lcl->h_countsLeft(cellPtrOffset) + beginInd;
         lcl->cellToRangeMap(cell.getRightChildId(), 1) =
                 lcl->cellToRangeMap(cell.id, 1);
-
-        cudaFree(d_offsetGreater);
-        cudaFree(d_offsetLessEquals);
     }
+
+    printf("done partition id %i\n", pst->idSelf);
+    /*
+    blitz::Array<float, 1> x = lcl->particles(blitz::Range::all(), 0);
+    blitz::Array<float, 1> y = lcl->particles(blitz::Range::all(), 1);
+    blitz::Array<float, 1> z = lcl->particles(blitz::Range::all(), 2);
+
+    cudaMemcpyAsync(
+            x.data(),
+            lcl->d_particlesX,
+            sizeof (float) * x.rows(),
+            cudaMemcpyDeviceToHost,
+            pst->lcl->streams(0)
+    );
+
+    cudaMemcpyAsync(
+            y.data(),
+            lcl->d_particlesY,
+            sizeof (float) * y.rows(),
+            cudaMemcpyDeviceToHost,
+            pst->lcl->streams(0)
+    );
+
+    cudaMemcpyAsync(
+            z.data(),
+            lcl->d_particlesZ,
+            sizeof (float) * z.rows(),
+            cudaMemcpyDeviceToHost,
+            pst->lcl->streams(0)
+    );
+
+    CUDA_CHECK(cudaStreamSynchronize,(lcl->streams(0)));
+
+    if (pst->idSelf == 0) {
+        for (int i = 0; i < x.rows(); i++) {
+            printf("x %f y %f z %f  \n", x(i), y(i), z(i));
+        }
+        printf("\n---------------\n\n");
+
+    }*/
 
     return 0;
 }

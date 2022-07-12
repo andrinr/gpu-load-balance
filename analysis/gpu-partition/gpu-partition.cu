@@ -7,8 +7,6 @@
 // https://github.com/NVIDIA/cuda-samples/tree/master/Samples/2_Concepts_and_Techniques/scan
 // https://onlinelibrary.wiley.com/doi/epdf/10.1002/cpe.3611
 
-// 2 data elements per thread
-// Code taken from: https://www.eecs.umich.edu/courses/eecs570/hw/parprefix.pdf
 __device__ void scan(volatile unsigned int * s_idata, unsigned int thid, unsigned int n) {
     unsigned int offset = 1;
     for (unsigned int d = n>>1; d > 0; d >>= 1) // build sum in place up the tree
@@ -44,6 +42,7 @@ __global__ void partition(
         unsigned int * g_offsetGreater,
         float * g_idata,
         float * g_odata,
+        unsigned int * g_permutations,
         float pivot,
         unsigned int nLeft,
         unsigned int n) {
@@ -116,12 +115,37 @@ __global__ void partition(
 
     if (i < n) {
         g_odata[indexA] = g_idata[i];
+        g_permutations[i] = indexA;
     }
 
     if (j < n) {
         g_odata[indexB] = g_idata[j];
+        g_permutations[j] = indexB;
     }
 }
+
+
+template <unsigned int blockSize>
+__global__ void permute(
+        float * g_idata,
+        float * g_odata,
+        unsigned int * g_permutations,
+        int n) {
+    unsigned int tid = threadIdx.x;
+
+    unsigned int i = blockIdx.x * blockSize * 2 + 2 * tid;
+    unsigned int j = blockIdx.x * blockSize * 2 + 2 * tid + 1;
+    //unsigned int gridSize = blockSize*2*gridDim.x;
+
+    if (i < n) {
+        g_odata[g_permutations[i]] = g_idata[i];
+    }
+
+    if (j < n) {
+        g_odata[g_permutations[j]] = g_idata[j];
+    }
+}
+
 
 int main(int argc, char** argv) {
 
@@ -129,30 +153,53 @@ int main(int argc, char** argv) {
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
 
-    unsigned int n = 1 << 13;
+    unsigned int n = (1 << 10) - 100;
     unsigned int nLeft = 0;
     float cut = 0.5;
 
-    float * h_idata = (float*)malloc(n * sizeof (float));
-    float * h_odata = (float*)malloc(n * sizeof (float));
+    float * h_dataX = (float*)malloc(n * sizeof (float));
+    float * h_dataY = (float*)malloc(n * sizeof (float));
+    float * h_dataZ = (float*)malloc(n * sizeof (float));
+    unsigned int * h_permutations = (unsigned int *)malloc(n * sizeof (unsigned int));
 
     srand(0);
 
     for (int i = 0; i < n; i++) {
-        h_idata[i] = (float)(rand())/(float)(RAND_MAX);
-        nLeft += h_idata[i] < cut;
+        h_dataX[i] = (float)(rand())/(float)(RAND_MAX);
+        h_dataY[i] = (float)(rand())/(float)(RAND_MAX);
+        h_dataZ[i] = (float)(rand())/(float)(RAND_MAX);
+        nLeft += h_dataX[i] < cut;
 
         //printf("%f\n", h_idata[i]);
     }
 
+    for (int i = 0; i < n; i++) {
+        if (h_dataX[i] <0.5 ) {
+            h_dataY[i] = 4.0;
+            h_dataZ[i] = 3.0;
+        }
+        else {
+            h_dataY[i] = 10.0;
+            h_dataZ[i] = 11.0;
+        }
+    }
+
     int nBlocks = (int) ceil((float) n / (N_THREADS * 2.0));
 
-    float * d_idata;
-    float * d_odata;
+    float * d_dataX;
+    float * d_dataY;
+    float * d_dataZ;
+    float * d_dataT;
+    unsigned int * d_permutations;
 
-    CUDA_CHECK(cudaMalloc, (&d_idata, sizeof (float) * n));
-    CUDA_CHECK(cudaMalloc, (&d_odata, sizeof (float) * n));
-    cudaMemcpy(d_idata, h_idata, sizeof (float ) * n, cudaMemcpyHostToDevice);
+    CUDA_CHECK(cudaMalloc, (&d_dataX, sizeof (float) * n));
+    CUDA_CHECK(cudaMalloc, (&d_dataY, sizeof (float) * n));
+    CUDA_CHECK(cudaMalloc, (&d_dataZ, sizeof (float) * n));
+    CUDA_CHECK(cudaMalloc, (&d_dataT, sizeof (float) * n));
+    CUDA_CHECK(cudaMalloc, (&d_permutations, sizeof (unsigned int) * n));
+    cudaMemcpy(d_dataX, h_dataX, sizeof (float ) * n, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_dataY, h_dataY, sizeof (float ) * n, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_dataZ, h_dataZ, sizeof (float ) * n, cudaMemcpyHostToDevice);
 
     unsigned int * d_offsetLessEquals;
     unsigned int * d_offsetGreater;
@@ -162,7 +209,8 @@ int main(int argc, char** argv) {
 
     CUDA_CHECK(cudaMemset,(d_offsetLessEquals, 0, sizeof (unsigned int)));
     CUDA_CHECK(cudaMemset,(d_offsetGreater, 0, sizeof (unsigned int)));
-    CUDA_CHECK(cudaMemset,(d_odata, 255, sizeof (float ) * n));
+    //CUDA_CHECK(cudaMemset,(d_dataT, 255, sizeof (float ) * n));
+    //CUDA_CHECK(cudaMemset,(d_dataY, 255, sizeof (float ) * n));
 
     cudaEventRecord(start);
 
@@ -173,11 +221,39 @@ int main(int argc, char** argv) {
             >>>(
             d_offsetLessEquals,
             d_offsetGreater,
-            d_idata,
-            d_odata,
+            d_dataX,
+            d_dataT,
+            d_permutations,
             cut,
             nLeft,
             n);
+
+    cudaMemcpy(d_dataX, d_dataT, sizeof (float ) * n, cudaMemcpyHostToHost);
+
+    permute<N_THREADS><<<
+        nBlocks,
+        N_THREADS
+    >>>(
+            d_dataY,
+            d_dataT,
+            d_permutations,
+            n
+    );
+
+    cudaMemcpy(d_dataY, d_dataT, sizeof (float ) * n, cudaMemcpyHostToHost);
+
+    permute<N_THREADS><<<
+    nBlocks,
+    N_THREADS
+    >>>(
+            d_dataZ,
+            d_dataT,
+            d_permutations,
+            n
+    );
+
+    cudaMemcpy(d_dataZ, d_dataT, sizeof (float ) * n, cudaMemcpyHostToHost);
+
 
     cudaEventRecord(stop);
 
@@ -185,7 +261,9 @@ int main(int argc, char** argv) {
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
 
-    cudaMemcpy(h_odata, d_odata, sizeof (float ) * n, cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_dataY, d_dataY, sizeof (float ) * n, cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_dataZ, d_dataZ, sizeof (float ) * n, cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_permutations, d_permutations, sizeof (unsigned int) * n, cudaMemcpyDeviceToHost);
 
     int sum = 0;
 
@@ -193,7 +271,9 @@ int main(int argc, char** argv) {
         printf("%f ", h_idata[i]);
     }*/
     for (int i = 0; i < n; ++i) {
-        printf("%f \n", h_odata[i]);
+        printf("%f \n", h_dataY[i]);
+        printf("%f \n", h_dataZ[i]);
+        printf("%i \n", h_permutations[i]);
         //printf("%f ", h_idata[i]);
         /*if (h_odata[i] > cut) {
             throw std::runtime_error("Partition failed");
@@ -202,13 +282,17 @@ int main(int argc, char** argv) {
 
     printf("\n");
 
-    cudaFree(d_idata);
-    cudaFree(d_odata);
+    cudaFree(d_dataX);
+    cudaFree(d_dataY);
+    cudaFree(d_dataZ);
+    cudaFree(d_dataT);
+    cudaFree(d_permutations);
     cudaFree(d_offsetGreater);
     cudaFree(d_offsetLessEquals);
 
-    free(h_idata);
-    free(h_odata);
+    free(h_dataX);
+    free(h_dataY);
+    free(h_dataZ);
 
     cudaDeviceReset();
 }

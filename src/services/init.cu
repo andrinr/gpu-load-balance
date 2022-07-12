@@ -56,9 +56,6 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     cellToRangeMap(0, 1) = in.nParticles;
     lcl->cellToRangeMap.reference(cellToRangeMap);
 
-    auto h_countsLeft = blitz::Array<unsigned int, 1>(MAX_CELLS);
-    lcl->h_countsLeft.reference(h_countsLeft);
-
     // Temporary array buffer on the CPU
     if (in.acceleration == NONE) {
         auto particlesT = blitz::Array<float, 1>(in.nParticles);
@@ -103,6 +100,9 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
         CUDA_CHECK(cudaMalloc,(&lcl->d_particlesX, sizeof (float ) * in.nParticles));
         CUDA_CHECK(cudaMalloc,(&lcl->d_particlesY, sizeof (float ) * in.nParticles));
         CUDA_CHECK(cudaMalloc,(&lcl->d_particlesZ, sizeof (float ) * in.nParticles));
+
+        auto h_countsLeft = blitz::Array<unsigned int, 1>(MAX_CELLS);
+        lcl->h_countsLeft.reference(h_countsLeft);
     }
 
     printf("ServiceInit finished on thread %d\n",pst->idSelf);
