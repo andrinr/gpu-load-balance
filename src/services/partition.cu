@@ -8,6 +8,138 @@
 static_assert(std::is_void<ServicePartitionGPU::input>()  || std::is_trivial<ServicePartitionGPU::input>());
 static_assert(std::is_void<ServicePartitionGPU::output>() || std::is_trivial<ServicePartitionGPU::output>());
 
+#define NUM_BANKS 16
+#define LOG_NUM_BANKS 4
+#define CONFLICT_FREE_OFFSET(n) ((n) >> NUM_BANKS + (n) >> (2 * LOG_NUM_BANKS))
+
+__device__ void scan2(volatile unsigned int * s_idata, unsigned int thid, unsigned int n) {
+    unsigned int offset = 1;
+    for (unsigned int d = n>>1; d > 0; d >>= 1) // build sum in place up the tree
+    {
+        __syncthreads();
+        if (thid < d)
+        {
+            unsigned int ai = offset*(2*thid+1)-1;
+            unsigned int bi = offset*(2*thid+2)-1;
+            s_idata[bi] += s_idata[ai];
+        }
+        offset *= 2;
+    }
+    if (thid == 0) { s_idata[n - 1] = 0; } // clear the last element
+    for (unsigned int d = 1; d < n; d *= 2) // traverse down tree & build scan
+    {
+        offset >>= 1;
+        __syncthreads();
+        if (thid < d)
+        {
+            unsigned int ai = offset*(2*thid+1)-1;
+            unsigned int bi = offset*(2*thid+2)-1;
+            unsigned int t = s_idata[ai];
+            s_idata[ai] = s_idata[bi];
+            s_idata[bi] += t;
+        }
+    }
+}
+
+template <unsigned int blockSize>
+__global__ void partition2(
+        unsigned int * g_offsetLessEquals,
+        unsigned int * g_offsetGreater,
+        float * g_idata,
+        float * g_odata,
+        unsigned int * g_permutations,
+        float pivot,
+        unsigned int nLeft,
+        unsigned int n) {
+
+    int ai = thid;
+    int bi = thid + (blockSize);
+    int bankOffsetA = CONFLICT_FREE_OFFSET(ai);
+    int bankOffsetB = CONFLICT_FREE_OFFSET(ai);
+    temp[ai + bankOffsetA] = g_idata[ai + ];
+    temp[bi + bankOffsetB] = g_idata[bi];
+
+    __shared__ unsigned int s_lessEquals[blockSize * 2];
+    __shared__ unsigned int s_greater[blockSize * 2];
+
+    __shared__ unsigned int s_offsetLessEquals;
+    __shared__ unsigned int s_offsetGreater;
+
+    unsigned int tid = threadIdx.x;
+
+    unsigned int i = blockIdx.x * blockSize * 2 + 2 * tid;
+    unsigned int j = blockIdx.x * blockSize * 2 + 2 * tid + 1;
+
+    temp[ai + bankOffsetA] = g_idata[ai];
+    temp[bi + bankOffsetB] = g_idata[bi];
+    //unsigned int gridSize = blockSize*2*gridDim.x;
+
+    bool f1, f2;
+    if (i < n) {
+        f1 = g_idata[i] <= pivot;
+        f2 = not f1;
+        // potential to avoid bank conflicts here
+        s_lessEquals[2*tid] = f1;
+        s_greater[2*tid] = f2;
+    }
+    else {
+        f1 = false;
+        f2 = false;
+        s_lessEquals[2*tid] = 0;
+        s_greater[2*tid] = 0;
+    }
+
+    bool f3, f4;
+    if (j < n) {
+        f3 = g_idata[j] <= pivot;
+        f4 = not f3;
+        // potential to avoid bank conflicts here
+        s_lessEquals[2*tid+1] = f3;
+        s_greater[2*tid+1] = f4;
+    }
+    else {
+        f3 = false;
+        f4 = false;
+        s_lessEquals[2*tid+1] = 0;
+        s_greater[2*tid+1] = 0;
+    }
+
+    __syncthreads();
+
+    scan(s_lessEquals, tid, blockSize * 2 );
+    scan(s_greater, tid, blockSize * 2);
+
+    __syncthreads();
+
+    // Avoid another kernel
+    if (tid == blockSize - 1) {
+        // result shared among kernel
+        // atomicAdd returns old
+        // exclusive scan does not include the last element
+        s_offsetLessEquals = atomicAdd(g_offsetLessEquals, s_lessEquals[blockSize * 2 - 1] + f3);
+        s_offsetGreater = atomicAdd(g_offsetGreater, s_greater[blockSize * 2 - 1] + f4);
+    }
+
+    __syncthreads();
+
+    // avoiding warp divergence
+    unsigned int indexA = (s_lessEquals[2*tid] + s_offsetLessEquals) * f1 +
+                          (s_greater[2*tid] + s_offsetGreater + nLeft) * f2;
+
+    unsigned int indexB = (s_lessEquals[2*tid+1] + s_offsetLessEquals) * f3 +
+                          (s_greater[2*tid+1] + s_offsetGreater + nLeft) * f4;
+
+    if (i < n) {
+        g_odata[indexA] = g_idata[i];
+        g_permutations[i] = indexA;
+    }
+
+    if (j < n) {
+        g_odata[indexB] = g_idata[j];
+        g_permutations[j] = indexB;
+    }
+}
+
 __device__ void scan(volatile unsigned int * s_idata, unsigned int thid, unsigned int n) {
     unsigned int offset = 1;
     for (unsigned int d = n>>1; d > 0; d >>= 1) // build sum in place up the tree
@@ -47,6 +179,7 @@ __global__ void partition(
         float pivot,
         unsigned int nLeft,
         unsigned int n) {
+
     __shared__ unsigned int s_lessEquals[blockSize * 2];
     __shared__ unsigned int s_greater[blockSize * 2];
 

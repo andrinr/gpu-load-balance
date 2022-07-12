@@ -8,7 +8,7 @@
 static const int MAX_CELLS = 8192;
 static const int N_THREADS = 256;
 static const int ELEMENTS_PER_THREAD = 16;
-static const int N = 1 << 25;
+static const int N = 1 << 26;
 static const int d = 1 << 10;
 static const int N_STREAMS = 1;
 
