@@ -53,9 +53,11 @@ int master(MDL vmdl,void *vpst) {
         mdl->RunService(PST_COPYTODEVICE, sizeof (ServiceCopyToDevice::input), &iCopy, oCopy);
     }
 
+    unsigned int oCounts[MAX_CELLS];
+    unsigned int oCountsLeft[MAX_CELLS];
+
     for (int l = 1; l < root.getNLevels(); ++l) {
 
-        printf("done part root 2 \n");
         int a = std::pow(2, (l - 1)) - 1;
         int b = std::min(
                root.getNCellsOnLastLevel(),
@@ -70,11 +72,8 @@ int master(MDL vmdl,void *vpst) {
             mdl->RunService(PST_MAKEAXIS, nCells * sizeof(ServicePartition::input), iCells, oSwaps);
         }
 
-        printf("done part root 2.5 \n");
-        ServiceCount::output oCount[nCells];
-        mdl->RunService(PST_COUNT, nCells * sizeof(ServiceCount::input), iCells, oCount);
+        mdl->RunService(PST_COUNT, nCells * sizeof(ServiceCount::input), iCells, oCounts);
 
-        printf("done part root 3 \n");
         // Copy with each iteration as partition is done on GPU
         if (acceleration == COUNT) {
             ServiceCopyToDevice::input iCopy {acceleration};
@@ -91,35 +90,34 @@ int master(MDL vmdl,void *vpst) {
             int *sumLeft;
             foundAll = true;
 
-            ServiceCountLeft::output oCountLeft[nCells];
             if (acceleration == COUNT_PARTITION) {
                 mdl->RunService(
                         PST_COUNTLEFTGPU,
                         nCells * sizeof(ServiceCountLeft::input),
                         iCells,
-                        oCountLeft);
+                        oCountsLeft);
             }
             else if (acceleration == COUNT) {
                 mdl->RunService(
                         PST_COUNTLEFTAXISGPU,
                         nCells * sizeof(ServiceCountLeft::input),
                         iCells,
-                        oCountLeft);
+                        oCountsLeft);
             }
             else {
                 mdl->RunService(
                         PST_COUNTLEFT,
                         nCells * sizeof(ServiceCountLeft::input),
                         iCells,
-                        oCountLeft);
+                        oCountsLeft);
             }
 
             for (int i = 0; i < nCells; ++i) {
                 if (cells(i).foundCut) continue;
                 printf(
                         "counted left: %u, of %u. cut %f, axis %d, level %u, cell %u \n",
-                        oCountLeft[i],
-                        oCount[i] / 2,
+                        oCountsLeft[i],
+                        oCounts[i] / 2,
                         (cells(i).cutMarginLeft + cells(i).cutMarginRight) / 2.0,
                         cells(i).cutAxis,
                         l,
@@ -128,9 +126,9 @@ int master(MDL vmdl,void *vpst) {
                 //CellHelpers::log(cells(i));
 
                 float ratio = ceil(cells(i).nLeafCells / 2.0) / cells(i).nLeafCells;
-                int difference = oCountLeft[i] - oCount[i] * ratio;
-                float diffPct = (float) difference / oCountLeft[i];
-                printf("diff %f %, diff %i \n", diffPct, difference);
+                int difference = oCountsLeft[i] - oCounts[i] * ratio;
+                float diffPct = (float) difference / oCountsLeft[i];
+                //printf("diff %f %, diff %i \n", diffPct, difference);
                 if (abs(difference) < 32) {
                     cells(i).foundCut = true;
                 } else if (difference > 0) {
@@ -146,8 +144,6 @@ int master(MDL vmdl,void *vpst) {
                     foundAll = false;
                 }
             }
-            printf("%i \n", j);
-            //free(oCountLeft);
         }
 
         // Split and store all cells on current heap level
@@ -171,7 +167,6 @@ int master(MDL vmdl,void *vpst) {
         if (acceleration == COUNT_PARTITION) {
             ServicePartitionGPU::output oPartition[1];
             mdl->RunService(PST_PARTITIONGPU, nCells * sizeof(ServicePartitionGPU::input), iCells, oPartition);
-            printf("done part root 1 \n");
         }
         else {
             ServicePartition::output oPartition[1];
@@ -184,6 +179,9 @@ int master(MDL vmdl,void *vpst) {
         ServiceFinalize::output oFree[1];
         mdl->RunService(PST_FINALIZE, sizeof (int), iFree, oFree);
     }
+
+    //free(oCountsLeft);
+    //free(oCounts);
 
     return 0;
 }

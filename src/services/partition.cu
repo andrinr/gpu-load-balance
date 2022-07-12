@@ -175,10 +175,6 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
 
         const int nBlocks = (int) ceil((float) n / (N_THREADS * 2.0));
 
-        if (pst->idSelf == 0) {
-            printf("n %i nBlocks %i b %i e %i\n", n, nBlocks, beginInd, endInd);
-        }
-
         unsigned int *d_offsetLessEquals;
         unsigned int *d_offsetGreater;
 
@@ -368,14 +364,15 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
 
         lcl->cellToRangeMap(cell.getLeftChildId(), 0) =
                 lcl->cellToRangeMap(cell.id, 0);
-        lcl->cellToRangeMap(cell.getLeftChildId(), 1) = lcl->h_countsLeft(cellPtrOffset) + beginInd;
+        lcl->cellToRangeMap(cell.getLeftChildId(), 1) =
+                lcl->h_countsLeft(cellPtrOffset) + beginInd;
 
-        lcl->cellToRangeMap(cell.getRightChildId(), 0) = lcl->h_countsLeft(cellPtrOffset) + beginInd;
+        lcl->cellToRangeMap(cell.getRightChildId(), 0) =
+                lcl->h_countsLeft(cellPtrOffset) + beginInd;
         lcl->cellToRangeMap(cell.getRightChildId(), 1) =
                 lcl->cellToRangeMap(cell.id, 1);
     }
 
-    printf("done partition id %i\n", pst->idSelf);
     /*
     blitz::Array<float, 1> x = lcl->particles(blitz::Range::all(), 0);
     blitz::Array<float, 1> y = lcl->particles(blitz::Range::all(), 1);

@@ -79,7 +79,6 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     // Make sure memcopy is done for this thread
     // Could also improved but seems complicated
 
-    printf("reached %i\n", pst->idSelf);
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
         auto cell = static_cast<Cell>(*(in + cellPtrOffset));
 

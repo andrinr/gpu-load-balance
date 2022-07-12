@@ -14,7 +14,7 @@ int ServiceCount::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
         auto cell = static_cast<Cell>(*(in + cellPtrOffset));
         out[cellPtrOffset] = lcl->cellToRangeMap(cell.id,1) - lcl->cellToRangeMap(cell.id,0);
-        //printf("coutn %u ]n", lcl->cellToRangeMap(cell.id,1) - lcl->cellToRangeMap(cell.id,0));
+
     }
     return nCells * sizeof (output);
 }
