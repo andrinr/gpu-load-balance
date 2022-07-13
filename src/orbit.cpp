@@ -28,7 +28,7 @@ int master(MDL vmdl,void *vpst) {
     float lower[3] = {-0.5, -0.5, -0.5};
     float upper[3] = {0.5, 0.5, 0.5};
 
-    const GPU_ACCELERATION acceleration = COUNT_PARTITION;
+    const GPU_ACCELERATION acceleration = COUNT;
 
     // user code
     Cell root(0, d, lower, upper);

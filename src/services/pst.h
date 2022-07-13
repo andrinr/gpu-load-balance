@@ -17,6 +17,8 @@ public:
     unsigned int * d_permutations;
     unsigned int * d_results;
     unsigned int * h_results;
+    unsigned int * d_offsetLeq;
+    unsigned int * d_offsetG;
     int nThreads;
     int nBlocks;
 

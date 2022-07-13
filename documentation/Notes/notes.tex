@@ -1769,19 +1769,21 @@ Note that we are aware of the Thrust library an its implementation of partition,
 
 We will implement two GPU accelerated versions:
 \begin{itemize}
-	\item GPU Accelerated Count Left
-	\item GPU Accelerated Count Left and Partition
+	\item \textbf{Version A}: GPU Accelerated Count Left
+	\item \textbf{Version B}: GPU Accelerated Count Left and Partition
 \end{itemize}
 
-Note that the total number of particles, which can be simulated, will be reduced, as the GPU memory is a lot smaller than the CPU memory. How much less particles can be simulated, depends a lot on the implementation and will vary between the two implementations.
+Note that the total number of particles, which can be simulated, will be reduced in both implementations, as the GPU memory is a lot smaller than the CPU memory. One could propose to load and offload several batches from the CPU to GPU but this comes with a significant overhead due to the slow memory bandwidth between the CPU and the GPU.
 
 \subsubsection{Relevant CUDA Concepts}
 
 CUDA gives us the ability to launch kernels, which are written in C with some additional CUDA specific syntax. These kernel can be run from the CPU, commonly refereed to as the host, and are then executed on the GPU, also known as the device. The device and the host have a separate memory and as seen in section \ref{sec:gmm} the transfer $I_{CG}$ rates between the GPU and CPU are generally slower, under performing $I_{C}$ and $I_G$ speeds. Therefore one of key the challenges when rewriting CPU code to GPU code is to limit data transfers between the GPU and CPU as much as possible.
 
-Each kernel is executed exactly once for every thread and has private local memory, only accessible by the thread. Furthermore each kernel is part of a block, where a all threads within a block can be synchronized. We are also able to launch a kernel across multiple blocks, in this case however, the blocks cannot be synchronized on the device level. The only way to make sure all blocks have finished a task before executing a consecutive task, is to wait for the completion of the kernel, meaning the completion of all blocks associated with this kernel, on the host side. The number of blocks and the number of threads per block can be defined during runtime from the host. Since the GPU is limited in its computing and also memory capabilities, the number of blocks which are run in parallel are limited, therefore CUDA does not give us any guarantee, weather a set of blocks are run serially or in parallel.  
+Each kernel is executed exactly once for every thread and has private local memory, only accessible by the thread. Furthermore each kernel is part of a block, where a all threads within a block can be synchronized. We are also able to launch a kernel across multiple blocks, in this case however, the blocks cannot be synchronized on the device level. The only way to make sure all blocks have finished a task before executing a consecutive task, is to wait from the host side for the completion of the kernel, meaning the completion of all blocks associated with this kernel. The number of blocks and the number of threads per block can be defined dynamically during runtime. Since the GPU is limited in its computing and also memory capabilities, the number of blocks which are run in parallel are limited, therefore CUDA does not give us any guarantee, weather a set of blocks are run serially or in parallel.  
 
-Each block has access to shared memory register, the capacity of this register can also be defined at runtime by the host, however its specific size depends on the actual hardware. Data in the shared memory exists only as long as the kernel exists and it cannot be accessed across different blocks. Kernel code can perform fast read and write operations on the shared memory. Additionally to the shared memory, there exists global memory. Global memory is persistent even after a block or a kernel has finished. This allows for memory to be copied from the host to device, and reused over a long time period and across different blocks. Global memory is however a lot slower than shared memory and its generally advised to copy data from global memory to shared memory before performing actual computations. After the computations have finished, the results can be written back to global memory.
+Each block has access to shared memory register, where the capacity of this register can also be defined at runtime by the host, the maximum shared memory size depends on the hardware but usually we have 48kB per block available. There are also upper limits for the number of threads per block, usually around 512 to 1024. With a shared memory size of 48kb and 1024 threads we get $\frac{48000b}{1024} = 46b$ per thread. This is equivalent to one float per thread. However usually we do not max out the thread counts per block, leaving us with more shared memory space per thread.Data in the shared memory exists only as long as the kernel exists and it cannot be accessed across different blocks. Kernel code can perform fast read and write operations on the shared memory. 
+
+Additionally to the shared memory, there exists global memory. Global memory is persistent even after a block or a kernel has finished. This allows for memory to be copied from the host to device, and reused over a long time period and across different blocks. Global memory is however a lot slower than shared memory and it is generally advised to copy data from global memory to shared memory before performing actual computations. After the computations have finished, the results can be written back to global memory.
 
 Another important concept are warps. Each warp consists of 32 threads and all threads within a warp are executed in parallel, given that there is no warp divergence. Because warps are executed in parallel, there is no need for synchronization. A warp divergence can occur, if there is a control statements within a warp, where two or more threads from the same warp execute a different code. This leads to a decrease in performance and should be avoided whenever possible.
 
@@ -1807,15 +1809,15 @@ Another important concept are warps. Each warp consists of 32 threads and all th
 
 Our primary focus for optimization is the binary cut algorithm, more specifically the counting method. Its implementation in CUDA is straight forward and performance improvement are guaranteed as shown in section \TODO{add reference}. 
 
-\subsubsection{GPU Accelerated Count Left}
-We have described a CPU implementation of the countLeftService. In this section we explain how we can port this problem to the GPU. In essence we can use a general reduction as a basis version, and implement it to specifically fit our needs, which in our case is summing up elements which fulfill a certain condition. The condition being smaller than a given value.
+\subsubsection{Version A: GPU Accelerated Count Left}
+We have described a CPU implementation of the countLeftService. In this section we explain how we can port this problem to the GPU. In essence we can use a general reduction as a basis version, and adapt it to sum up up elements which fulfill a certain condition, where the condition is being smaller than a given value.
 
 Optimized reductions in CUDA are well documented and explained by the NVIDIA developer team. We make use of a reduction introduced by \TODO{Reference} and adapt it slightly to fit our needs. 
-In a reduction we decompose the problem into smaller subproblem which can be run independently. In our case we decompose the array into smaller arrays, for each of which we apply the conditional summation. 
+In a reduction a problem is decomposed into smaller subproblems which can be run independently. In our case we decompose the array into smaller arrays, for each of which we apply the conditional summation. 
 
-In the context of CUDA, we apply a decomposition and run each subproblem on a single CUDA block, this allows us to leverage fast shared memory register, keep the number of operations per thread in a reasonable range and because the subproblems can be solved independently from each other, blocks can be executed in parallel or also serially without any conflicts or synchronization. In fact, since the number of blocks which can be run concurrently on the GPU is limited, some blocks will be forced to run serially with a problem size as large as ours. \TODO{Explain cuda blocks, threads, shared memory?} After running the conditional summation on each slice of the array, we end up with a an array of results. These results can then be summed together on CPU using a simple iterator, or we can invoke another sum reduction kernel for this task.
+In the context of CUDA, we apply a decomposition and run each subproblem on a single CUDA block. Then the subproblems can be solved independently from each other meaning blocks can be executed in parallel or also serially without any conflicts or need for synchronization. After running the conditional summation on each slice of the array, we end up with a an array of results. These results can then be summed together on CPU using a simple iterator. Alternatively we can invoke another sum reduction kernel for this task.
 
-There are several key points which need to be addressed in order make the algorithm as efficient as possible. 
+There are several key points which need to be addressed in order make the algorithm as efficient as possible. All points are also mentioned in \TODO{cite}
 
 \begin{itemize}
 	\item \textbf{Shared Memory} 
@@ -1825,17 +1827,15 @@ There are several key points which need to be addressed in order make the algori
 	
 	\item \textbf{Meta Programming} The reduction is optimized by using a template, which indicates the total number of thread per block, which is equivalent to the blockSize. Since the template is evaluated at compile time, all the if statements taking blockSize as a parameter in figure \ref{cuda:reduction} and figure \ref{cuda:warp-device} do not cause any performance loss. In fact, because we are able to unroll loops, which would be evaluated at runtime, we increase the performance of the code. 
 
-	\item \textbf{Shared Memory Bank Conflicts} In order to decrease the bank conflicts in the shared memory we want to make sure that threads in the same warp do not try to access the same memory bank. Therefore we offset each memory access by the total gridSize as it can be seen on line 12 in figure \ref{cuda:reduction}
-	
-	\item \textbf{Coalesced Memory Access}
-	\TODO{Do}
+	\item \textbf{Shared Memory Bank Conflicts} In order to decrease the bank conflicts in the shared memory we want to make sure that threads in the same warp do not try to access the same memory bank. Therefore we offset each memory access by the total grid size, which is equivalent to the total number of blocks multiplied by the number of threads per block, as it can be seen on line 12 in figure \ref{cuda:reduction}.
+
 	
 	\item \textbf{Warp divergence} Each time we we have an control statement in the code, we introduce a divergence. On the GPU these divergences become especially bad when they are introduced inside a warp. This means that any of the threads of the 32 threads in a warp, have to execute a different code than the rest. For this reason, the $warpReduce$ method as seen in figure \ref{cuda:warp-device} is introduced. We can see on line 32 in figure \ref{cuda:reduction} that this method is only executed when we reach 32 elements in the shared memory, which remain to be added together. Inside the warp reduce method, we again encounter an unrolled loop, but in this case we have no if statements that could generate a divergence. The if statements which are present, are as mentioned, evaluated at compile time only. Inside a warp we are also not dependent on synchronization, thus the thread synchronization call can be omitted as well. Note that this implementation will perform many unnecessary operations, but this does not affect the performance negatively.
 	
 
 \end{itemize}
 
-In our case we invoke the reduction for each cell once, where we distribute the particles within the cell among a number of blocks. The number of blocks can be determined by the number of particles in this cell $n_{cell}$ divided by the number of threads per block which is set to 512 and finally we devide this further by the number of elements per thread $r$. This of course makes the implementation straight forward but we have to pay attention to keep the number of particles large enough. As we increase the number of cells, we make more calls to the reduction kernel, where each call processes less elements. At some point a single cell may not even have enough elements left to keep a single block busy. This will results in a lot of unused warps and hinder performance. Even if we do not reach this point, as we increase the number of cells, in theory we can have an almost unoccupied block for each cell. Considering 1024 cells this is considerable and leads to a reduced warp occupancy. 
+In our case we execute the reduction kernel once for each cell, where we distribute the particles within the cell among a set of blocks. The number of blocks can be determined by the number of particles in this cell $n_{cell}$ divided by the number of threads per block which is set to 256 and finally we devide this further by the number of elements per thread $r$. This makes the implementation straight forward but as we increase the number of cells, we make more calls to the reduction kernel, where each call processes less elements. Since we ceil the number of blocks, there is always the possibility of a block per cell which is almost not occupied. As we increase the number of cells, we also increase the number of unused warp.
 
 In order to resolve this, we have 
 
@@ -1947,8 +1947,7 @@ We can use several strategies in order to improve the performance of memory allo
 
 \begin{enumerate}
 	\item \textbf{Pinned Memory} As the GPU cannot access the default paged memory directly, when copying memory from the host to the device, the memory must first be copied to pinned memory. This means if we use pinned memory directly with $cudaMallocHost()$, data transfers can be around twice as fast. In our implementation we use pinned memory for all data, which need to be either sent from the host to device or vice versa.
-	\item \textbf{Reuse Memory} We can avoid allocation and freeing commands altogether and instead reuse previously allocated memory whenever possible. In our implementation we allocate the memory in the very beginning, whereas we have a fixed number of particles and a fixed upper limit for the number of cells. 
-	
+	\item \textbf{Reuse Memory} We can avoid allocation and freeing commands altogether and instead reuse previously allocated memory whenever possible. In our implementation we allocate the memory in the very beginning, whereas we have a fixed number of particles and a fixed upper limit for the number of cells. This is true for both the CPU and GPU memory.
 \end{enumerate}
 
 We limit memory allocation and freeing to the very beginning and end of the orb algorithm. This reduces the runtime of the algorithm by a substantial factor. Furthermore we use pinned memory

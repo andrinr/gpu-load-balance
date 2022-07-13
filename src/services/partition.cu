@@ -7,7 +7,7 @@
 // can be moved around with "memcpy" which is required for MDL.
 static_assert(std::is_void<ServicePartitionGPU::input>()  || std::is_trivial<ServicePartitionGPU::input>());
 static_assert(std::is_void<ServicePartitionGPU::output>() || std::is_trivial<ServicePartitionGPU::output>());
-
+/*
 #define NUM_BANKS 16
 #define LOG_NUM_BANKS 4
 #define CONFLICT_FREE_OFFSET(n) ((n) >> NUM_BANKS + (n) >> (2 * LOG_NUM_BANKS))
@@ -138,7 +138,7 @@ __global__ void partition2(
         g_odata[indexB] = g_idata[j];
         g_permutations[j] = indexB;
     }
-}
+}*/
 
 __device__ void scan(volatile unsigned int * s_idata, unsigned int thid, unsigned int n) {
     unsigned int offset = 1;
@@ -295,6 +295,9 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     int countLeq[nCells];
     int countG[nCells];
 
+    CUDA_CHECK(cudaMemset, (lcl->d_offsetLeq, 0, sizeof(unsigned int) * nCells));
+    CUDA_CHECK(cudaMemset, (lcl->d_offsetG, 0, sizeof(unsigned int) * nCells));
+
     // Primary axis to temporary
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
         out[cellPtrOffset] = 0;
@@ -308,15 +311,8 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
 
         const int nBlocks = (int) ceil((float) n / (N_THREADS * 2.0));
 
-        unsigned int *d_offsetLessEquals;
-        unsigned int *d_offsetGreater;
-
-        CUDA_CHECK(cudaMalloc, (&d_offsetLessEquals, sizeof(unsigned int)));
-        CUDA_CHECK(cudaMalloc, (&d_offsetGreater, sizeof(unsigned int)));
-
-        CUDA_CHECK(cudaMemset, (d_offsetLessEquals, 0, sizeof(unsigned int)));
-        CUDA_CHECK(cudaMemset, (d_offsetGreater, 0, sizeof(unsigned int)));
-
+        //CUDA_CHECK(cudaMalloc, (&d_offsetLessEquals, sizeof(unsigned int)));
+        //CUDA_CHECK(cudaMalloc, (&d_offsetGreater, sizeof(unsigned int)));
         float * d_from;
         float * d_to = lcl->d_particlesT + beginInd;
 
@@ -336,8 +332,8 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
             N_THREADS * sizeof(unsigned int) * 4 + sizeof(unsigned int) * 2,
             lcl->streams(0)
         >>>(
-                d_offsetLessEquals,
-                d_offsetGreater,
+                lcl->d_offsetLeq + cellPtrOffset,
+                lcl->d_offsetG + cellPtrOffset,
                 d_from,
                 d_to,
                 lcl->d_permutations + beginInd,
@@ -345,9 +341,6 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
                 lcl->h_countsLeft(cellPtrOffset),
                 n
         );
-
-        cudaFree(d_offsetLessEquals);
-        cudaFree(d_offsetGreater);
     };
 
     // Temporary back to primary

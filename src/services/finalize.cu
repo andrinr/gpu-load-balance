@@ -16,6 +16,8 @@ int ServiceFinalize::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
         cudaFree(lcl->d_particlesX);
         cudaFree(lcl->d_particlesY);
         cudaFree(lcl->d_particlesZ);
+        cudaFree(lcl->d_offsetLeq);
+        cudaFree(lcl->d_offsetG);
     }
 
     if (in.acceleration == COUNT) {

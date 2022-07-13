@@ -103,6 +103,9 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
 
         auto h_countsLeft = blitz::Array<unsigned int, 1>(MAX_CELLS);
         lcl->h_countsLeft.reference(h_countsLeft);
+
+        CUDA_CHECK(cudaMalloc,(&lcl->d_offsetLeq, sizeof (unsigned int) * MAX_CELLS));
+        CUDA_CHECK(cudaMalloc,(&lcl->d_offsetG, sizeof (unsigned int) * MAX_CELLS));
     }
 
     printf("ServiceInit finished on thread %d\n",pst->idSelf);
