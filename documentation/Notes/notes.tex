@@ -1845,7 +1845,7 @@ Another approach is to adapt the kernel, such that it directly iterates over all
 
 \subsubsection{GPU Accelerated Partitioning}
 
-On the main bottlenecks of the optimized code, is the data transfer which is needed to transfer the correct axis between the 
+The main bottlenecks of the orb algorithm are now the data transfer between the CPU and GPU and the partitioning of the data. Both problems can be resolved by partitioning the array on the GPU directly thus also removing the need to transfer the data back and forth between the CPU and the GPU.
 
 We describe measurements which were done using the reduction in CUDA, we mention how the reduction cannot necessarily be improved a lot and that the data transfer between the GPU and CPU is the main bottleneck now. We mention how building the tree on the does not make a lot of sense. We explain why instead we focus our efforts to implement a GPU reshuffling method, which can improve runtime by reducing the reshuffling costs and also remove CPU GPU transfers between invocations of the binary cut algorithm altogether. 
 
@@ -1870,9 +1870,7 @@ We add a timeline which is based on measurements with a CUDA enhanced binary cut
 	\label{u}
 \end{figure}
 
-The partitioning algorithm is a widely used concept and there are various implementations used in different variants of the quick-sort algorithm. The overall design of the implementation is guided by \TODO{Insert ref} and the scan is taken from GPU Gems \TODO{Insert ref}. The main and probably only disadvantage of partitioning the particle array on the GPU, is that it cannot be done in place, thus we need another temporary array allocated on the GPU memory which further restricts the total number of particles. 
-Since 
-
+The partitioning algorithm is a widely used concept and there are various implementations used in different variants of the quick-sort algorithm. The overall design of the implementation is guided by \TODO{Insert ref} and the scan is taken from GPU Gems \TODO{Insert ref}. The main and probably only disadvantage of partitioning the particle array on the GPU, is that it cannot be done in place, thus we need another temporary array allocated on the GPU memory which further restricts the total number of particles. Furthermore we need to store the permutations, because we need to apply them to the other axes as well. We could as well simply perform all permutations from the same kernel at the same time, but this would require 3 temporary arrays, thus reducing the total number of particles by a factor of 2. The solution with the partition array and a single temporary array only results in a reduction of the particles by a factor of $\frac{5}{3}$.
 
 \begin{itemize}
 	\item As we increase the number of cells, we make more calls to the reduction kernel 
