@@ -1809,33 +1809,63 @@ Another important concept are warps. Each warp consists of 32 threads and all th
 
 Our primary focus for optimization is the binary cut algorithm, more specifically the counting method. Its implementation in CUDA is straight forward and performance improvement are guaranteed as shown in section \TODO{add reference}. 
 
-\subsubsection{Version A: GPU Accelerated Count Left}
+\subsubsection{GPU Accelerated Count Left}
 We have described a CPU implementation of the countLeftService. In this section we explain how we can port this problem to the GPU. In essence we can use a general reduction as a basis version, and adapt it to sum up up elements which fulfill a certain condition, where the condition is being smaller than a given value.
 
-Optimized reductions in CUDA are well documented and explained by the NVIDIA developer team. We make use of a reduction introduced by \TODO{Reference} and adapt it slightly to fit our needs. 
-In a reduction a problem is decomposed into smaller subproblems which can be run independently. In our case we decompose the array into smaller arrays, for each of which we apply the conditional summation. 
+Optimized reductions in CUDA are well documented and explained by the NVIDIA developer team. We make use of a reduction introduced by \TODO{Reference} and adapt it slightly to fit our needs. We will reiterate over the important optimization aspects and finally point out the specific adaptations we have made. 
 
-In the context of CUDA, we apply a decomposition and run each subproblem on a single CUDA block. Then the subproblems can be solved independently from each other meaning blocks can be executed in parallel or also serially without any conflicts or need for synchronization. After running the conditional summation on each slice of the array, we end up with a an array of results. These results can then be summed together on CPU using a simple iterator. Alternatively we can invoke another sum reduction kernel for this task.
+We split the array of particles which are contained within one cell into smaller slices, where each slice fits one block. Then the subproblems or blocks can be run independently from each other, in other words individual blocks can be executed in parallel or also serially without any conflicts or need for block level synchronization. After running the conditional summation on each slice of the array, we end up with a an array of results. These results can then be summed together on CPU using a simple iterator. Alternatively we could invoke another sum reduction kernel for this task.
 
-There are several key points which need to be addressed in order make the algorithm as efficient as possible. All points are also mentioned in \TODO{cite}
+The key concepts of the reduction are:
 
 \begin{itemize}
-	\item \textbf{Shared Memory} 
+	\item \textbf{Leverage Shared Memory} 
 	In the code depicted in figure \ref{cuda:reduction} on line 3 we invocate the shared memory, where its size is dynamic as marked with the extern keyword. In a next step (lines 10-13) we apply our condition and copy the results to shared memory. This allows us to work exclusively with shared memory, reducing the amount of costly accesses performed on global memory.
 	
-	\item \textbf{Ops Per Thread} There exists an optimum when considering the number of operation performed by a single thread. In order to adapt the number of ops dynamically, we iterate over a certain number of elements in the global memory, as seen in figure \ref{cuda:reduction} lines 10-13. The input parameter n defines the total number of particles. Therefore if we reduce the total number of blocks by a factor of $r$, the while loop will iterate over $r$ elements. In our case we set $r$ to 32. 
+	\item \textbf{Increase Thread Occupancy} There exists an optimum when considering the number of operation performed by a single thread. In order to adapt the number of ops dynamically, we iterate over a certain number of elements in the global memory, as seen in figure \ref{cuda:reduction} lines 10-13. The input parameter n defines the total number of particles. Therefore if we reduce the total number of blocks by a factor of $r$, the while loop will iterate over $r$ elements. In our case we set $r$ to 32. 
 	
 	\item \textbf{Meta Programming} The reduction is optimized by using a template, which indicates the total number of thread per block, which is equivalent to the blockSize. Since the template is evaluated at compile time, all the if statements taking blockSize as a parameter in figure \ref{cuda:reduction} and figure \ref{cuda:warp-device} do not cause any performance loss. In fact, because we are able to unroll loops, which would be evaluated at runtime, we increase the performance of the code. 
 
-	\item \textbf{Shared Memory Bank Conflicts} In order to decrease the bank conflicts in the shared memory we want to make sure that threads in the same warp do not try to access the same memory bank. Therefore we offset each memory access by the total grid size, which is equivalent to the total number of blocks multiplied by the number of threads per block, as it can be seen on line 12 in figure \ref{cuda:reduction}.
-
+	\item \textbf{Avoid Shared Memory Bank Conflicts} In order to decrease the bank conflicts in the shared memory we want to make sure that threads in the same warp do not try to access the same memory bank. Therefore we offset each memory access by the total grid size, which is equivalent to the total number of blocks multiplied by the number of threads per block, as it can be seen on line 12 in figure \ref{cuda:reduction}.
 	
-	\item \textbf{Warp divergence} Each time we we have an control statement in the code, we introduce a divergence. On the GPU these divergences become especially bad when they are introduced inside a warp. This means that any of the threads of the 32 threads in a warp, have to execute a different code than the rest. For this reason, the $warpReduce$ method as seen in figure \ref{cuda:warp-device} is introduced. We can see on line 32 in figure \ref{cuda:reduction} that this method is only executed when we reach 32 elements in the shared memory, which remain to be added together. Inside the warp reduce method, we again encounter an unrolled loop, but in this case we have no if statements that could generate a divergence. The if statements which are present, are as mentioned, evaluated at compile time only. Inside a warp we are also not dependent on synchronization, thus the thread synchronization call can be omitted as well. Note that this implementation will perform many unnecessary operations, but this does not affect the performance negatively.
+	\item \textbf{Avoiding Warp Divergence} Each time we we have an control statement in the code, we introduce a divergence. On the GPU these divergences become especially bad when they are introduced inside a warp. This means that any of the threads of the 32 threads in a warp, have to execute a different code than the rest. For this reason, the $warpReduce$ method as seen in figure \ref{cuda:warp-device} is introduced. We can see on line 32 in figure \ref{cuda:reduction} that this method is only executed when we reach 32 elements in the shared memory, which remain to be added together. Inside the warp reduce method, we again encounter an unrolled loop, but in this case we have no if statements that could generate a divergence. The if statements which are present, are as mentioned, evaluated at compile time only. Inside a warp we are also not dependent on synchronization, thus the thread synchronization call can be omitted as well. Note that this implementation will perform many unnecessary operations, but this does not affect the performance negatively.
 	
-
 \end{itemize}
 
-In our case we execute the reduction kernel once for each cell, where we distribute the particles within the cell among a set of blocks. The number of blocks can be determined by the number of particles in this cell $n_{cell}$ divided by the number of threads per block which is set to 256 and finally we devide this further by the number of elements per thread $r$. This makes the implementation straight forward but as we increase the number of cells, we make more calls to the reduction kernel, where each call processes less elements. Since we ceil the number of blocks, there is always the possibility of a block per cell which is almost not occupied. As we increase the number of cells, we also increase the number of unused warp.
+The main difference between the proposed version and our version is that we changed the following part: 
+
+\begin{lstlisting}[language=c++];
+unsigned int i = blockIdx.x*(blockSize*2) + tid;
+unsigned int gridSize = blockSize*2*gridDim.x;
+sdata[tid] = 0;
+while (i < n) { 
+	sdata[tid] += g_idata[i] + g_idata[i+blockSize]; 
+	i += gridSize; 
+}
+__syncthreads();
+\end{lstlisting}
+to:
+
+\begin{lstlisting}[language=c++]
+unsigned int i = blockIdx.x*(blockSize) + threadIdx.x;
+unsigned int gridSize = blockSize*gridDim.x;
+sdata[tid] = 0;
+
+while (i < n) {
+	sdata[tid] += (g_idata[i] <= cut);
+	i += gridSize;
+}
+__syncthreads();
+\end{lstlisting}
+
+In our version we do not add up two elements with each iteration of the loop. This ensures that no memory access is attempted on global memory which is out of bounds. In the original version, if one is not careful, segmentation faults can occur on the GPU. Furthermore there are no performance penalties as we can simply increase the elements per thread if we wish to increase thread occupancy.
+
+We execute the reduction kernel once for each cell, where we distribute the particles within the cell among a set of blocks. The number of blocks can be determined by the number of particles in this cell $n_{cell}$ divided by the number of threads per block which is set to 256 and finally we devide this further by the number of elements per thread $r$. This makes the implementation straight forward but as we increase the number of cells, we make make more calls to the reduction kernel. This is problematic because each initialization of a kernel comes with some overhead. Therefore we should come up with solution, where each kernel processes a large number of elements. As of now we have up to $d$ kernel invocation, which oftentimes reaches around 1024. There are some solutions to this problem:
+
+\begin{itemize}
+	\item \textbf{Single Kernel with Cell ID} We can build a reduction kernel where we take an additional array in global GPU memory as an input. The additional array has the same size as the particle position array, but it stores the cellID for each particle. Furthermore we increase the shared memory size to the product of the number of threads per block by the total number of cells which are currently being iterated over. This allows us perform the summation and store its results in the correct place in the shared memory. This version however, requires a very large shared memory, thus forcing us to reduce the number of threads per block. Furthermore we have to store another array for the cellID on the GPU. 
+	\item \textbf{Block Padding} Another solution would be to introduce a padding with a constant value of 0 after each slice of particles which are contained within one cell. This padding range starts with the last particle within the cell and ends with the last array index which is still contained within the same block. Therefore we only need to keep track of which block processes which cell and are able to reconstruct the actual counts for each cell. We need to increase the array which stores the particle positions by a maximum of threads per kernel times the maximum number of items per thread times $d$. In a normal setup only a fraction of the total memory size needed. However it requires us correctly load \TODO{continue}
+\end{itemize}
 
 In order to resolve this, we have 
 
@@ -1870,7 +1900,7 @@ We add a timeline which is based on measurements with a CUDA enhanced binary cut
 	\label{u}
 \end{figure}
 
-The partitioning algorithm is a widely used concept and there are various implementations used in different variants of the quick-sort algorithm. The overall design of the implementation is guided by \TODO{Insert ref} and the scan is taken from GPU Gems \TODO{Insert ref}. The main and probably only disadvantage of partitioning the particle array on the GPU, is that it cannot be done in place, thus we need another temporary array allocated on the GPU memory which further restricts the total number of particles. Furthermore we need to store the permutations, because we need to apply them to the other axes as well. We could as well simply perform all permutations from the same kernel at the same time, but this would require 3 temporary arrays, thus reducing the total number of particles by a factor of 2. The solution with the partition array and a single temporary array only results in a reduction of the particles by a factor of $\frac{5}{3}$.
+The partitioning algorithm is a widely used concept and there are various implementations used in different variants of the quick-sort algorithm. The overall design of the implementation is guided by \TODO{Insert ref} and the scan is taken from GPU Gems \TODO{Insert ref}. The main and probably only disadvantage of partitioning the particle array on the GPU, is that it cannot be done in place, thus we need another temporary array allocated on the GPU memory which further restricts the total number of particles. Furthermore we need to store the permutations, because we need to apply them to the other axes as well. We could as well simply perform all permutations from the same kernel at the same time, but this would require 3 temporary arrays, thus reducing the total number of particles by a factor of 2. The solution with the partition array and a single temporary array only results in a reduction of the particles by a factor of $\frac{5}{3}$. 	
 
 \begin{itemize}
 	\item As we increase the number of cells, we make more calls to the reduction kernel 
@@ -1879,64 +1909,159 @@ The partitioning algorithm is a widely used concept and there are various implem
 
 \begin{figure}[H]
 	
-	\begin{lstlisting}[language=c++]
+\begin{lstlisting}[language=c++]
 template <unsigned int blockSize>
-__global__ void reduce(float *g_idata, uint *g_odata, float cut, int n) {
-	extern __shared__ int sdata[];
+__global__ void partition(
+unsigned int * g_offsetLessEquals,
+unsigned int * g_offsetGreater,
+float * g_idata,
+float * g_odata,
+unsigned int * g_permutations,
+float pivot,
+unsigned int nLeft,
+unsigned int n) {
+	__shared__ unsigned int s_lessEquals[blockSize * 2];
+	__shared__ unsigned int s_greater[blockSize * 2];
+	__shared__ unsigned int s_offsetLessEquals;
+	__shared__ unsigned int s_offsetGreater;
 	
 	unsigned int tid = threadIdx.x;
-	unsigned int i = blockIdx.x + threadIdx.x;
-	unsigned int gridSize = blockSize*gridDim.x;
-	sdata[tid] = 0;
 	
-	while (i < n) {
-		sdata[tid] += (g_idata[i] < cut);
-		i += gridSize;
+	unsigned int i = blockIdx.x * blockSize * 2 + 2 * tid;
+	unsigned int j = blockIdx.x * blockSize * 2 + 2 * tid + 1;
+	
+	bool f1, f2, f3, f4;
+	if (i < n) {
+		f1 = g_idata[i] <= pivot; f2 = not f1;
+		s_lessEquals[2*tid] = f1;
+		s_greater[2*tid] = f2;
+	} else {
+		f1 = false; f2 = false;
+		s_lessEquals[2*tid] = 0;
+		s_greater[2*tid] = 0;
 	}
+	
+	if (j < n) {
+		f3 = g_idata[j] <= pivot; f4 = not f3;
+		s_lessEquals[2*tid+1] = f3;
+		s_greater[2*tid+1] = f4;
+	} else {
+		f3 = false; f4 = false;
+		s_lessEquals[2*tid+1] = 0;
+		s_greater[2*tid+1] = 0;
+	}
+	
 	__syncthreads();
 	
-   	if (blockSize >= 512) {
-		if (tid < 256) {
-			sdata[tid] += sdata[tid + 256];
-		}
+	scan(s_lessEquals, tid, blockSize * 2 );
+	scan(s_greater, tid, blockSize * 2);
+	\end{lstlisting}
+	\caption{Partitioning kernel I}
+	\label{cuda:partitionI}
+\end{figure}
+
+
+
+\begin{figure}
+\begin{lstlisting}[language=c++]
+	
+	__syncthreads();
+	
+	if (tid == blockSize - 1) {
+		s_offsetLessEquals = 
+		atomicAdd(g_offsetLessEquals, s_lessEquals[blockSize*2-1] + f3);
+		s_offsetGreater = 
+		atomicAdd(g_offsetGreater, s_greater[blockSize*2-1] + f4);
 	}
-	if (blockSize >= 256) {
-		if (tid < 128) {
-			sdata[tid] += sdata[tid + 128];
-		} __syncthreads();
+	
+	__syncthreads();
+	
+	unsigned int indexA = (s_lessEquals[2*tid] + s_offsetLessEquals) * f1 +
+	(s_greater[2*tid] + s_offsetGreater + nLeft) * f2;
+	
+	unsigned int indexB = (s_lessEquals[2*tid+1] + s_offsetLessEquals) * f3 +
+	(s_greater[2*tid+1] + s_offsetGreater + nLeft) * f4;
+	
+	if (i < n) {
+		g_odata[indexA] = g_idata[i];
+		g_permutations[i] = indexA;
 	}
-	if (blockSize >= 128) {
-		if (tid < 64) {
-			sdata[tid] += sdata[tid + 64];
-		} __syncthreads();
-	}
-	if (tid < 32) {
-		warpReduce<blockSize>(sdata, tid);
-	}
-	if (tid == 0) {
-		g_odata[blockIdx.x] = sdata[0];
+	
+	if (j < n) {
+		g_odata[indexB] = g_idata[j];
+		g_permutations[j] = indexB;
 	}
 }
 	\end{lstlisting}
-	\caption{Global conditional reduction kernel}
-	\label{cuda:reduction}
+	\caption{Partitioning kernel II}
+	\label{cuda:partitionII]}
 \end{figure}
+
+
+\begin{figure}[H]
+	\begin{lstlisting}[language=c++]
+__device__ void scan(volatile unsigned int * s_idata, unsigned int thid, unsigned int n) {
+	unsigned int offset = 1;
+	for (unsigned int d = n>>1; d > 0; d >>= 1) // build sum in place up the tree
+	{
+		__syncthreads();
+		if (thid < d)
+		{
+			unsigned int ai = offset*(2*thid+1)-1;
+			unsigned int bi = offset*(2*thid+2)-1;
+			s_idata[bi] += s_idata[ai];
+		}
+		offset *= 2;
+	}
+	if (thid == 0) { s_idata[n - 1] = 0; } // clear the last element
+	for (unsigned int d = 1; d < n; d *= 2) // traverse down tree & build scan
+	{
+		offset >>= 1;
+		__syncthreads();
+		if (thid < d)
+		{
+			unsigned int ai = offset*(2*thid+1)-1;
+			unsigned int bi = offset*(2*thid+2)-1;
+			unsigned int t = s_idata[ai];
+			s_idata[ai] = s_idata[bi];
+			s_idata[bi] += t;
+		}
+	}
+}
+	\end{lstlisting}
+	\caption{Device Scan Kernel}
+	\label{cuda:scan}
+\end{figure}
+
+
 
 \begin{figure}[H]
 	\begin{lstlisting}[language=c++]
 template <unsigned int blockSize>
-__device__ void warpReduce(volatile int *sdata, unsigned int tid) {
-	if (blockSize >= 64) sdata[tid] += sdata[tid + 32];
-	if (blockSize >= 32) sdata[tid] += sdata[tid + 16];
-	if (blockSize >= 16) sdata[tid] += sdata[tid + 8];
-	if (blockSize >= 8) sdata[tid] += sdata[tid + 4];
-	if (blockSize >= 4) sdata[tid] += sdata[tid + 2];
-	if (blockSize >= 2) sdata[tid] += sdata[tid + 1];
+__global__ void permute(
+float * g_idata,
+float * g_odata,
+unsigned int * g_permutations,
+int n) {
+	unsigned int tid = threadIdx.x;
+	
+	unsigned int i = blockIdx.x * blockSize * 2 + 2 * tid;
+	unsigned int j = blockIdx.x * blockSize * 2 + 2 * tid + 1;
+	//unsigned int gridSize = blockSize*2*gridDim.x;
+	
+	if (i < n) {
+		g_odata[g_permutations[i]] = g_idata[i];
+	}
+	
+	if (j < n) {
+		g_odata[g_permutations[j]] = g_idata[j];
+	}
 }
 	\end{lstlisting}
-	\caption{Device warp reduction kernel}
-	\label{cuda:warp-device}
+	\caption{Device Permute Kernel}
+	\label{cuda:permute}
 \end{figure}
+
 
 
 \subsubsection{Memory allocation}
