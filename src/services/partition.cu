@@ -7,10 +7,15 @@
 // can be moved around with "memcpy" which is required for MDL.
 static_assert(std::is_void<ServicePartitionGPU::input>()  || std::is_trivial<ServicePartitionGPU::input>());
 static_assert(std::is_void<ServicePartitionGPU::output>() || std::is_trivial<ServicePartitionGPU::output>());
-/*
+
 #define NUM_BANKS 16
 #define LOG_NUM_BANKS 4
-#define CONFLICT_FREE_OFFSET(n) ((n) >> NUM_BANKS + (n) >> (2 * LOG_NUM_BANKS))
+#ifdef ZERO_BANK_CONFLICTS
+#define CONFLICT_FREE_OFFSET(n) \
+((n) >> NUM_BANKS + (n) >> (2 * LOG_NUM_BANKS))
+#else
+#define CONFLICT_FREE_OFFSET(n) ((n) >> LOG_NUM_BANKS)
+#endif
 
 __device__ void scan2(volatile unsigned int * s_idata, unsigned int thid, unsigned int n) {
     unsigned int offset = 1;
@@ -56,8 +61,6 @@ __global__ void partition2(
     int bi = thid + (blockSize);
     int bankOffsetA = CONFLICT_FREE_OFFSET(ai);
     int bankOffsetB = CONFLICT_FREE_OFFSET(ai);
-    temp[ai + bankOffsetA] = g_idata[ai + ];
-    temp[bi + bankOffsetB] = g_idata[bi];
 
     __shared__ unsigned int s_lessEquals[blockSize * 2];
     __shared__ unsigned int s_greater[blockSize * 2];
@@ -66,6 +69,7 @@ __global__ void partition2(
     __shared__ unsigned int s_offsetGreater;
 
     unsigned int tid = threadIdx.x;
+    unsigned int l = blockIdx.x * blockSize * 2;
 
     unsigned int i = blockIdx.x * blockSize * 2 + 2 * tid;
     unsigned int j = blockIdx.x * blockSize * 2 + 2 * tid + 1;
@@ -74,34 +78,36 @@ __global__ void partition2(
     temp[bi + bankOffsetB] = g_idata[bi];
     //unsigned int gridSize = blockSize*2*gridDim.x;
 
+    temp[ai + bankOffsetA] = g_idata[ai + ];
+    temp[bi + bankOffsetB] = g_idata[bi];
     bool f1, f2;
     if (i < n) {
-        f1 = g_idata[i] <= pivot;
+        f1 = g_idata[ai + l] <= pivot;
         f2 = not f1;
         // potential to avoid bank conflicts here
-        s_lessEquals[2*tid] = f1;
-        s_greater[2*tid] = f2;
+        s_lessEquals[ai + bankOffsetA] = f1;
+        s_greater[ai + bankOffsetA] = f2;
     }
     else {
         f1 = false;
         f2 = false;
-        s_lessEquals[2*tid] = 0;
-        s_greater[2*tid] = 0;
+        s_lessEquals[ai + bankOffsetA] = 0;
+        s_greater[ai + bankOffsetA] = 0;
     }
 
     bool f3, f4;
     if (j < n) {
-        f3 = g_idata[j] <= pivot;
+        f3 = g_idata[bi + left] <= pivot;
         f4 = not f3;
         // potential to avoid bank conflicts here
-        s_lessEquals[2*tid+1] = f3;
-        s_greater[2*tid+1] = f4;
+        s_lessEquals[bi + bankOffsetB] = f3;
+        s_greater[bi + bankOffsetB] = f4;
     }
     else {
         f3 = false;
         f4 = false;
-        s_lessEquals[2*tid+1] = 0;
-        s_greater[2*tid+1] = 0;
+        s_lessEquals[bi + bankOffsetB] = 0;
+        s_greater[bi + bankOffsetB] = 0;
     }
 
     __syncthreads();

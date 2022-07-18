@@ -36,6 +36,8 @@
 \usepackage{graphicx}
 \usepackage{caption}
 \usepackage{subcaption}
+%control
+\usepackage{ifthen}
 
 % Plots
 \usepackage{pgfplots}
@@ -78,33 +80,164 @@
 The N-Body technique has been used for decades to simulate the Universe so we can compare theory with observations. This technique uses ``particles'' or ``bodies'' to sample phase space, and as gravity operates over infinite distance it is necessary to consider all pair-wise interactions which makes a naive implementation $\mathcal{O}(n^2)$.
 It is clear that this does not scale particularly well with large particle counts.
 
-One common approach is to decompose the particles into a tree structure and multipole expansions of the particles in each tree cell to approximate the forces. This reduces the complexity of the algorithm to $\mathcal{O}(n\log{}n)$. More recently the Fast Multipole Method (FMM), also relying on the tree data structure, has gained wider option primarily due to the extremely large sizes of modern simulations. This technique further reduces the complexity to $\mathcal{O}(n)$. 
 
-The computational effort required in modern N-Body simulations can be split into three categories:
+One common approach is to partition the space, in which the particles are contained, into a set of subspaces, also called cells, which are then stored in a tree data structure. The process of doing so is very similar to a k-d tree construction. However in our case, where we use a Orthogonal Recursive Bisection (ORB), we do not periodically switch between the individual axes when searching for a median. Instead we pick the axis in which the cell is largest, and search for a median. The resulting tree is then considered a space partitioning data structure and can be leveraged to perform a multipole expansions of each cell or subspace to approximate the forces acting between the particles. 
+This reduces the complexity of the algorithm to $\mathcal{O}(n\log{}n)$. More recently the Fast Multipole Method (FMM), also relying on the space partitioning data structure, has gained wider adoption primarily due to the extremely large sizes of modern simulations. This technique further reduces the complexity to $\mathcal{O}(n)$. 
 
-\begin{itemize}
-	\item \textbf{Load Balancing:} Distribute particles equally among nodes with regards to memory.
-	\item \textbf{Tree Building:} Build tree on each node for accelerated force calculation and integration.
-	\item \textbf{Force calculation and integration:} Leverage the tree and FFM to calculate forces between particles and apply them.
-\end{itemize}
+Knowing this we can split the computational effort required in modern N-Body simulations into three categories:
 
-Before the implementation of FMM into codes, and particularly before the era of modern accelerated computing (e.g., SIMD vectorization and GPU computing) the forces calculations dominated the computational cost. In more recent simulations, each category is about one third of the total calculation time\cite{2017ComAC...4....2P}. This makes the tree building and load balancing subjects to great performance gains, since GPU acceleration is usually not exploited. 
+\begin{enumerate}
+	\item \textbf{Load Balancing:} In supercomputers we need to distribute the particles equally among computing nodes to make use of the full processing capacity. This needs to be done using ORB in order for us to be able to leverage FFM.
+	\item \textbf{Tree Building:} ORB is used again on each node individually to build the fast multipole expansion.
+	\item \textbf{Force calculation and integration:} We can then leverage the tree on a local and global level combined with FFM to integrate the forces between the particles.
+\end{enumerate}
 
-This project proposes to implement Tree Building with the GPU using CUDA to accelerate load balancing. We will consider implementing the same method for tree building as well. Thus some considerations, which are important for FFM, also apply to this work.
+Note that after each time step, the particles have new positions and therefore the space partitioning tree needs to be recomputed as well.
+
+Before the implementation of FMM into codes, and particularly before the era of modern accelerated computing (e.g., SIMD vectorization and GPU computing) the forces calculations (3.) dominated the computational cost. In more recent simulations, each category is about one third of the total calculation time\cite{2017ComAC...4....2P}. This makes the tree building (2.) and load balancing (1.) subjects to great performance gains, since GPU acceleration is usually not exploited. Tree walking and building algorithms heavily rely on control statements such as if / else. SIMD programming in contrast, benefits from large packable data arrays without any branch divergence. Therefore porting tree building code onto the GPU is no easy task and we aim to explore the possibilities and limitations.
+
+
+We propose to implement tree building on the GPU using CUDA to accelerate load balancing. We will consider implementing the same method for tree building in the future, but set the main target for load balancing.
+
+\subsection{Load Balancing Procedure Overview}
+
+Load balancing is crucial to simulations, because supercomputers with node counts going in the thousands are used for accelerating the runtime. Therefore in an initial step we need to distribute all the particles among the computing nodes in the super computer. To do this randomly, would be very ineffective because we could not make use of FFM anymore. Therefore we apply ORB until we end up with a number of subspaces equivalent to the number of nodes in the system.
+
+The individual steps used for load balancing are as follows:
+
+\begin{enumerate}
+	\item 
+	The simulation data is stored on a storage device. It contains information about the particles position and further properties.
+	
+	\pgfmathsetseed{10}
+	\begin{figure}[H]
+		\begin{center}
+			\begin{tikzpicture}
+				\foreach \i in {1,...,80}{
+					\filldraw [red] (rnd*\linewidth*0.5,rnd*\linewidth*0.5) circle (1pt) node [anchor=west]{};
+				}
+				\draw (0,0) rectangle (\linewidth*0.5, \linewidth*0.5);
+			\end{tikzpicture}
+		\end{center}
+		\caption{Initial data with particles}
+	\end{figure}
+	\item
+	Since the data is initially unstructured, we distribute it randomly among the nodes in the super computer.
+	\pgfmathsetseed{10}
+	\begin{figure}[H]
+		\begin{center}
+			\foreach \j in {1,...,4}{
+				\begin{minipage}[c]{0.2\linewidth}
+					\begin{tikzpicture}
+						\foreach \i in {1,...,20}{
+							\filldraw [red] (rnd*\linewidth,rnd*\linewidth) circle (1pt) node [anchor=west]{};
+						}
+						\draw (0,0) rectangle (\linewidth, \linewidth);
+					\end{tikzpicture}
+				\end{minipage}
+			}
+		\end{center}
+		\caption{Particles are randomly distributed among 4 nodes}
+	\end{figure}
+	\item
+	We then compute the space partitioning tree data structure. The datastructure is computed globally across all nodes, meaning that the actual cut positions are the same for all nodes.
+	\pgfmathsetseed{10}
+	\begin{figure}[H]
+		\begin{center}
+			\foreach \j in {1,...,4}{
+				\begin{minipage}[c]{0.2\linewidth}
+					\begin{tikzpicture}
+						\foreach \i in {1,...,20}{
+							\filldraw [red] (rnd*\linewidth,rnd*\linewidth) circle (1pt) node [anchor=west]{};
+						}
+						\draw (0,0) rectangle (\linewidth, \linewidth);
+						
+						\draw (0,0) rectangle (\linewidth*0.55, \linewidth);
+						
+						\draw (0,0) rectangle (\linewidth*0.55, \linewidth*0.6);
+						
+						\draw (\linewidth*0.55,0) rectangle (\linewidth, \linewidth*0.5);
+						
+					\end{tikzpicture}
+				\end{minipage}
+			}
+		\end{center}
+		\caption{Space partitioning tree data structure is computed}
+	\end{figure}
+	
+	\item
+	In a final step we distribute the particles among the nodes in way such that each node only owns particles within a leaf node of the space partitioning tree data structure.
+	\begin{figure}[H]
+		\begin{center}
+			\pgfmathsetseed{10}
+			\begin{minipage}[c]{0.2\linewidth}
+				\begin{tikzpicture}
+					\foreach \i in {1,...,80}{
+						\filldraw [red] (rnd*\linewidth,rnd*\linewidth) circle (1pt) node [anchor=west]{};
+					}
+					\draw[fill=white] (0,0) rectangle (\linewidth*0.55,  \linewidth*0.6);
+					\draw[fill=white] (\linewidth*0.55,0) rectangle (\linewidth,  \linewidth*0.5);
+					\draw[fill=white] (0,\linewidth*0.6) rectangle (\linewidth*0.55,  \linewidth);
+					\draw (\linewidth*0.55,\linewidth*0.5) rectangle (\linewidth,  \linewidth);
+					
+				\end{tikzpicture}
+			\end{minipage}
+			\pgfmathsetseed{10}
+			\begin{minipage}[c]{0.2\linewidth}
+				\begin{tikzpicture}
+					\foreach \i in {1,...,80}{
+						\filldraw [red] (rnd*\linewidth,rnd*\linewidth) circle (1pt) node [anchor=west]{};
+					}
+					\draw[fill=white] (0,0) rectangle (\linewidth*0.55,  \linewidth*0.6);
+					\draw[fill=white] (\linewidth*0.55,0) rectangle (\linewidth,  \linewidth*0.5);
+					\draw (0,\linewidth*0.6) rectangle (\linewidth*0.55,  \linewidth);
+					\draw[fill=white] (\linewidth*0.55,\linewidth*0.5) rectangle (\linewidth,  \linewidth);
+					
+				\end{tikzpicture}
+			\end{minipage}
+			\pgfmathsetseed{10}
+			\begin{minipage}[c]{0.2\linewidth}
+				\begin{tikzpicture}
+					\foreach \i in {1,...,80}{
+						\filldraw [red] (rnd*\linewidth,rnd*\linewidth) circle (1pt) node [anchor=west]{};
+					}
+					\draw[fill=white] (0,0) rectangle (\linewidth*0.55,  \linewidth*0.6);
+					\draw (\linewidth*0.55,0) rectangle (\linewidth,  \linewidth*0.5);
+					\draw[fill=white] (0,\linewidth*0.6) rectangle (\linewidth*0.55,  \linewidth);
+					\draw[fill=white] (\linewidth*0.55,\linewidth*0.5) rectangle (\linewidth,  \linewidth);
+				\end{tikzpicture}
+			\end{minipage}	
+			\pgfmathsetseed{10}
+			\begin{minipage}[c]{0.2\linewidth}
+				\begin{tikzpicture}
+					\foreach \i in {1,...,80}{
+						\filldraw [red] (rnd*\linewidth,rnd*\linewidth) circle (1pt) node [anchor=west]{};
+					}
+					\draw (0,0) rectangle (\linewidth*0.55,  \linewidth*0.6);
+					\draw[fill=white] (\linewidth*0.55,0) rectangle (\linewidth,  \linewidth*0.5);
+					\draw[fill=white] (0,\linewidth*0.6) rectangle (\linewidth*0.55,  \linewidth);
+					\draw[fill=white] (\linewidth*0.55,\linewidth*0.5) rectangle (\linewidth,  \linewidth);
+				\end{tikzpicture}
+			\end{minipage}
+		\end{center}
+		\caption{Leaf cells of data structure are distributed among nodes}
+	\end{figure}
+\end{enumerate}
+
 
 \subsection{Target Data}\label{section:target-data}
-
-\TODO{Write about properties of datasets}
 
 The target data consists of $N$ particles where each particle has several data points and introduce the following definitions:
 
 \begin{itemize}
-	\item We define a particle as $p_i$  where $i \in \{0,...,N\}$. 
+	\item We define a particle as $par_i$  where $i \in \{0,...,N\}$. 
 	\item We define the space of binary numbers with a precision of $p$ as $\mathbb{B}_p$ where we have $a \in \mathbb{B}_p \Leftrightarrow a \in \{0,1\}^{p}$
 	\item We define the corner coordinates of root domain with $\vec{lower}, \vec{upper}$ where we have $\vec{lower}, \vec{upper} \in \mathbb{B}_p^3$. 
-	\item We define the coordinates of a particle $p_i$ as $\vec{x_i}$ for which holds $\{\vec{x} | \vec{lower} \leq \vec{x} \leq \vec{upper}, \vec{x} \in \mathbb{B}_p^3 \}$.
+	\item We define the coordinates of a particle $par_i$ as $\vec{x_i}$ for which holds $\{\vec{x} | \vec{lower} \leq \vec{x} \leq \vec{upper}, \vec{x} \in \mathbb{B}_p^3 \}$.
 
 \end{itemize}
+
+The distribution of the entire dataset cannot easily be characterized. There may be areas with very dense distribution, separated by vastly unpopulated areas. Thus it is best to make no assumptions about the dataset and expect anything.
 
 \begin{figure}[H]
 	\begin{center}
@@ -118,21 +251,8 @@ The target data consists of $N$ particles where each particle has several data p
 			\node[yshift=0.3cm, xshift=-0.3cm] at (10,5) {$\frac{b}{2}$};
 		\end{tikzpicture}
 	\end{center}
-\caption{Unfiorm random distribution of 3D coordinates in cube domain projected onto a 2d plane}
+\caption{Uniform random distribution of 3D coordinates in cube domain projected onto a 2d plane}
 \end{figure}
-
-\Q{Ask Doug}
-
-\subsection{Force Integration and FFM}\label{section:force-integration}
-
-\TODO{Write about how the very unequal data can also affect integration }
-Non equal weighting functions for different particles are due to higher accelerations and greater proximity to strong gravitational influences. This in turn requires a higher integrations accuracy to mitigate errors. When we try to balance the workload, this implies drawbacks in terms of memory balance. 
-
-
-
-\subsection{Target Computing Systems}\label{section:target-systems}
-
-\TODO{Write about systems which can be used to test data and systems which are worth considering while estimating runtimes of this approach.}
 
 \subsection{PKDGrav}
 
@@ -1240,7 +1360,7 @@ for(auto p= startPtr; p<endPtr; ++p) nLeft += *p < cut;
 
 In a first test, we do not enable AVX, but turn on $O3$. The generated assembly code looks as follows:
 
-\begin{figure}
+\begin{figure}[H]
 	\begin{lstlisting}
 .L18:
 	movups	(%rax), %xmm0
@@ -1258,7 +1378,7 @@ $psubd$ is a packaged instruction, meaning it already uses some form of SIMD ins
 
 If we additionally set the compile flag -march=native we end up with the following code:
 
-\begin{figure}
+\begin{figure}[H]
 \begin{lstlisting}
 .L19:
 	vmovups	(%rax), %ymm3
@@ -1867,11 +1987,6 @@ We execute the reduction kernel once for each cell, where we distribute the part
 	\item \textbf{Block Padding} Another solution would be to introduce a padding with a constant value of 0 after each slice of particles which are contained within one cell. This padding range starts with the last particle within the cell and ends with the last array index which is still contained within the same block. Therefore we only need to keep track of which block processes which cell and are able to reconstruct the actual counts for each cell. We need to increase the array which stores the particle positions by a maximum of threads per kernel times the maximum number of items per thread times $d$. In a normal setup only a fraction of the total memory size needed. However it requires us correctly load \TODO{continue}
 \end{itemize}
 
-In order to resolve this, we have 
-
-Nevertheless it leads to reduced warp occupancy rate. However compared to earlier calls, we have few kernel calls with large array sections, the performance is greatly reduced. In fact we have observed a 10 fold reduction in speed for the binary cut algorithm. Some of the effects can also be explained by  \TODO{insert}.
-
-Another approach is to adapt the kernel, such that it directly iterates over all the particles. But this approach cannot be implemented easily and directly comes with other drawbacks. Since we need to know the total number of elements smaller than a value for each cell, we have to be very careful about where we store results, as there should not be any 
 
 \subsubsection{GPU Accelerated Partitioning}
 
@@ -2147,7 +2262,7 @@ AMD EPYC 7702 64-Core Processor, Tesla T4.
 
 
 % Use for reduction explanation https://texample.net/tikz/examples/database-decimation-process/
-%\bibliographystyle{apa}
+\bibliographystyle{unsrt}
 \bibliography{reference}
 
 \end{document}
