@@ -81,27 +81,26 @@ The N-Body technique has been used for decades to simulate the Universe so we ca
 It is clear that this does not scale particularly well with large particle counts.
 
 
-One common approach is to partition the space, in which the particles are contained, into a set of subspaces, also called cells, which are then stored in a tree data structure. The process of doing so is very similar to a k-d tree construction. However in our case, where we use a Orthogonal Recursive Bisection (ORB), we do not periodically switch between the individual axes when searching for a median. Instead we pick the axis in which the cell is largest, and search for a median. The resulting tree is then considered a space partitioning data structure and can be leveraged to perform a multipole expansions of each cell or subspace to approximate the forces acting between the particles. 
-This reduces the complexity of the algorithm to $\mathcal{O}(n\log{}n)$. More recently the Fast Multipole Method (FMM), also relying on the space partitioning data structure, has gained wider adoption primarily due to the extremely large sizes of modern simulations. This technique further reduces the complexity to $\mathcal{O}(n)$. 
+One common approach is to partition the space, in which the particles are contained, into a set of subspaces, also called cells, which are then stored in a tree data structure. The process of doing so is very similar to a k-d tree construction. However in our case, where we use a Orthogonal Recursive Bisection (ORB), we do not periodically switch between the individual axes when searching for a median. Instead we pick the axis in which the cell is largest, and search for a median in the particle positions of this axis. The resulting tree is then considered a space partitioning data structure and can be leveraged to perform a multipole expansions of each cell or subspace to approximate the forces acting between the particles. 
+This reduces the complexity of the algorithm to $\mathcal{O}(n\log{}n)$. More recently the Fast Multipole Method (FMM), also relying on the space partitioning data structure, has gained wider adoption. This technique further reduces the complexity to $\mathcal{O}(n)$. 
 
 Knowing this we can split the computational effort required in modern N-Body simulations into three categories:
 
 \begin{enumerate}
 	\item \textbf{Load Balancing:} In supercomputers we need to distribute the particles equally among computing nodes to make use of the full processing capacity. This needs to be done using ORB in order for us to be able to leverage FFM.
 	\item \textbf{Tree Building:} ORB is used again on each node individually to build the fast multipole expansion.
-	\item \textbf{Force calculation and integration:} We can then leverage the tree on a local and global level combined with FFM to integrate the forces between the particles.
+	\item \textbf{Force calculation and Integration:} We can then leverage the tree on a local and global level combined with FFM to integrate the forces between the particles.
 \end{enumerate}
 
 Note that after each time step, the particles have new positions and therefore the space partitioning tree needs to be recomputed as well.
 
 Before the implementation of FMM into codes, and particularly before the era of modern accelerated computing (e.g., SIMD vectorization and GPU computing) the forces calculations (3.) dominated the computational cost. In more recent simulations, each category is about one third of the total calculation time\cite{2017ComAC...4....2P}. This makes the tree building (2.) and load balancing (1.) subjects to great performance gains, since GPU acceleration is usually not exploited. Tree walking and building algorithms heavily rely on control statements such as if / else. SIMD programming in contrast, benefits from large packable data arrays without any branch divergence. Therefore porting tree building code onto the GPU is no easy task and we aim to explore the possibilities and limitations.
 
-
 We propose to implement tree building on the GPU using CUDA to accelerate load balancing. We will consider implementing the same method for tree building in the future, but set the main target for load balancing.
 
 \subsection{Load Balancing Procedure Overview}
 
-Load balancing is crucial to simulations, because supercomputers with node counts going in the thousands are used for accelerating the runtime. Therefore in an initial step we need to distribute all the particles among the computing nodes in the super computer. To do this randomly, would be very ineffective because we could not make use of FFM anymore. Therefore we apply ORB until we end up with a number of subspaces equivalent to the number of nodes in the system.
+Load balancing is crucial to simulations, because supercomputers with node counts going in the thousands are used for accelerating the runtime. Therefore in an initial step we need to distribute all the particles among the computing nodes in the super computer. To do this randomly, would be very ineffective because we could not make use of FFM anymore. Therefore we apply ORB until we end up with a number of subspaces equivalent to the number of nodes in the system. As we have already mentioned the steps have to repeated after the positions are recomputed, parts of the tree may be preserved as some error is allowed. There may be particles which have moved over the original cell boundaries, but this is acceptable to some level. However we will not focus on updating the data structure and rather assume a complete rebuild after each time step.
 
 The individual steps used for load balancing are as follows:
 
@@ -140,7 +139,7 @@ The individual steps used for load balancing are as follows:
 		\caption{Particles are randomly distributed among 4 nodes}
 	\end{figure}
 	\item
-	We then compute the space partitioning tree data structure. The datastructure is computed globally across all nodes, meaning that the actual cut positions are the same for all nodes.
+	We then compute the space partitioning tree data structure with ORB. The datastructure is computed globally across all nodes, meaning that the actual cut positions are the same for all nodes.
 	\pgfmathsetseed{10}
 	\begin{figure}[H]
 		\begin{center}
@@ -224,8 +223,35 @@ The individual steps used for load balancing are as follows:
 	\end{figure}
 \end{enumerate}
 
+\subsection{Force Integration}
 
-\subsection{Target Data}\label{section:target-data}
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+			\filldraw  (0,0) circle (3pt) node [anchor=west]{};
+			\filldraw[red]  (1,1) circle (3pt) node [anchor=west]{};
+			\draw[->, thick] (0,0) -- (1,1);
+			\draw[->, red, thick] (1,1) -- (2,2);
+		\end{tikzpicture}
+	\end{center}
+\end{figure}
+
+\subsection{Fast Multipole Expansion}
+
+A multipole expansion can be used to approximate a function. In our case, we aim to approximate the gravity field of the particles contained within a cell. This simplification of gravitational fields is used to group particles together such that the group can be treated as a single object. 
+
+For an intuitive understanding, one can imagine a large cluster of particles that is very far away from planet Earth. If we wish to compute the interactions between every single object of the cluster and Earth, we will need to perform $O(n^2)$ computations. However, since the object is reasonably far away, it does not make sense to compute every interaction. Instead, we summarize the cluster into a single object, which is represented as a function. We can then simply compute the interacting gravity between planet Earth and the function. Since we are bound by numerical accuracy anyways, the error term introduced by simplifying calculations with the fast multipole method can also be kept so small that it does not exceed the numerical error. Consequently, objects within our own solar system would be too close to planet Earth to approximate its effects using a multipole. In such cases, it is necessary to perform all $O(n^2)$ computations.
+
+After we have built the space partitioning tree, we compute the multipole for all cells in the tree. This allows us to dynamically select more or less detailed functions to represent a group of particles. Depending on the distance between the particle we want to determine the forces for and the particles which exert the forces, we might choose a higher or lower multipole expansion.
+
+As we have mentioned, when using ORB to create the space partitioning tree data structure, we always search for a median in the axis where the cell size is largest. This is the best method to avoid skewed shapes and approximate squarish shapes. 
+
+As described in \cite{Stadel2001}, "the opening radius of a cell is given by some constant factor times $r_{max}$". $r_{max}$ is the distance between the center of mass of a cell and its most distant corner. The opening radius correlates with the error ratio, which in turn influences how fine grained the timesteps many calculations have to be performed. Trivially, a square is the rectangle where the distance between any point and its most distant corner point is the smallest. Thus, we will want to approach more square-like shapes.
+
+The most straight forward way to avoid high ratios between the length and height of such a rectangle is to always split it along its longest axis.
+
+\subsection{Target Data and Notation}\label{section:target-data}
 
 The target data consists of $N$ particles where each particle has several data points and introduce the following definitions:
 
@@ -234,6 +260,7 @@ The target data consists of $N$ particles where each particle has several data p
 	\item We define the space of binary numbers with a precision of $p$ as $\mathbb{B}_p$ where we have $a \in \mathbb{B}_p \Leftrightarrow a \in \{0,1\}^{p}$
 	\item We define the corner coordinates of root domain with $\vec{lower}, \vec{upper}$ where we have $\vec{lower}, \vec{upper} \in \mathbb{B}_p^3$. 
 	\item We define the coordinates of a particle $par_i$ as $\vec{x_i}$ for which holds $\{\vec{x} | \vec{lower} \leq \vec{x} \leq \vec{upper}, \vec{x} \in \mathbb{B}_p^3 \}$.
+	When refering to a single coordinate of a particle object we do so by writing $\vec{x}_{i,j}$. Finally the array of all particles positions in a single axis is denoted as $\vec{x}_{:,j}$. 
 
 \end{itemize}
 
@@ -263,17 +290,11 @@ The distribution of the entire dataset cannot easily be characterized. There may
 
 %https://de.overleaf.com/learn/latex/TikZ_package
 %https://texample.net/tikz/examples/
-This section will introduce the ORB algorithm along with its subroutines.
+The ORB algorithm partitions a multi-dimensional domain into subdomains based on spatial proximity, by splitting a $k$-dimensional domain containing $N$ particles into $d$ subdomains each of $k$ dimensions. This is most efficiently achieved using a recursive algorithm. During the recursive process, all intermediate domains are stored in a binary tree. A node of this tree is referred to as a $cell$. A $cell$ is a datastructure which keeps track of the domain information and also keeps pointers to its two child cells. When the final tree is examined, the number of leaf nodes (or leaf cells) must be equal to $d$. 
 
-The ORB algorithm partitions a multi-dimensional domain into subdomains based on spatial proximity, by splitting a $k$-dimensional domain containing $N$ particles into $d$ subdomains each of $k$ dimensions. This is most efficiently achieved using a recursive algorithm. During the recursive process, all intermediate domains are stored in a binary tree. A node of this tree is referred to as a $cell$. A $cell$ is a datastructure which keeps track of the domain information and also keeps pointers to its left and right child cells. When the final tree is examined, the number of leaf nodes (or leaf cells) must be equal to $d$. The tree can be leveraged in two ways:
-\begin{enumerate}
-	\item For simulation code, and more specifically for the Fast Multipole Method, the tree can be used to greatly accelerate the simulation time. \TODO{expand}
-	\item The tree can be used to equally distribute memory and/or workload among nodes or processors in a computing system. 
-\end{enumerate}
+Our main objective in this work is to improve the runtime of astrophysical simulations, or more specifically PKDGrav. At the same time we want to minimize penalties with regards to $N$, the total number of particles, such that we can leverage a high $N$ to increase the precision of the simulation. Furthermore we want to adapt and optimize the algorithms with regards to the target data as introduced in \ref{section:target-data} and target computing systems (\ref{section:target-systems}).
 
-Our main objective in this work is to improve the runtime of astrophysical simulations, or more specifically PKDGrav. At the same time we want to minimize penalties in regards to $N$, the total number of particles, such that we can leverage a high $N$ to increase the precision of the simulation. Furthermore we want to adapt and optimize the algorithms with regards to the target data as introduced in \ref{section:target-data} and target computing systems (\ref{section:target-systems}).
-
-\subsubsection{By example} 
+\subsection{By example} 
 For the purpose of explaining the algorithm both visually and by a numeric example, we consider the following minimal dataset:
 
 \begin{filecontents*}{particles10.csv}
@@ -285,6 +306,29 @@ x,y,id,o1,o2,x2,y2
 0.3,0.8,4,1,1,0.3,0.8
 0.7,0.1,5,2,2,0.7,0.1
 0.9,0.3,6,2,2,0.9,0.3
+\end{filecontents*}
+
+\begin{filecontents*}{particles11.csv}
+	x,y,id
+	0.4,0.3,0
+	0.2,0.6,1
+	0.3,0.8,4
+	0.6,0.5,3
+	0.8,0.9,2
+	0.7,0.1,5
+	0.9,0.3,6
+\end{filecontents*}
+
+
+\begin{filecontents*}{particles12.csv}
+	x,y,id
+	0.4,0.3,0
+	0.6,0.5,3
+	0.3,0.8,4
+	0.2,0.6,1
+	0.8,0.9,2
+	0.7,0.1,5
+	0.9,0.3,6
 \end{filecontents*}
 
 \begin{figure}[H]
@@ -328,7 +372,7 @@ x,y,id,o1,o2,x2,y2
 We have now formulated our main objectives for improving ORB, which are (1) to improve the runtime, which is done with workload balancing, whilst (2) at the same time keeping $N$ as large as possible. In this section we will explain the averse effects when disregarding interactions between maximizing runtime and maximizing N.
 
 
-As described in section \ref{section:force-integration}, if we want to reduce the error across all particles, we need to introduce more discrete time steps for certain particles than for others. The need for non-constant simulations steps across the simulation is caused by the vastly variant forces which are exercised on different particles. It is possible that certain particles follow a straight path with an almost constant velocity, whereas others are influenced by strong gravitational poles. 
+If we want to reduce the error of the force integration across all particles, we need to introduce more discrete time steps for certain particles than for others. The need for non-constant simulations steps across the simulation is caused by the vastly variant forces which are exercised on different particles. It is possible that certain particles follow a straight path with an almost constant velocity, whereas others are influenced by strong gravitational poles. 
 
 We denote the workload for a particle $p_i$ as the weighting function $w(p_i)$. The workload correlates with the number of simulations steps, that need to be computed for a single particle. In an optimally parallelized system, the workload should be very similar among computing units, thus it would appear make sense to distribute the particles regarding the weighting function. This in turn implies an unequal distribution of the particles with regards to memory.
 
@@ -393,8 +437,6 @@ The ORB algorithm is initiated by considering the volume $V_{cell}$ which encomp
 
 The ideal cut plane is defined such that exactly $N_{leftChild}$ particles are located to its left side. This cut plane allows us to split the volume $V_{cell}$ in two subdomain, where the $V_{leftCell}$ is constrained by our original domain boundaries and the cut plane on its right side. The same can be done for the right cell, where the cut plane determines the left side boundaries of the volume $V_{rightCell}$. We repeat this process until we have segmented our initial domain into $d$ leaf cells.
 
-As described in \cite{Stadel2001}, "the opening radius of a cell is given by some constant factor times $r_{max}$". $r_{max}$ is the distance between the center of mass of a cell and its most distant corner. The opening radius influences the error ratio, which in turn influences how many calculations have to be performed. Trivially, a square is the rectangle where the distance between any point and its most distant corner point is the smallest. Thus, we will want to approach more square-like shapes.
-The most straight forward way to avoid high ratios between the length and height of such a rectangle is to always split it along its longest axis.
 
     
 \begin{figure}[H]
@@ -423,6 +465,7 @@ The most straight forward way to avoid high ratios between the length and height
                 \end{axis}
             \end{tikzpicture}
 \caption{Example particles with ORB at recursion depth 0}
+\label{fig:orb1}
 \end{figure}
 
 \begin{figure}[H]
@@ -465,6 +508,7 @@ The most straight forward way to avoid high ratios between the length and height
 		\end{tikzpicture}
     \end{center}
 \caption{Example particles with ORB at recursion depth 1}
+\label{fig:orb2}
 \end{figure}
 
 \begin{figure}[H]
@@ -510,6 +554,7 @@ The most straight forward way to avoid high ratios between the length and height
 		\end{tikzpicture}
     \end{center}
 \caption{Example particles with ORB at recursion depth 2}
+\label{fig:orb3}
 \end{figure}
 
 \begin{figure}[H]
@@ -528,21 +573,24 @@ Since $d_{cellLeft} - d_{cellRight}$ must always be $\leq 1$, it must hold that 
 \begin{algorithm}[H]
 	\caption{The ORB main routine}\label{euclid}
 	\begin{algorithmic}[1]
-		\Procedure{orb}{$\vec{lower}, \vec{upper} ,x, d_i$}
+		\Procedure{orb}{$\vec{lower}, \vec{upper}, d$}
 		\State $\vec{size} = \vec{upper} - \vec{lower}$
-		\State $axis = maxIndex(\vec{size}_0, \vec{size}_1, \vec{size}_2)$ \Comment{Get index of max value}
+		\State $i = maxIndex(\vec{size}_0, \vec{size}_1, \vec{size}_2)$ \Comment{Get index of max value}
+		\newline
+		\State $d^\prime_{i \times 2 } = \left \lceil\frac{d}{2} \right \rceil$
+				
+		\State $cut = cut(\vec{lower}_{i}, \vec{upper}_{i}, i, \frac{d^\prime}{d} )$
+		\State $mid = partition(split, axis)$
 		\newline
 		
-		\State $cut = cut(x, \vec{lower}_{axis}, \vec{upper}_{axis}, axis, )$
-		\State $mid = partition(split, axis, x)$
+		\State $\vec{upper^\prime} = \vec{upper}$
+		\State $upperChild_{i} = cut$
+		\State $\vec{lower^\prime} = \vec{lower}$
+		\State $lowerChild_{i} = cut$
 		\newline
 		
-		\State $\vec{upperChild} = \vec{upper}$
-		\State $upperChild_{axis} = cut$
-		\State $\vec{lowerChild} = \vec{lower}$
-		\State $lowerChild_{axis} = cut$
-		\State $d_{i \times 2 } = \left \lceil\frac{d_{i}}{2} \right \rceil$
-		\State \Call{orb}{$\vec{lower}, \vec{upperChild}, x, $}
+		\State \Call{orb}{$\vec{lower}, \vec{upper^\prime}, d^\prime $}
+		\State \Call{orb}{$\vec{lower^\prime}, \vec{upper}, d - d^\prime $}
 		\EndProcedure
 	\end{algorithmic}
 \end{algorithm}
@@ -557,25 +605,26 @@ Let not apply the algorithm to our running example:
 %Finding the median of a large particle array is an essential step for ORB. We will thus explore different algorithms alongside their advantages and disadvantages for our specific use case.
 %Note that there exists approximation algorithms for example the median of medians algorithms. But the correctness guarantee of the median lying between 30\% and 70\% is not good enough in our case. If we were to implement such an approximation algorithms we would run into similar issues as described in \ref{sec:balancing}. But in this case the unequal memory balancing do not have the advantage of equal workload balancing, which in turn will worsen the performance and the maximum number of workable particles. Thus we will only consider approximation algorithms, if their approximation to the ideal values are very exact and can be determined.
 
- The $cut$ algorithm takes an array of particles, an axis, a left and right boundary as well as a percentage $r$ of particles which should be on the left side to the determined cut. Its goal is to return a position, such that the particles on the left side of the cut are equal to the percentage input parameter multiplied by all particles. The problem is equivalent to a root finding procedure. Since we are operating on binary numbers with a limited precision, the bisection method is guaranteed to determine after a certain number of steps. 
+ The $cut$ algorithm takes an array of particles, an axis, a left and right boundary as well as a percentage $r$ of particles which should be on the left side to the determined cut. Its goal is to return a position, such that the particles on the left side of the cut are equal to the percentage input parameter multiplied by all particles. The problem is equivalent to a root finding procedure. Since we are operating on binary numbers with a limited precision, the bisection method is guaranteed to terminate after a certain number of steps. 
  Other approximate algorithms can converge quicker than the bisection method, however they are not guaranteed to converge.
 
 \subsubsection{Bisection Method}
 
-The first step is to make an estimation for a cut. In our case we simply assume it to be the exact middle of the domain boundaries. In principle the binary cut counts the number of particles on the left side of the of an initial cut. In case the particles are less than half of all particles, it clear that the cut was too far to the left, and the new right boundary of the domain is the cut. In case the particles are more than half, we set the the left boundary as the cut. This is repeated until we find a precise cut position.
+The first step is to make an estimation for a cut. In our case we simply assume it to be the exact middle of the domain boundaries. In principle the binary cut counts the number of particles on the left side of the of an initial cut. In case the particles are less than half of all particles, its clear that the cut was too far to the left, and the new right boundary of the domain is the cut. In case the particles are more than half, we set the the left boundary as the cut. This is repeated until we find a precise cut position.
 
 
 \begin{algorithm}[H]
-	\caption{Deterministic find cut with early stopping}\label{algo:cut}
+	\caption{Bisection Method}\label{algo:cut}
 	\begin{algorithmic}[1]
-		\Procedure{cut}{$x, N_j, left, right, axis, percentage$}
+		\Procedure{cut}{$left, right, axis, percentage$}
 		\State $nLeft = 0$
+		\State $cut = 0$
 		\newline
 		\For{$k \in {0,..,p}$}
 		\State $cut = (right + left ) / 2 $
-		\State $nLeft\gets sum(x_{:,axis} < split)$
+		\State $nLeft\gets sum(x_{:,axis} < cut)$
 		\newline
-		\If{$abs(nLeft - N_j * percentage) < \alpha $}
+		\If{$abs(nLeft - N_j) * percentage< \alpha $}
 		\State Break
 		\EndIf
 		\newline
@@ -666,23 +715,64 @@ When thinking about this in terms of the recursive algorithm, maintaining this d
 		\EndFor
 		
 		\State $ x_{i}, x_{N_j-1} = x_{N_j-1}, x_{i}$
-		\State \Return $i$
 		\EndProcedure
 	\end{algorithmic}
 \end{algorithm}
 
 The partition algorithm has a clearly observable runtime of $O(N)$ since we iterate over all particles once. Since we need to touch each element at least once to reshuffle the entire array there is no better algorithm than this.
 
+The partitioning of the particles array comes with two advantages:
+
+\begin{enumerate}
+	\item We can easily keep track of the particles contained within one cell by simply storing the start and end index of the elements within the volume. 
+	\item We can easily perform operations on the particle data contained within a cell since its stored in a consecutive array. 
+\end{enumerate}
+
+Lets apply the algorithm to our running example. We start with our initial array of particles as follows:
+
+\begin{figure}[H]
+	\begin{center}
+		\csvreader[
+		tabular=ccc,
+		table head=\hline \bfseries{x} & \bfseries{y} & \bfseries{id} \\\hline,
+		late after last line=\\\hline % horizontal line at the end of the table
+		]{particles10.csv}{}{\csvcoli & \csvcolii & \csvcoliii}
+	\end{center}
+\end{figure}
+
+We then partition the particles with a cut in the x axis set to 0.65 as seen in figure \ref{fig:orb2}.
+
+\begin{figure}[H]
+	\begin{center}
+		\csvreader[
+		tabular=ccc,
+		table head=\hline \bfseries{x} & \bfseries{y} & \bfseries{id} \\\hline,
+		late after last line=\\\hline % horizontal line at the end of the table
+		]{particles11.csv}{}{\csvcoli & \csvcolii & \csvcoliii}
+	\end{center}
+\end{figure}
+
+Finally we partition $cell_2$ into $cell_4$ and $cell_5$ with the cut position 0.55 along the y axis as seen in figure \ref{fig:orb2}. We end up with the following array:
+
+\begin{figure}[H]
+	\begin{center}
+		\csvreader[
+		tabular=ccc,
+		table head=\hline \bfseries{x} & \bfseries{y} & \bfseries{id} \\\hline,
+		late after last line=\\\hline % horizontal line at the end of the table
+		]{particles12.csv}{}{\csvcoli & \csvcolii & \csvcoliii}
+	\end{center}
+\end{figure}
+
+Note how all particles from $cell_4$ are contained in the range of 0-1. The particles of $cell_5$ in 2-3 and finally the particles contained in the volume of $cell_3$ can be found in 4-7.
 
 \subsection{Parallelize ORB }
 
-In the context of parallelization schemas we assume a computing model, where the number of processors is $np$. When the goal of the algorithm is workload balancing, we will want to set $d = np$ to end up with exactly as many leaf cells as we have processors. In the context of a supercomputing system $np$ could also be set no the number of nodes in the system, but the algorithms and also the messaging interfaces are usually the same. 
-When we have a cell for each processor, we can distribute the workload equally in the system and avoid idle time.
+In the context of parallelization, we define the number of processors as $np$. When the goal of the algorithm is workload balancing, we will want to set $d = np$ to end up with exactly as many leaf cells as we have processors. In the context of a supercomputing system $np$ is usually equivalent to the number of nodes in the system.
 
-Initially we assume that each processor has a subset of all the particles stored in its memory. If we apply this concept to the particles from our numeric example, we have a distribution as depicted below. Note that the particles are distributed among processor randomly.
+Initially we assume that each processor has a random unique subset of all the particles stored in its memory. If we apply this concept to the particles from our numeric example, we have a distribution as depicted below. 
 
-
-\begin{figure}[ht]
+\begin{figure}[H]
 	
 	\centering
 	\begin{tikzpicture}
@@ -739,10 +829,6 @@ Initially we assume that each processor has a subset of all the particles stored
 	
 \end{figure}
 
-\subsubsection{Local Partitioning}
-
-When performing a local reshuffle, each processor sorts its particles according to the cell information available. The cell information is however being held by a single processor. This processor supervises the ORB algorithm and broadcast the data to the workers. The distribution of the particles among the processors does not change when performing a local reshuffle.
-
 \begin{figure}[H]
 	\begin{center}
 		\begin{tikzpicture}
@@ -756,20 +842,20 @@ When performing a local reshuffle, each processor sorts its particles according 
 			
 			\communication{Broadcast cells}{0}{7}{15};
 			
-			\process{reorder}{0}{14};
-			\process{reorder}{2}{14};
-			\process{reorder}{4}{14};
-			\process{reorder}{6}{14};
+			\process{partition}{0}{14};
+			\process{partition}{2}{14};
+			\process{partition}{4}{14};
+			\process{partition}{6}{14};
 			
 			\process{compute\\ cut}{0}{11};
 			
 			
 			\communication{Broadcast cut from operative}{0}{7}{8};
 			
-			\process{count}{0}{7};
-			\process{count}{2}{7};
-			\process{count}{4}{7};
-			\process{count}{6}{7};
+			\process{count \& \\ count left}{0}{7};
+			\process{count \& \\ count left}{2}{7};
+			\process{count \& \\ count left}{4}{7};
+			\process{count \& \\ count left}{6}{7};
 			
 			
 			\communication{Reduce count to operative}{0}{7}{4};
@@ -778,10 +864,12 @@ When performing a local reshuffle, each processor sorts its particles according 
 			
 		\end{tikzpicture}
 	\end{center}
-	\caption{Parallelized ORB for np = 4 and local reshuffling}
+	\caption{Parallelized ORB for np = 4}
 	\label{fig:orb_parallel}
 \end{figure}
 
+
+\begin{comment}
 \subsubsection{Global Partitioning}
 
 In the case of global partitioning, we partition the particle in such a way, that we can decouple the left and right child's computations completely from each other. In order to achieve this, the particles need to be redistributed among threads, s.t. each thread contains only particles contained in a single cell. Which in turn means it only need to consider particles in a designated volume. Finally this allows us to run the thread completely independent from others and remove the overhead introduced by synchronization operations.
@@ -933,12 +1021,10 @@ We can observe how the ownership of particle 2 and particle 1 has to be changed,
 	\label{fig:orb_parallel}
 \end{figure}
 
-
+\end{comment}
 
 \newpage
 \section{Theoretical Analysis of ORB runtime}
-
-\TODO{More like assumption and predictions to narrow the search space. Its more like one influences the other. The theoretical model can set limits, in terms of how fast "could you" do it. }
 
 The nature of the ORB algorithm and its application with very large data-sizes, requires that we consider hardware specific performance metrics for concrete implementation details. Since the decision tree for the implementation details of the algorithm is vast and each implementation involves a significant amount of development time, we will further guide our path using a theoretical model. Furthermore the model should be seen as a theoretical maximum in terms of optimization. Of course this assumes a perfect CPU and perfect GPU implementation, which are both not achievable due to a lack of knowledge and a lock of time to optimize each an every single part of the code. The lack of knowledge, is at this stage mostly present in terms of GPU implementations. Still to this day, there are new papers published which discuss new implementation details of fairly fundamental algorithms. 
 
@@ -1167,11 +1253,11 @@ In order to estimate the runtime of the algorithms we denote the number of parti
 
 We test the our hypothesis, that ORB is, for the most part, memory bandwidth bound using the roofline model. In the roofline model, we compare the operational density, which is measured in FLOPS / per byte against the number number of flops per minute. 
 
-For modern hardware, its fairly uncommon to release a peak flops value. Since 2008 Intel has introduced AVX (Advanced Vector Extensions), tflops benchmarks largely depend upon the compiled assembly instructions, the specific instructions vary a lot between small c++ implementation details and can only be used on contiguous memory access. AVX enables the processing of several floating point precision (32 bit) numbers simultaneously. The first version of AVX , enabled a 4 such operations, with AVX2 this was extended to 8 and finally AVX512 pushed the limit to 16 operations. AVX furthermore has the capability to process $c = a + b$ operations, where as some older SIMD instructions were only able to process $a = a + b$ type operations. 
+For modern hardware, its fairly uncommon to release a peak flops value. Since 2008 Intel has introduced AVX (Advanced Vector Extensions), gflops benchmarks largely depend upon the compiled assembly instructions, the specific instructions vary a lot between small c++ implementation details and can only be used on contiguous memory access. Therefore we estime the glfops with our application specific context in mind. 
 
-Most architecture models are able to complete a single AVX instructions with a CPI (cycles per instructions) of 2. For our equation we assume a perfect parallelization, meaning that gflops linearly scale with the number of processors. 
+AVX enables the processing of several floating point precision (32 bit) numbers simultaneously. AVX2, which is present in most modern hardware, enable the processing of 8 floating point instructions and its instructions have a CPI (cycles per instructions) of two on most chip architectures.
 
-We define in equation \ref{eq:avx}, a function to estimate the number of gigaflops for a given hardware. We define GHZ as the gigahertz which can be reached by the CPU, meanwhile $NF$ is the number of floats which can be processed simultaneously using AVX. $CPI$ is as mentioned the cycles per instructions for the AVX instruction set. Finally we have $np$ which is the number of processors.
+We define in equation \ref{eq:avx}, a function to estimate the number of gigaflops for a given hardware. We define GHZ as the gigahertz which can be reached by the CPU, meanwhile $NF$ is the number of floats which can be processed simultaneously using AVX. $CPI$ is as mentioned the cycles per instructions for the AVX instruction set. Finally we have $np$ which is the number of processors and  we assume a perfect parallelization, meaning 100\% of the code can be parallelized.
 
 \begin{center}
 	\begin{equation}
