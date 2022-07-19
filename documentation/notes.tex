@@ -570,30 +570,34 @@ The ideal cut plane is defined such that exactly $N_{leftChild}$ particles are l
 
 Since $d_{cellLeft} - d_{cellRight}$ must always be $\leq 1$, it must hold that the tree is a nearly complete binary tree. Therefore we can conclude that the height of the tree is equal to $\lceil log(d) \rceil$ and the total number of nodes (not only leaf nodes) is $log(d) \times d$. Since we have a nearly complete binary tree, we also have the possibility of storing it in a heap data-structure, which can in turn greatly increase the performance, since we will not have to perform a tree walk to access individual cells in the tree.
 
-\begin{algorithm}[H]
-	\caption{The ORB main routine}\label{euclid}
-	\begin{algorithmic}[1]
-		\Procedure{orb}{$\vec{lower}, \vec{upper}, d$}
-		\State $\vec{size} = \vec{upper} - \vec{lower}$
-		\State $i = maxIndex(\vec{size}_0, \vec{size}_1, \vec{size}_2)$ \Comment{Get index of max value}
-		\newline
-		\State $d^\prime_{i \times 2 } = \left \lceil\frac{d}{2} \right \rceil$
-				
-		\State $cut = cut(\vec{lower}_{i}, \vec{upper}_{i}, i, \frac{d^\prime}{d} )$
-		\State $mid = partition(split, axis)$
-		\newline
-		
-		\State $\vec{upper^\prime} = \vec{upper}$
-		\State $upperChild_{i} = cut$
-		\State $\vec{lower^\prime} = \vec{lower}$
-		\State $lowerChild_{i} = cut$
-		\newline
-		
-		\State \Call{orb}{$\vec{lower}, \vec{upper^\prime}, d^\prime $}
-		\State \Call{orb}{$\vec{lower^\prime}, \vec{upper}, d - d^\prime $}
-		\EndProcedure
-	\end{algorithmic}
-\end{algorithm}
+\begin{figure}
+	
+	\begin{algorithm}[H]
+		\caption{The ORB main routine}\label{euclid}
+		\begin{algorithmic}[1]
+			\Procedure{orb}{$\vec{lower}, \vec{upper}, d$}
+			\State $\vec{size} = \vec{upper} - \vec{lower}$
+			\State $i = maxIndex(\vec{size}_0, \vec{size}_1, \vec{size}_2)$ \Comment{Get index of max value}
+			\newline
+			\State $d^\prime_{i \times 2 } = \left \lceil\frac{d}{2} \right \rceil$
+			
+			\State $cut = cut(\vec{lower}_{i}, \vec{upper}_{i}, i, \frac{d^\prime}{d} )$
+			\State $mid = partition(split, axis)$
+			\newline
+			
+			\State $\vec{upper^\prime} = \vec{upper}$
+			\State $upperChild_{i} = cut$
+			\State $\vec{lower^\prime} = \vec{lower}$
+			\State $lowerChild_{i} = cut$
+			\newline
+			
+			\State \Call{orb}{$\vec{lower}, \vec{upper^\prime}, d^\prime $}
+			\State \Call{orb}{$\vec{lower^\prime}, \vec{upper}, d - d^\prime $}
+			\EndProcedure
+		\end{algorithmic}
+	\end{algorithm}
+\label{proc:orb}
+\end{figure}
 
 Let not apply the algorithm to our running example:
 
@@ -613,33 +617,37 @@ Let not apply the algorithm to our running example:
 The first step is to make an estimation for a cut. In our case we simply assume it to be the exact middle of the domain boundaries. In principle the binary cut counts the number of particles on the left side of the of an initial cut. In case the particles are less than half of all particles, its clear that the cut was too far to the left, and the new right boundary of the domain is the cut. In case the particles are more than half, we set the the left boundary as the cut. This is repeated until we find a precise cut position.
 
 
-\begin{algorithm}[H]
-	\caption{Bisection Method}\label{algo:cut}
-	\begin{algorithmic}[1]
-		\Procedure{cut}{$left, right, axis, percentage$}
-		\State $nLeft = 0$
-		\State $cut = 0$
-		\newline
-		\For{$k \in {0,..,p}$}
-		\State $cut = (right + left ) / 2 $
-		\State $nLeft\gets sum(x_{:,axis} < cut)$
-		\newline
-		\If{$abs(nLeft - N_j) * percentage< \alpha $}
-		\State Break
-		\EndIf
-		\newline
-		
-		\If{$nLeft <= N_j * percentage$}
-		\State $left = cut$
-		\Else 
-		\State $right = cut$
-		\EndIf
-		\newline
-		\EndFor
-		\State \Return $cut$
-		\EndProcedure
-	\end{algorithmic}
-\end{algorithm}
+\begin{figure}
+	
+	\begin{algorithm}[H]
+		\caption{Bisection Method}\label{algo:cut}
+		\begin{algorithmic}[1]
+			\Procedure{cut}{$left, right, axis, percentage$}
+			\State $nLeft = 0$
+			\State $cut = 0$
+			\newline
+			\For{$k \in {0,..,p}$}
+			\State $cut = (right + left ) / 2 $
+			\State $nLeft\gets sum(x_{:,axis} < cut)$
+			\newline
+			\If{$abs(nLeft - N_j) * percentage< \alpha $}
+			\State Break
+			\EndIf
+			\newline
+			
+			\If{$nLeft <= N_j * percentage$}
+			\State $left = cut$
+			\Else 
+			\State $right = cut$
+			\EndIf
+			\newline
+			\EndFor
+			\State \Return $cut$
+			\EndProcedure
+		\end{algorithmic}
+	\end{algorithm}
+\label{proc:cut}
+\end{figure}
 
 \subsubsection{Runtime Analysis}
 
@@ -697,7 +705,7 @@ The underlying distribution is a normal distribution. \TODO{Add reference to sec
 
 \subsection{Partition Algorithm}
 
-We have already introduced all basic building blocks of the ORB algorithm. The only and final piece which is missing is the partition algorithm. Note that it is not necessarily part of the ORB algorithm, but rather the bookkeeping strategy of the data-structure. We want to continuously update the particles array and in the words used before, have a direct correlation between $x_i$ and $i$. This allows us to group all particles, which are contained in a cell in a fixed range of indexes of the particles array. 
+We have already introduced all basic building blocks of the ORB algorithm. The only and final piece which is missing is the partition algorithm. Note that it is not necessarily part of the ORB algorithm, but rather the bookkeeping strategy of the data-structure. We want to continuously update the particles array and in the words used before, have a direct correlation between $x_i$ and $i$. This allows us to group all particles, which are contained in a cell in a fixed range of indexes of the particles array. The advantages of this are two fold: Firstly we can access all particles within a cell in constant time, secondly this allows us to easily manipulate particles within a cell as a slice. The disadvantage is a slight increase in runtime which comes with the partitioning algorithm.
 
 When thinking about this in terms of the recursive algorithm, maintaining this data structure is pretty straight forward. Each time we split a cell into two children, we make sure that particles contained in the left child cell are found in a designated range of the particles array, and the exact same concept is applied to the right cell. The partition algorithm is equivalent to the common hoar partition algorithm. \TODO{Add reference}
 
@@ -719,14 +727,7 @@ When thinking about this in terms of the recursive algorithm, maintaining this d
 	\end{algorithmic}
 \end{algorithm}
 
-The partition algorithm has a clearly observable runtime of $O(N)$ since we iterate over all particles once. Since we need to touch each element at least once to reshuffle the entire array there is no better algorithm than this.
-
-The partitioning of the particles array comes with two advantages:
-
-\begin{enumerate}
-	\item We can easily keep track of the particles contained within one cell by simply storing the start and end index of the elements within the volume. 
-	\item We can easily perform operations on the particle data contained within a cell since its stored in a consecutive array. 
-\end{enumerate}
+The partition algorithm has a clearly observable runtime of $O(N)$ since we iterate over all particles once. Since we need to touch each element at least once to partition the entire array there is no better algorithm than this.
 
 Lets apply the algorithm to our running example. We start with our initial array of particles as follows:
 
@@ -770,7 +771,9 @@ Note how all particles from $cell_4$ are contained in the range of 0-1. The part
 
 In the context of parallelization, we define the number of processors as $np$. When the goal of the algorithm is workload balancing, we will want to set $d = np$ to end up with exactly as many leaf cells as we have processors. In the context of a supercomputing system $np$ is usually equivalent to the number of nodes in the system.
 
-Initially we assume that each processor has a random unique subset of all the particles stored in its memory. If we apply this concept to the particles from our numeric example, we have a distribution as depicted below. 
+Initially we assume that each processor has a random unique subset of all the particles stored in its memory, this has two reasons. For one we run into memory limitations quickly when trying to load all the particles onto a single node, furthermore memory bandwidths limitations can be multiplied by the number of processors and are thus a lot higher. 
+
+Let us now apply this to our running example where we have 3 nodes.
 
 \begin{figure}[H]
 	
@@ -829,6 +832,8 @@ Initially we assume that each processor has a random unique subset of all the pa
 	
 \end{figure}
 
+The ORB algorithm is only executed form the operative node, all other nodes are purely worker nodes and perform certain parts of the algorithm. In our case one of the most performance intensive tasks is found on line 6 from the cut procedure as seen in figure \ref{proc:cut}. Not only is it costly, its also a task that can only be executed from the node, which owns the particles array, i.e. its stored in its memory. Therefore the worker nodes count the number of particles on the left side of a 2D cut plane individually and send back the results to the operative thread as seen in figure \ref{fig:orbp}. Besides the counting we also have the partitioning which also concerns the particles array and thus can only be executed by its corresponding owner. Consequently the procedure is also executed on the worker nodes individually. Note that the operative node can also perform work, thus become a worker node at times. This can be seen in figure \ref{fig:orbp}, where p0 is the operative node, but still performs partition and counting operations.
+
 \begin{figure}[H]
 	\begin{center}
 		\begin{tikzpicture}
@@ -836,7 +841,7 @@ Initially we assume that each processor has a random unique subset of all the pa
 			\timeline{6}{16}{3}
 			
 			
-			\parallelloop{-2}{15.5}{8}{0.5}{loop till all cells found};
+			\parallelloop{-2}{15.5}{8}{0.5}{loop till desired tree depth is reached};
 			
 			\parallelloop{-1}{11.5}{7}{3.5}{loop till cut found};
 			
@@ -865,7 +870,7 @@ Initially we assume that each processor has a random unique subset of all the pa
 		\end{tikzpicture}
 	\end{center}
 	\caption{Parallelized ORB for np = 4}
-	\label{fig:orb_parallel}
+	\label{fig:orbp}
 \end{figure}
 
 
