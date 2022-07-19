@@ -77,11 +77,11 @@
 \newpage
 \section{Introduction}
 
-The N-Body technique has been used for decades to simulate the Universe so we can compare theory with observations. This technique uses ``particles'' or ``bodies'' to sample phase space, and as gravity operates over infinite distance it is necessary to consider all pair-wise interactions which makes a naive implementation $\mathcal{O}(n^2)$.
+The N-Body technique has been used for decades to simulate the Universe so we can compare theory with observations. This technique uses ``particles'' representing object such as planets and stars. As gravity operates over infinite distance it is necessary to consider all pair-wise interactions which makes a naive implementation $\mathcal{O}(n^2)$.
 It is clear that this does not scale particularly well with large particle counts.
 
 
-One common approach is to partition the space, in which the particles are contained, into a set of subspaces, also called cells, which are then stored in a tree data structure. The process of doing so is very similar to a k-d tree construction. However in our case, where we use a Orthogonal Recursive Bisection (ORB), we do not periodically switch between the individual axes when searching for a median. Instead we pick the axis in which the cell is largest, and search for a median in the particle positions of this axis. The resulting tree is then considered a space partitioning data structure and can be leveraged to perform a multipole expansions of each cell or subspace to approximate the forces acting between the particles. 
+One common approach is to partition the space, in which the particles are contained, into a set of subspaces, also called cells, which are then stored in a tree data structure. The process of doing so is very similar to a k-d tree construction. However in our case, where we use a Orthogonal Recursive Bisection (ORB), we do not periodically switch between the individual axes when searching for a median. Instead we pick the axis in which the cell is largest, and search for a median in the particle positions of this axis. The resulting tree is then considered a space partitioning data structure and can be leveraged to perform a multipole expansions of each cell or subspace to approximate the forces acting between the particles. A mutlipole expansion is essentially a mathematical represnation of a group of objects into a single function, we discuss this in further detail later.
 This reduces the complexity of the algorithm to $\mathcal{O}(n\log{}n)$. More recently the Fast Multipole Method (FMM), also relying on the space partitioning data structure, has gained wider adoption. This technique further reduces the complexity to $\mathcal{O}(n)$. 
 
 Knowing this we can split the computational effort required in modern N-Body simulations into three categories:
@@ -253,7 +253,7 @@ The most straight forward way to avoid high ratios between the length and height
 
 \subsection{Target Data and Notation}\label{section:target-data}
 
-The target data consists of $N$ particles where each particle has several data points and introduce the following definitions:
+The target data consists of $N$ particles where we use the following notations:
 
 \begin{itemize}
 	\item We define a particle as $par_i$  where $i \in \{0,...,N\}$. 
@@ -283,14 +283,16 @@ The distribution of the entire dataset cannot easily be characterized. There may
 
 \subsection{PKDGrav}
 
+\subsection{Ralated Work}
 
+\TODO{Write how ORB is similar to quicksort, how individual parts could be done using thrust library.}
 \newpage
 \section{Orthogonal Recursive Bisection (ORB)} \label{section:orb}
 
 
 %https://de.overleaf.com/learn/latex/TikZ_package
 %https://texample.net/tikz/examples/
-The ORB algorithm partitions a multi-dimensional domain into subdomains based on spatial proximity, by splitting a $k$-dimensional domain containing $N$ particles into $d$ subdomains each of $k$ dimensions. This is most efficiently achieved using a recursive algorithm. During the recursive process, all intermediate domains are stored in a binary tree. A node of this tree is referred to as a $cell$. A $cell$ is a datastructure which keeps track of the domain information and also keeps pointers to its two child cells. When the final tree is examined, the number of leaf nodes (or leaf cells) must be equal to $d$. 
+The ORB algorithm partitions a multi-dimensional domain into subdomains based on spatial proximity, by splitting a $k$-dimensional domain containing $N$ particles into $d$ subdomains each of $k$ dimensions. This can be done using a recusive process where all intermediate domains are stored in a binary tree. A node of this tree is referred to as a $cell$. A $cell$ is a datastructure which keeps track of the domain information and also keeps pointers to its two child cells. The final binary tree should have exactly $d$ leaf cells. 
 
 Our main objective in this work is to improve the runtime of astrophysical simulations, or more specifically PKDGrav. At the same time we want to minimize penalties with regards to $N$, the total number of particles, such that we can leverage a high $N$ to increase the precision of the simulation. Furthermore we want to adapt and optimize the algorithms with regards to the target data as introduced in \ref{section:target-data} and target computing systems (\ref{section:target-systems}).
 
@@ -369,14 +371,16 @@ x,y,id,o1,o2,x2,y2
 
 
 \subsection{Memory and Workload Balancing}\label{balancing}
-We have now formulated our main objectives for improving ORB, which are (1) to improve the runtime, which is done with workload balancing, whilst (2) at the same time keeping $N$ as large as possible. In this section we will explain the averse effects when disregarding interactions between maximizing runtime and maximizing N.
+We have now formulated our main objectives for improving ORB, which are (1) to improve the runtime, which is done with workload balancing, whilst (2) at the same time keeping $N$ as large as possible. In this section we will explain the averse effects when disregarding interactions between minimizing runtime and maximizing N.
+
+\Q{Is N fixed? simulated?}
 
 
 If we want to reduce the error of the force integration across all particles, we need to introduce more discrete time steps for certain particles than for others. The need for non-constant simulations steps across the simulation is caused by the vastly variant forces which are exercised on different particles. It is possible that certain particles follow a straight path with an almost constant velocity, whereas others are influenced by strong gravitational poles. 
 
-We denote the workload for a particle $p_i$ as the weighting function $w(p_i)$. The workload correlates with the number of simulations steps, that need to be computed for a single particle. In an optimally parallelized system, the workload should be very similar among computing units, thus it would appear make sense to distribute the particles regarding the weighting function. This in turn implies an unequal distribution of the particles with regards to memory.
+We denote the workload for a particle $p_i$ as the weighting function $w(p_i)$. The workload correlates with the number of simulations steps, that need to be computed for a single particle. In an optimally parallelized system, the workload should be very similar among computing units, thus it would make sense to distribute the particles regarding the weighting function. This in turn implies an unequal distribution of the particles with regards to memory.
 
-Let us consider a simple example to illustrate the point. Given the set of particles $A = \{p_1, p_2, .., p_{2m/3}\}$ and respectively $B = \{p_{2m/3 + 1}, p_2, .., p_{m}\}$. This gives us a total number of particles equivalent to $N = m$. Let us now consider that $\forall p \in A : w(p) = 1$ and $\forall p \in B : w(p) = 2$. If we assign all particles from set $A$ to process with rank 0 and the particles from B to rank 1. It is clear that $\sum_{p\in A} w(p) = \sum_{p\in B} w(p)$. Thus the two processors are balanced in terms of computing costs, but clearly they are not balanced in terms of memory size. In fact, process with rank 0 has $2m/3$ elements and rank 1 has $m/3$ elements. Assuming each process has a memory size of $2m/3$, then clearly this configuration is not optimal. If we were to favor memory balancing, we could assign $2m/3$ to each processor and have $(4/3) \times m$ particles in total. 
+Let us consider a simple example to illustrate the point. Given the set of particles $A = \{p_1, p_2, .., p_{2m/3}\}$ and respectively $B = \{p_{2m/3 + 1}, p_2, .., p_{m}\}$. This gives us a total number of particles equivalent to $N = m$. Let us now consider that $\forall p \in A : w(p) = 1$ and $\forall p \in B : w(p) = 2$. If we assign all particles from set $A$ to process with rank 0 and the particles from B to rank 1. It is clear that $\sum_{p\in A} w(p) = \sum_{p\in B} w(p)$. Thus the two processors are balanced in terms of computing costs, but clearly they are not balanced in terms of memory size. In fact, process with rank 0 has $2m/3$ elements and rank 1 has $m/3$ elements. Assuming each process has a memory size of $2m/3$, then clearly this configuration is not optimal. If we were to favor memory balancing, we could assign $2m/3$ to each processor and we would be able process $(4/3) \times m$ particles in total, which is larger than the original $N$ and therefore favorable.
 
 To which degree we decide to favor memory over workload balancing is difficult to answer. But as for now we will parametrize the workload using the weighting function, which allows us to optimize and decide at a later stage. If we decide to completely ignore the workload balancing and solely focus on memory balancing, we can simply set the $w(p_i) = 1$ for all particles.
 
@@ -428,7 +432,7 @@ Finally we need to determine the number of particles, which should be encompasse
 	\end{equation}
 \end{center}
 
-With this formula we make sure, that for any given $d$, we can subdivide the domain accordingly and end up with leaf cells, who encompass an almost equal amount of particles. \TODO{Insert better explanation and example here.}
+With this formula we make sure, that for any given $d$, we can subdivide the domain accordingly and end up with leaf cells, who encompass an almost equal amount of particles.
 
 
 To simplify the visual and numeric explanation of the ORB algorithm, we assume $\forall i \in \{0,..,N\} : w(p_i) = 1$.
@@ -570,6 +574,7 @@ The ideal cut plane is defined such that exactly $N_{leftChild}$ particles are l
 
 Since $d_{cellLeft} - d_{cellRight}$ must always be $\leq 1$, it must hold that the tree is a nearly complete binary tree. Therefore we can conclude that the height of the tree is equal to $\lceil log(d) \rceil$ and the total number of nodes (not only leaf nodes) is $log(d) \times d$. Since we have a nearly complete binary tree, we also have the possibility of storing it in a heap data-structure, which can in turn greatly increase the performance, since we will not have to perform a tree walk to access individual cells in the tree.
 
+\Q{Cant we assume for the reader to know what a heap is?}
 \begin{figure}
 	
 	\begin{algorithm}[H]
@@ -609,7 +614,7 @@ Let not apply the algorithm to our running example:
 %Finding the median of a large particle array is an essential step for ORB. We will thus explore different algorithms alongside their advantages and disadvantages for our specific use case.
 %Note that there exists approximation algorithms for example the median of medians algorithms. But the correctness guarantee of the median lying between 30\% and 70\% is not good enough in our case. If we were to implement such an approximation algorithms we would run into similar issues as described in \ref{sec:balancing}. But in this case the unequal memory balancing do not have the advantage of equal workload balancing, which in turn will worsen the performance and the maximum number of workable particles. Thus we will only consider approximation algorithms, if their approximation to the ideal values are very exact and can be determined.
 
- The $cut$ algorithm takes an array of particles, an axis, a left and right boundary as well as a percentage $r$ of particles which should be on the left side to the determined cut. Its goal is to return a position, such that the particles on the left side of the cut are equal to the percentage input parameter multiplied by all particles. The problem is equivalent to a root finding procedure. Since we are operating on binary numbers with a limited precision, the bisection method is guaranteed to terminate after a certain number of steps. 
+ The $cut$ algorithm takes an array of particles, an axis, a left and right boundary as well as a percentage $r$ of particles which should be on the left side to the determined cut. Its goal is to return a position, such that the particles on the left side of the cut are equal to the percentage input parameter multiplied by all particles. The problem is equivalent to a root finding procedure since we are searching for the count on the left side of a certain value to be a fixed value. Therefore we can treat \TODO{Expand} Since we are operating on binary numbers with a limited precision, the bisection method is guaranteed to terminate after a certain number of steps. 
  Other approximate algorithms can converge quicker than the bisection method, however they are not guaranteed to converge.
 
 \subsubsection{Bisection Method}
@@ -649,11 +654,6 @@ The first step is to make an estimation for a cut. In our case we simply assume 
 \label{proc:cut}
 \end{figure}
 
-\subsubsection{Runtime Analysis}
-
-We analyse the runtime of the cut algorithm as follows: On line 5 we count the number of particles on the left side of the cut position. Since the array is unordered, we need to sweep over all the elements once which results in a runtime of $O(N)$. All other operartions inside the for loop can be computed in a negligible constant time. The loop itself is repeated $p$ number of times, where $p$ corresponds to the precision of the array data. With each iteration we half the span in which the optimal solution lies. Thus we reach the precision limit after $p$ iterations. Note that due to the Break condition on line 7, the average runtime is not the same as the maximum runtime and depends a lot on the underlying data.
-
-The bisection method converges rather slowly, assuming its first guess for the cut position was almost correct, it will correct its next guess by $25\%$ of the entire domain size, thus the number of iterations need to approach the actual optimum again is rather high.  
 
 \subsubsection{Edge cases}
 
@@ -674,6 +674,13 @@ The $\alpha$ value defines by how many particles the final cut value can be off 
 
 Considering the runtime improvements, we will show that the introduction of the $\alpha$ value brings some improvements. \TODO{Elaborate}
 
+
+
+\subsubsection{Runtime Analysis}
+
+We analyse the runtime of the cut algorithm as follows: On line 5 we count the number of particles on the left side of the cut position. Since the array is unordered, we need to sweep over all the elements once which results in a runtime of $O(N)$. All other operartions inside the for loop can be computed in a negligible constant time. The loop itself is repeated $p$ number of times, where $p$ corresponds to the precision of the array data. With each iteration we half the span in which the optimal solution lies. Thus we reach the precision limit after $p$ iterations. Note that due to the Break condition on line 7, the average runtime is not the same as the maximum runtime and depends a lot on the underlying data.
+
+The bisection method converges rather slowly, \TODO{Explain} assuming its first guess for the cut position was almost correct, it will correct its next guess by $25\%$ of the entire domain size, thus the number of iterations need to approach the actual optimum again is rather high.  
 
 \begin{comment}
 
@@ -705,10 +712,11 @@ The underlying distribution is a normal distribution. \TODO{Add reference to sec
 
 \subsection{Partition Algorithm}
 
-We have already introduced all basic building blocks of the ORB algorithm. The only and final piece which is missing is the partition algorithm. Note that it is not necessarily part of the ORB algorithm, but rather the bookkeeping strategy of the data-structure. We want to continuously update the particles array and in the words used before, have a direct correlation between $x_i$ and $i$. This allows us to group all particles, which are contained in a cell in a fixed range of indexes of the particles array. The advantages of this are two fold: Firstly we can access all particles within a cell in constant time, secondly this allows us to easily manipulate particles within a cell as a slice. The disadvantage is a slight increase in runtime which comes with the partitioning algorithm.
+We have already introduced all basic building blocks of the ORB algorithm. The only and final piece which is missing is the partition algorithm. We want to continuously update the array and in the words used before, have a direct correlation between $x_i$ and $i$. This allows us to group all particles, which are contained in a cell in a fixed range of indexes of the particles array. The advantages of this are two fold: Firstly we can access all particles within a cell in constant time, secondly this allows us to easily manipulate particles within a cell as a slice. The disadvantage is a slight increase in runtime which comes with the partitioning algorithm.
 
-When thinking about this in terms of the recursive algorithm, maintaining this data structure is pretty straight forward. Each time we split a cell into two children, we make sure that particles contained in the left child cell are found in a designated range of the particles array, and the exact same concept is applied to the right cell. The partition algorithm is equivalent to the common hoar partition algorithm. \TODO{Add reference}
+When thinking about this in terms of the recursive algorithm, maintaining this data structure is pretty straight forward. Each time we split a cell into two children, we make sure that particles contained in the left child cell are found in a designated range of the particles array, and the exact same concept is applied to the right cell. The partition algorithm is equivalent to the common hoare partition algorithm. \TODO{Add reference}
 
+\TODO{Add explanation}
 \begin{algorithm}[H]
 	\caption{Partition algorithm}\label{euclid}
 	\begin{algorithmic}[1]
@@ -1035,7 +1043,7 @@ The nature of the ORB algorithm and its application with very large data-sizes, 
 
 When creating such a model, the performance is either bound by the number of floating point operations per minute, or in some cases its bound by the memory access speed. In our case, we have the hypothesis that binary cut, as well as the partition method in ORB are bound by memory access times and not the actual processor performance.
 
-Now how can we verify, that the most performance intensive parts of ORB are are in fact memory bound? A very straight forward method is to compare the hardware bandwidth limits in terms of bytes between the CPU and its memory with the number of operations we perform on each loaded elements and correspondingly the maximum number of flops which can be performed on the respective hardware. 
+Now how can we verify, that the most performance intensive parts of ORB are are in fact memory bound? A very straight forward method is to compare the hardware memory bandwidth limits with the number of operations we perform on each loaded elements and correspondingly the maximum number of flops which can be performed on the respective hardware. 
 
 In section \ref{sec:parellize-orb} we have introduced a strategy for parallelizing ORB across multiple nodes. In this section we will limit ourselves to parts of the ORB algorithm, which are executed by the worker nodes. 
 
@@ -1043,7 +1051,7 @@ In section \ref{sec:parellize-orb} we have introduced a strategy for parallelizi
 
 \subsection{General Memory Model}\label{sec:gmm}
 
-In order to have a clear terminology and understanding of a computing system, we will briefly describe a general model of computing system, which can be applied to most modern high performance systems.
+In order to have a clear terminology and understanding of a computing system, we will briefly describe a general model of computing system, which can be applied to most modern high performance systems. Note that we are looking at a single node and its hardware components here. A supercomputer may have thousands of these computers linked together where different bandwidth are seen between individual nodes. 
 
 A computing system consists of several nodes, where each node has one or more CPU`s where some are equipped with one or more GPU`s. Both the CPU and the GPU have their own memory which are connected by a data link. The bandwidth of this link is called Memory Bandwidth. We name the capacity of the CPU Memory Bandwidth $B_{CPU}$ and the GPU Memory Bandwidth $B_{GPU}$. Furthermore we have a separate data link between the CPU and the GPU memory which is in some cases called PCI express, NVLink (for modern NVidia GPU`s) among others. We will refer to it as $I_{GC}$. In systems with multiple CPU there is a link between the individiual CPU which we denote as $I_{CC}$. Finally we denote the link between GPUs as $I_{GG}$.
 
@@ -1254,7 +1262,7 @@ In this section we introduce a table which lists all important data points for P
 If we investigate the operations which are needed for the binary cut algorithm, we notice that the actual operations completed inside the loop, are only very few. When comparing the CPU implementation with GPU one, we need to not only consider benefits from increased parallelism in GPU hardware, which will lead to a higher tflops, but also possible speed-ups reached by higher bandwidths in GPU memory than CPU memory. On the other hand we need to mitigate the very low bandwidths between the GPU and CPU, which cannot be avoided altogether, as the data needs to be sent from the CPU to GPU before we can process it on the graphics processor.
 \end{comment}
 
-In order to estimate the runtime of the algorithms we denote the number of particles as $N$. Furthermore we assume a precision $p$ of 32, which is general standard for both integers and floats, furthermore its a sensible assumption for astrophysical simulations. We only look at $x$ for the runtime analysis, where it follows that the total storage of all particles is $32 \times 3 \times N bits = 4 \times 3 \times N Bytes = 12 \times N Bytes$. Furthermore we assume $d = 1024$ and $N=10^9$.
+In order to estimate the runtime of the algorithms we denote the number of particles as $N$. Furthermore we assume a precision $p$ of 32, which is general standard for both integers and floats, furthermore its a sensible assumption for astrophysical simulations. We only look at at the positional data of the particles for the runtime analysis since its the only relevant data to be considered to find a cut. The total storage of all particles is $32 \times 3 \times N bits = 4 \times 3 \times N Bytes = 12 \times N Bytes$. Furthermore we assume $d = 1024$ and $N=10^9$.
 
 
 \subsection{Roofline Performance Model}
@@ -1263,7 +1271,7 @@ We test the our hypothesis, that ORB is, for the most part, memory bandwidth bou
 
 For modern hardware, its fairly uncommon to release a peak flops value. Since 2008 Intel has introduced AVX (Advanced Vector Extensions), benchmarks performance largely depend upon the compiled assembly instructions, where the specific instructions vary a lot between implementation details. SIMD instructions can only be used when there is a contiguous memory access. Thus the peformance of the code depends on chosen memory layout as well as iteration method. Due to the lack of peak flop estimations, we build our own model to estimate the flops of the major parts of ORB. 
 
-AVX enables the processing of several floating point precision (32 bit) numbers simultaneously. AVX2, which is present in most modern hardware, enable the processing of 8 floating point instructions and its instructions have a CPI (cycles per instructions) of two on most chip architectures.
+AVX enables the processing of several floating point precision (32 bit) numbers simultaneously. AVX2, which is present in most modern hardware, enable the processing of 8 floating point instructions and its instructions have a CPI (cycles per instructions) of two on most chip architectures, where naturally a higher CPI correlates with an increased performance.
 
 We define in equation \ref{eq:avx}, a function to estimate the number of gigaflops for a given hardware. We define GHZ as the gigahertz which can be reached by the CPU, meanwhile $NF$ is the number of floats which can be processed simultaneously using AVX. $CPI$ is as mentioned the cycles per instructions for the AVX instruction set. Finally we have $np$ which is the number of processors and  we assume a perfect parallelization, meaning 100\% of the code can be parallelized.
 
@@ -1274,7 +1282,7 @@ We define in equation \ref{eq:avx}, a function to estimate the number of gigaflo
 \label{eq:avx}
 \end{center}
 
-In terms of arithmetic intensity, we take a look at the code for the conditional reduction of the binary cut algorithm. We ignore other parts of the code for now, as optimizing this part is one of the main targets for the thesis. The part where we count the number of particles which are to the left of a cut position, essentially comes down to this loop:
+In terms of arithmetic intensity, we take a look at the code for counting of particles left of a specified cut plane. We ignore other parts of the code for now, as optimizing this part is one of the main targets for the thesis. The part where we count the number of particles which are to the left of a cut position, essentially comes down to this loop:
 
 \begin{figure}
 	\begin{lstlisting}[language=c++]
@@ -1286,11 +1294,13 @@ In terms of arithmetic intensity, we take a look at the code for the conditional
 
 Where $p$ is a C-style array which stores the particles position and $nLeft$ gives the number of particles which are left of the $cut$. In terms of arithmetic intensity, we have the following operations:
 
+\Q{Add glossary for terms like arithemtic intensity?}
+
 \begin{enumerate}
 	\item Compare particle to cut
-	\item Add result to nLeft
-	\item Increment i
-	\item Compare i
+	\item Add result to $nLeft$
+	\item Increment pointer $p$
+	\item Compare pointer $p$ with $endPtr$
 \end{enumerate}
 
 Which results in a total of 4 operations. Since a single float is stored using 4 bytes, we receive 1.0 operations per byte. Note that AVX or any SIMD instructions do not influence the arithmetic intensity, as the number of floating point operations per byte remains the same. We simply perform a set of operations concurrently. What is however influenced by AVX, is the maximum number of GFLOPS which can be processed by the hardware. If we were to ignore AVX, the algorithm would clearly not be bound by memory, as its performance would lack behind the memory bandwidth. For this reason it is so important to consider AVX.
@@ -1567,6 +1577,7 @@ If we additionally set the compile flag -march=native we end up with the followi
 
 We can identify $vmovups$, $vcomplpts$ and $vpsubd$ which are all AVX commands. Since they are using the ymm instead of the xmm registers, we know these are AVX2 and not AVX commands. For the chip architecture we have tested this on, AVX2 is the most optimal SIMD instruction set.
 
+\TODO{Fix, Redo this part}
 The following test results were achieved from a Intel(R) Core(TM) i9-10885H CPU @ 2.40GHz
 processor. We perform the conditional reduction on  $2^{27}$ particles. The reduction takes 244420 microseconds. This means we have a throughput of $2^{27} / 10^{12} * 10^6 / 24420 = 0.00549 tflops$. This of course does not lie anywhere near the theoretical maximum, which even for a single processor ($np = 1$) is $2.4 * 8 * 2 * 1 / 1000 = 0.0384 tflops.$. This is a strong indication, that already with a single processor solutions, we are in the realm of bandwidth limited algorithms. This effect of course, would become even stronger when including parallelism.
 
@@ -1649,7 +1660,7 @@ Since for most computer the Interconnect bandwidth is greatly smaller than the M
 \normalfont
 \subsection{Piz Daint} 
 
-Let us plugin the values from Figure \ref{fig:datapoints} into the corresponding formulas \ref{eq:cpu}, \ref{eq:gpu}, \ref{eq:cputree} and \ref{eq:gputree}.
+Let us plugin the values from figure \ref{fig:datapoints} into the corresponding formulas \ref{eq:cpu}, \ref{eq:gpu} and \ref{eq:gputree} for piz daint.
 
 \subsubsection{Naive implementation}
 The naive implementation yields the following speeds for the naive CPU  implementation:
@@ -1701,6 +1712,18 @@ This yields in a speed-up of:
 
 \vspace{5mm}
 
+\pgfmathsetmacro\cpuSummit{ln(1024) / ln(2) * (\p * \s / (170 * 2)}
+\pgfmathsetmacro\gpuSummitN{ln(1024) / ln(2) * (
+	(\p * \s / (900 * 6) + 
+	\s / (50 * 6) + \s /(170 * 2)
+	)}
+\pgfmathsetmacro\gpuSummitT{ln(1024) / ln(2) * 
+	(\p * \s / (900 * 6))
+	+  \s / (50 * 6) + \s /(170 * 2)}
+\pgfmathsetmacro\cpuEiger{ln(1024) / ln(2) * (\p * \s / (204.8 * 2)}
+ 
+The computations for Eiger and Summit can performed in the same way as we have shown for Piz Daint. For Eiger we cannot make any assumption for a GPU version as its CPU only system.
+\begin{comment}
 
 \subsection{Summit}
 
@@ -1709,7 +1732,7 @@ Let us plugin the values from Figure \ref{fig:datapoints} into the corresponding
 \subsubsection{Naive implementation}
 The naive implementation yields the following speeds for the naive CPU  implementation:
 
-\pgfmathsetmacro\cpuSummit{ln(1024) / ln(2) * (\p * \s / (170 * 2)}
+
 \begin{center}
 	\begin{equation}
 		log(1024) \times \left ( \p \times \frac{ \s GB }{170 GB/s \times 2} \right ) = \cpuSummit s
@@ -1717,10 +1740,7 @@ The naive implementation yields the following speeds for the naive CPU  implemen
 \end{center}
 
 And the corresponding GPU implementation:
-\pgfmathsetmacro\gpuSummitN{ln(1024) / ln(2) * (
-		(\p * \s / (900 * 6) + 
-		\s / (50 * 6) + \s /(170 * 2)
-	)}
+
 \begin{center}
 	\begin{equation}
 		log(1024) \times \left ( \p \times \frac{\s GB}{900 GB/s \times 6} + \frac{\s GB}{50 GB/s \times 6}  + \frac{\s GB}{170 GB/s \ \times 2} \right )= \gpuSummitN s
@@ -1739,10 +1759,7 @@ This yields in a speed-up of:
 \subsubsection{GPU Tree Building}
 
 And the corresponding GPU implementation:
-\pgfmathsetmacro\gpuSummitT{ln(1024) / ln(2) * 
-		(\p * \s / (900 * 6))
-	 +  \s / (50 * 6) + \s /(170 * 2)}
- 
+
 \begin{center}
 	\begin{equation}
 		log(1024) \times \left ( \p \times \frac{\s GB}{900 GB/s \times 6} \right ) + \frac{\s GB}{50 GB/s \times 2}  + \frac{\s GB}{170 GB/s \times 2} = \gpuSummitT s
@@ -1770,6 +1787,8 @@ This yields in a speed-up of:
 		\log(1024) \times \p \times \frac{ \s GB }{204.8 GB/s \times 2} = \cpuEiger s
 	\end{equation}
 \end{center}
+
+\end{comment}
 
 \subsection{Conclusion}
 
