@@ -767,7 +767,7 @@ Finally we partition $cell_2$ into $cell_4$ and $cell_5$ with the cut position 0
 
 Note how all particles from $cell_4$ are contained in the range of 0-1. The particles of $cell_5$ in 2-3 and finally the particles contained in the volume of $cell_3$ can be found in 4-7.
 
-\subsection{Parallelize ORB }
+\subsection{Parallelize ORB }\label{sec:parellize-orb}
 
 In the context of parallelization, we define the number of processors as $np$. When the goal of the algorithm is workload balancing, we will want to set $d = np$ to end up with exactly as many leaf cells as we have processors. In the context of a supercomputing system $np$ is usually equivalent to the number of nodes in the system.
 
@@ -829,7 +829,7 @@ Let us now apply this to our running example where we have 3 nodes.
 			%\node[below] at (0.5, 1){$cell_1$};
 		\end{axis}
 	\end{tikzpicture}
-	
+	\caption{Example particles distributed randomly across 3 nodes}
 \end{figure}
 
 The ORB algorithm is only executed form the operative node, all other nodes are purely worker nodes and perform certain parts of the algorithm. In our case one of the most performance intensive tasks is found on line 6 from the cut procedure as seen in figure \ref{proc:cut}. Not only is it costly, its also a task that can only be executed from the node, which owns the particles array, i.e. its stored in its memory. Therefore the worker nodes count the number of particles on the left side of a 2D cut plane individually and send back the results to the operative thread as seen in figure \ref{fig:orbp}. Besides the counting we also have the partitioning which also concerns the particles array and thus can only be executed by its corresponding owner. Consequently the procedure is also executed on the worker nodes individually. Note that the operative node can also perform work, thus become a worker node at times. This can be seen in figure \ref{fig:orbp}, where p0 is the operative node, but still performs partition and counting operations.
@@ -1035,8 +1035,11 @@ The nature of the ORB algorithm and its application with very large data-sizes, 
 
 When creating such a model, the performance is either bound by the number of floating point operations per minute, or in some cases its bound by the memory access speed. In our case, we have the hypothesis that binary cut, as well as the partition method in ORB are bound by memory access times and not the actual processor performance.
 
-Now how can we verify, that the most performance intensive parts of ORB are are in fact memory bound? A very straight forward method is to compare the hardware bandwidth limits in terms of bytes between the CPU and its memory with the number of operations we perform on each loaded elements and correspondingly the maximum number of flops which can be performed on the respective hardware.
+Now how can we verify, that the most performance intensive parts of ORB are are in fact memory bound? A very straight forward method is to compare the hardware bandwidth limits in terms of bytes between the CPU and its memory with the number of operations we perform on each loaded elements and correspondingly the maximum number of flops which can be performed on the respective hardware. 
 
+In section \ref{sec:parellize-orb} we have introduced a strategy for parallelizing ORB across multiple nodes. In this section we will limit ourselves to parts of the ORB algorithm, which are executed by the worker nodes. 
+
+\Q{Parallelization in the context of nodes / threads?} 
 
 \subsection{General Memory Model}\label{sec:gmm}
 
@@ -1236,7 +1239,7 @@ In this section we introduce a table which lists all important data points for P
 			$B_G$ & 732 GB/s & 900 GB/s $\times$ 6 & -\\
 			$I_{GC}$ & 32 GB/s & 50 GB/s $\times$ 6 & -\\
 			$I_{GG}$ & - & 50 GB/s & -\\
-			Tflops & 10.6 & 14 &\\
+			GPU Tflops & 9,3 & 16.5 &\\
 			\# CUDA Cores & 3584 & 5120 & \\
 		\end{tabular}}	
 	\end{center}
@@ -1256,9 +1259,9 @@ In order to estimate the runtime of the algorithms we denote the number of parti
 
 \subsection{Roofline Performance Model}
 
-We test the our hypothesis, that ORB is, for the most part, memory bandwidth bound using the roofline model. In the roofline model, we compare the operational density, which is measured in FLOPS / per byte against the number number of flops per minute. 
+We test the our hypothesis, that ORB is, for the most part, memory bandwidth bound using the roofline model. In the roofline model, we compare the operational density, which is measured in FLOPS / per byte against the number of flops per minute. 
 
-For modern hardware, its fairly uncommon to release a peak flops value. Since 2008 Intel has introduced AVX (Advanced Vector Extensions), gflops benchmarks largely depend upon the compiled assembly instructions, the specific instructions vary a lot between small c++ implementation details and can only be used on contiguous memory access. Therefore we estime the glfops with our application specific context in mind. 
+For modern hardware, its fairly uncommon to release a peak flops value. Since 2008 Intel has introduced AVX (Advanced Vector Extensions), benchmarks performance largely depend upon the compiled assembly instructions, where the specific instructions vary a lot between implementation details. SIMD instructions can only be used when there is a contiguous memory access. Thus the peformance of the code depends on chosen memory layout as well as iteration method. Due to the lack of peak flop estimations, we build our own model to estimate the flops of the major parts of ORB. 
 
 AVX enables the processing of several floating point precision (32 bit) numbers simultaneously. AVX2, which is present in most modern hardware, enable the processing of 8 floating point instructions and its instructions have a CPI (cycles per instructions) of two on most chip architectures.
 
@@ -1273,9 +1276,13 @@ We define in equation \ref{eq:avx}, a function to estimate the number of gigaflo
 
 In terms of arithmetic intensity, we take a look at the code for the conditional reduction of the binary cut algorithm. We ignore other parts of the code for now, as optimizing this part is one of the main targets for the thesis. The part where we count the number of particles which are to the left of a cut position, essentially comes down to this loop:
 
-\begin{lstlisting}[language=c++]
-	for(auto p= startPtr; p<endPtr; ++p) nLeft += *p < cut;
-\end{lstlisting}
+\begin{figure}
+	\begin{lstlisting}[language=c++]
+		for(auto p= startPtr; p<endPtr; ++p) nLeft += *p < cut;
+	\end{lstlisting}
+\caption{Counting the particles left of a cut plane}
+\end{figure}
+
 
 Where $p$ is a C-style array which stores the particles position and $nLeft$ gives the number of particles which are left of the $cut$. In terms of arithmetic intensity, we have the following operations:
 
@@ -1288,6 +1295,57 @@ Where $p$ is a C-style array which stores the particles position and $nLeft$ giv
 
 Which results in a total of 4 operations. Since a single float is stored using 4 bytes, we receive 1.0 operations per byte. Note that AVX or any SIMD instructions do not influence the arithmetic intensity, as the number of floating point operations per byte remains the same. We simply perform a set of operations concurrently. What is however influenced by AVX, is the maximum number of GFLOPS which can be processed by the hardware. If we were to ignore AVX, the algorithm would clearly not be bound by memory, as its performance would lack behind the memory bandwidth. For this reason it is so important to consider AVX.
 
+Since we have peak flops benchmarks available for all the NVIDIA P100 and V100s we do not need to make any estimations about the GPU flops. Estimating the arithmetic intensity for the GPU is a lot more complicated as it depends a lot on the specific implementation details. For now we will just assume the same arithmetic intensity as we have had for the CPU.
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+				\begin{axis}[
+					xmode=log,
+					ymode=log,
+					log basis x={2},
+					log basis y={2},
+					xlabel={FLOPS / byte},
+					ylabel={GFLOPS},
+					%x filter/.code=\pgfmathparse{#1 + 6.90775527898214},
+					xmin = 0.125, xmax = 64, ymin= 8, ymax=1024,
+					legend style={at={(1.05,0.6)},anchor=west}]
+			
+					\addplot+[name path = A, domain = 0.125:64, mark=none] {
+						3.8 * 8 * 2 * 2
+					};	
+					
+					\addlegendentryexpanded{3.8 GHZ \& np=2};
+					
+					\addplot+[name path = A, domain = 0.125:64, mark=none] {
+						3.8 * 8 * 2 * 4
+					};	
+					
+					\addlegendentryexpanded{3.8 GHZ \& np=4};
+					
+					\addplot+[name path = A, domain = 0.125:64, mark=none] {
+						3.8 * 8 * 2 * 8
+					};	
+					
+					\addlegendentryexpanded{3.8 GHZ \& np=8};
+					
+					\addplot+[name path = A, domain = 0.125:64, mark=none] {
+						68 * \x
+					};	
+					
+					\addlegendentryexpanded{68 GB/s};
+					
+		
+					\draw[dashed] (axis cs:1,8) -- node[left]{Count Left} (axis cs:1,1024);
+					
+				\end{axis}
+			\end{tikzpicture}
+	\caption{Roofline Model for Piz Daint CPU}
+	\label{fig:roofdaint}
+	\end{center}
+\end{figure}
+
+
 \begin{figure}[H]
 	\begin{center}
 		\begin{tikzpicture}
@@ -1296,47 +1354,35 @@ Which results in a total of 4 operations. Since a single float is stored using 4
 				ymode=log,
 				log basis x={2},
 				log basis y={2},
-				height=8cm,width=10cm, 
 				xlabel={FLOPS / byte},
 				ylabel={GFLOPS},
 				%x filter/.code=\pgfmathparse{#1 + 6.90775527898214},
-				xmin = 0.125, xmax = 64, ymin= 8, ymax=1024,
+				xmin = 0.125, xmax = 64, ymin= 8, ymax=16384,
 				legend style={at={(1.05,0.6)},anchor=west}]
-		
-				\addplot+[name path = A, domain = 0.125:64, mark=none] {
-					3.8 * 8 * 2 * 2
-				};	
-				
-				\addlegendentryexpanded{3.8 GHZ \& np=2};
 				
 				\addplot+[name path = A, domain = 0.125:64, mark=none] {
-					3.8 * 8 * 2 * 4
+					9300
 				};	
 				
-				\addlegendentryexpanded{3.8 GHZ \& np=4};
+				\addlegendentryexpanded{9.3 Tflops};
 				
 				\addplot+[name path = A, domain = 0.125:64, mark=none] {
-					3.8 * 8 * 2 * 8
+					732 * \x
 				};	
 				
-				\addlegendentryexpanded{3.8 GHZ \& np=8};
+				\addlegendentryexpanded{732 GB/s};
 				
-				\addplot+[name path = A, domain = 0.125:64, mark=none] {
-					68 * \x
-				};	
 				
-				\addlegendentryexpanded{68 GB/s};
-				
-	
-				\draw[dashed] (axis cs:1,8) -- node[left]{Count Left} (axis cs:1,1024);
+				\draw[dashed] (axis cs:1,8) -- node[left]{Count Left} (axis cs:1,16384);
 				
 			\end{axis}
 		\end{tikzpicture}
+		\caption{Roofline Model for Piz Daint GPU}
+		\label{fig:roofdaintGPU}
 	\end{center}
-	\caption{Roofline Model for Piz Daint}
-	\label{fig:roofdaint}
 \end{figure}
 
+As it can be seen in figure \ref{fig:roofdaint} and \ref{fig:roofdaintGPU} both the GPU and CPU version running on Piz Daint are memory bound, but due to its much higher memory bandwidth limit, a GPU version should be favored. 
 
 \begin{figure}[H]
 	\begin{center}
@@ -1391,7 +1437,47 @@ Which results in a total of 4 operations. Since a single float is stored using 4
 	\label{fig:roofsummit}
 \end{figure}
 
+
 \begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+			\begin{axis}[
+				xmode=log,
+				ymode=log,
+				log basis x={2},
+				log basis y={2},
+				xlabel={FLOPS / byte},
+				ylabel={GFLOPS},
+				%x filter/.code=\pgfmathparse{#1 + 6.90775527898214},
+				xmin = 0.125, xmax = 64, ymin= 8, ymax=32768,
+				legend style={at={(1.05,0.6)},anchor=west}]
+				
+				\addplot+[name path = A, domain = 0.125:64, mark=none] {
+					16500
+				};	
+				
+				\addlegendentryexpanded{16.5 Tflops};
+				
+				\addplot+[name path = A, domain = 0.125:64, mark=none] {
+					900 * \x
+				};	
+				
+				\addlegendentryexpanded{900 GB/s};
+				
+				
+				\draw[dashed] (axis cs:1,8) -- node[left]{Count Left} (axis cs:1,32768);
+				
+			\end{axis}
+		\end{tikzpicture}
+		\caption{Roofline Model for Summit GPU}
+		\label{fig:roofsummitGPU}
+	\end{center}
+\end{figure}
+
+As visible in figure \ref{fig:roofsummit} and \ref{fig:roofsummitPGU} the same applies to Summit. Its notable how the memory bandwidth only becomes the limiting factor when assuming a parallelization with 4 processors.
+
+\begin{figure}
+	[H]
 	\begin{center}
 		\begin{tikzpicture}
 			\begin{axis}[
@@ -1441,13 +1527,8 @@ Which results in a total of 4 operations. Since a single float is stored using 4
 	\label{fig:roofalps}
 \end{figure}
 
-As we can see in figure \ref{fig:roofdaint}, \ref{fig:roofsummit} and \ref{fig:roofalps} all three computer are memory bound, at least starting from a certain level of parallelization.
-
-We consider a minimal C++ to make measurements which can prove the theoretical model. We use the -S flag along with the g++ compiler to generate assembly code from the c++ source code and make sure that AVX commands are enabled. In this case startPtr is a pointer which indicated the first address where we want to start out iteration process. Consequently endPtr is the memory of the last entry we want to access. For testing purposes all entries in the array are set to random values between 0 and 1, and cut is set to 0.5. 
-
-\begin{lstlisting}
-for(auto p= startPtr; p<endPtr; ++p) nLeft += *p < cut;
-\end{lstlisting}
+Finally alps, which has the highest memory bandwidth compared to its flops, also becomes limited by the bandwidth after using more than four processors.
+We consider a minimal C++ code to make measurements which can prove the theoretical model. We use the -S flag along with the g++ compiler to generate assembly code from the c++ source code and make sure that AVX commands are enabled. For testing purposes all entries in the array are set to random values between 0 and 1, and cut is set to 0.5.
 
 In a first test, we do not enable AVX, but turn on $O3$. The generated assembly code looks as follows:
 
@@ -1491,10 +1572,13 @@ processor. We perform the conditional reduction on  $2^{27}$ particles. The redu
 
 But regardless if the app is actually memory bound or not, fact is that the GPU outperforms the CPU by a factor of 10-20 $\times$, thus even if it were bound by the chip architecture, there is still an improvement to be expected when porting the code to the GPU. 
 
-In the section we will assume our algorithm is fully memory bound, meaning that speed ups from a GPU implementation will mainly come from higher memory bandwidths.
+\subsection{Models for different approaches}
 
+When building the models, we assume that ORB is memory bound. Meaning that the limiting factor is not the flops of the chip, but rather the memory bandwidth. We will construct and explore models for three different approaches. In the first naive implementation, we simply send an array of particles to the GPU, where the counting is then performed.
+ 
 \subsubsection{Naive implementation}
 
+ 
 \begin{center}
 	\begin{equation}
 			log(d) \times \left ( p \times \frac{ s }{B_{C}} \right ) = t
