@@ -23,12 +23,10 @@ extern __global__ void reduce(
         float * g_idata,
         unsigned int * g_begins,
         unsigned int * g_ends,
+        float * cuts,
         unsigned int * a_index,
-        unsigned int nCells,
-        unsigned int * g_odata,
-        float cut,
-        int n,
-        int startCellId) {
+        unsigned int * g_odata) {
+
     extern __shared__ int sdata[];
     __shared__ unsigned int index;
 
@@ -88,93 +86,35 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     //int bytes = nCounts * sizeof (uint);
     // https://developer.nvidia.com/blog/how-overlap-data-transfers-cuda-cc/
     unsigned int blockOffset = 0;
-    std::array<unsigned int, MAX_CELLS> offsets;
+    std::vector<float> cuts;
+    std::vector<float> begins;
+    std::vector<float> ends;
     offsets[0] = 0;
 
     // Make sure memcopy is done for this thread
     // Could also improved but seems complicated
 
+    int nBlocks = 0;
+
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
         auto cell = static_cast<Cell>(*(in + cellPtrOffset));
-
-        if (cell.foundCut) {
-            offsets[cellPtrOffset+1] = blockOffset;
-            continue;
-        }
-
-        out[cellPtrOffset] = 0;
         int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
         int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
         int n = endInd - beginInd;
-        float cut = cell.getCut();
 
-        if (n > 1){ //N_THREADS * ELEMENTS_PER_THREAD) {
-            const int nBlocks = (int) floor((float) n / (N_THREADS * ELEMENTS_PER_THREAD));
-            const bool leq = true;
+        const int nBlocksPerCell = (int) ceil((float) n / (N_THREADS * ELEMENTS_PER_THREAD));
+        nBlocks += nBlocksPerCell;
 
-            // Kernel launches are serialzed within stream !
-            // increase number of streams per thread
-            if (cell.cutAxis == 0) {
-                reduce<N_THREADS>
-                <<<
-                    nBlocks,
-                    N_THREADS,
-                    N_THREADS * sizeof (uint),
-                    lcl->streams(0)
-                >>> (
-                    lcl->d_particlesX + beginInd,
-                    lcl->d_results + blockOffset,
-                    cut,
-                    n
-                );
-            }
-            else if (cell.cutAxis == 1) {
-                reduce<N_THREADS>
-                <<<
-                    nBlocks,
-                    N_THREADS,
-                    N_THREADS * sizeof (uint),
-                    lcl->streams(0)
-                >>> (
-                    lcl->d_particlesY + beginInd,
-                    lcl->d_results + blockOffset,
-                    cut,
-                    n
-                );
-            }
-            else if (cell.cutAxis == 2) {
-                reduce<N_THREADS>
-                <<<
-                    nBlocks,
-                    N_THREADS,
-                    N_THREADS * sizeof (uint),
-                    lcl->streams(0)
-                >>> (
-                    lcl->d_particlesZ + beginInd,
-                    lcl->d_results + blockOffset,
-                    cut,
-                    n
-                );
-            }
-
-            blockOffset += nBlocks;
+        int begin = beginInd;
+        for (int i = 0; i < nBlocksPerCell; ++i) {
+            cuts.push_back(cell.getCut());
+            begins.push_back(begin);
+            begin += N_THREADS * ELEMENTS_PER_THREAD;
+            ends.push_back(min(begin, endInd));
         }
-        else {
-            blitz::Array<float,1> particles =
-                    pst->lcl->particlesT(blitz::Range(beginInd, endInd), 0);
-
-            float * startPtr = particles.data();
-            float * endPtr = startPtr + (endInd - beginInd);
-
-            for(auto p= startPtr; p<endPtr; ++p)
-            {
-                out[cellPtrOffset] += *p < cut;
-            }
-            lcl->h_countsLeft(cellPtrOffset) = out[cellPtrOffset];
-        }
-
-        offsets[cellPtrOffset+1] = blockOffset;
     }
+
+    // Execute the kernel
 
     CUDA_CHECK(cudaMemcpyAsync,(
             lcl->h_results,
@@ -183,22 +123,7 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
             cudaMemcpyDeviceToHost,
             lcl->streams(0)));
 
-    CUDA_CHECK(cudaStreamSynchronize,(lcl->streams(0)));
-
-    for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
-
-        auto cell = static_cast<Cell>(*(in + cellPtrOffset));
-        if (cell.foundCut) {continue;}
-
-        int begin = offsets[cellPtrOffset];
-        int end = offsets[cellPtrOffset + 1];
-
-        for (int i = begin; i < end; ++i) {
-            out[cellPtrOffset] += lcl->h_results[i];
-        }
-
-        lcl->h_countsLeft(cellPtrOffset) = out[cellPtrOffset];
-    }
+   
 
     return nCells * sizeof(output);
 }
