@@ -21,29 +21,30 @@ extern __device__ void warpReduce(volatile int *sdata, unsigned int tid) {
 template <unsigned int blockSize>
 extern __global__ void reduce(
         float * g_idata,
-        unsigned int * g_cellEnds,
-        unsigned int * g_cellBegins,
+        unsigned int * g_begins,
+        unsigned int * g_ends,
+        unsigned int * a_index,
         unsigned int nCells,
         unsigned int * g_odata,
         float cut,
-        int n) {
+        int n,
+        int startCellId) {
     extern __shared__ int sdata[];
-    __shared__ unsigned int cellID;
+    __shared__ unsigned int index;
 
     unsigned int tid = threadIdx.x;
-    unsigned int i = blockIdx.x*(blockSize) + threadIdx.x;
+
+    if (tid == 0) {
+        index = atomicAdd(a_index, 1);
+    }
+
+    int start = g_begins[index];
+    int end = g_ends[index];
+    int n = end - start;
+
+    unsigned int i = start + threadIdx.x;
     unsigned int gridSize = blockSize*gridDim.x;
     sdata[tid] = 0;
-
-    // Find cell id
-    if (tid < nCells) {
-        unsigned int cellBegin = g_cellBegins[tid];
-        unsigned int cellEnd = g_cellEnds[tid];
-
-        if (i >= cellBegin && i < cellEnd) {
-            cellID = tid;
-        }
-    }
 
     while (i < n) {
         sdata[tid] += (g_idata[i] <= cut);

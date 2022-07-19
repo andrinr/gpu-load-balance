@@ -1574,10 +1574,11 @@ But regardless if the app is actually memory bound or not, fact is that the GPU 
 
 \subsection{Models for different approaches}
 
-When building the models, we assume that ORB is memory bound. Meaning that the limiting factor is not the flops of the chip, but rather the memory bandwidth. We will construct and explore models for three different approaches. In the first naive implementation, we simply send an array of particles to the GPU, where the counting is then performed.
+When building the models, we assume that ORB is memory bound. Meaning that the limiting factor is not the flops of the chip, but rather the memory bandwidth. We will construct and explore models for three different approaches. In the first naive implementation, we simply send an array of particles to the GPU, where the counting is then performed. In a more advanced variant, we consider sending the particles from the CPU to GPU only once and perform the partitioning on the GPU as well.  
  
-\subsubsection{Naive implementation}
+\subsubsection{GPU Counting}
 
+Each time we split all leaf cells into two child cells, we end up with twice the amount of cells. Considering we want to end up with $d$ leaf cells in the end, we need to perform the cut algorithm $log(d)$ times, which corresponds to the height of the tree. Each time we perform the cut algorithm, we test a maximum of $p$ different cut guesses. As we traverse the tree the number of cells increases, but at the same time the number of particles which need to counted decrease by the same factor. Thus the amount of cells which are to be iterated cancels out and we end up with the size of all particles $s$ divide by the memory bandwidth $B_C$.  
  
 \begin{center}
 	\begin{equation}
@@ -1601,9 +1602,9 @@ The Equation \ref{eq:gpu} for the GPU is similar, the only difference being that
 \vspace{5mm}
 
 
-\subsubsection{GPU tree building}\label{gpu-tree-building}
+\subsubsection{GPU Counting and Partitioning}\label{gpu-tree-building}
 
-Let us now consider an alternative way of computing binary cuts. We will build part of the tree on the GPU itself. This will allow us to reduce the very costly overheads imposed by transferring data from the CPU to the GPU. The maximum number of cuts we can perform is $p \times 3$. After p cuts we have $2^{p \times 3}$ leaf cells, and have reached the precision. Note that in this case we also need to send back the information about the built tree from the GPU to the CPU. 
+We can also consider performing the partitioning on the GPU, this means that there is no need to send data from the CPU to GPU each time we want to find a cut, allowing us to reduce the costly overheads. This means that we are able to move the considering the CPU GPU bandwidths and the initial loading data out of the bracket and reducing the runtime.
 
 \begin{center}
 	\begin{equation}
@@ -1613,6 +1614,7 @@ Let us now consider an alternative way of computing binary cuts. We will build p
 \end{center}
 
 
+\begin{comment}
 \subsubsection{Batch loading}
 
 Finally we can also try to mitigate the overheads introduced by CPU to GPU communication by sending small batches, such that the GPU can already start processing the data, before the data transfer was completed. Lets denote the number of batches by $b$. For the sake of simplicity we only make a single cut and thus can reuse Equation \ref{eq:cpu} for the CPU version. For the GPU we now omit the term for memory access from the GPU. Because we can already start processing data in parallel when the first batch arrived and $B_{G} > I_{GC}$ holds for every modern hardware. Thus the only overhead we still get is $\frac{s \div b}{B_{G}}$ for the very last batch, but as we can just increase b in relation to N, this becomes negligible. Note that this only counts for the very first iteration, thus the only difference we have is the constant of 31 and not 32. 
@@ -1637,6 +1639,7 @@ Since for most computer the Interconnect bandwidth is greatly smaller than the M
 
 \TODO{Add plots?}
 
+\end{comment}
 \newcommand\s{12}
 
 \newcommand\p{32}
@@ -1655,7 +1658,7 @@ The naive implementation yields the following speeds for the naive CPU  implemen
 
 \begin{center}
 	\begin{equation}
-		log(\d) \times \left ( \p \times \frac{ \s GB }{68 GB/s} \right )  = \cpuPiz s
+		log(1024) \times \left ( \p \times \frac{ \s GB }{68 GB/s} \right )  = \cpuPiz s
 	\end{equation}
 \end{center}
 
@@ -1664,7 +1667,7 @@ And the corresponding GPU implementation:
 \pgfmathsetmacro\gpuPizN{ ln(1024) / ln(2) * (\p * \s / 732 + \s / 32 + \s / 68)}
 \begin{center}
 	\begin{equation}
-		log(\d) \times \left ( 32 \times \frac{12 GB}{732 GB/s} + \frac{12 GB}{32 GB/s}  + \frac{12 GB}{68 GB/s} \right )=  \gpuPizN s
+		log(1024) \times \left ( 32 \times \frac{12 GB}{732 GB/s} + \frac{12 GB}{32 GB/s}  + \frac{12 GB}{68 GB/s} \right )=  \gpuPizN s
 	\end{equation}
 \end{center}
 
@@ -1684,7 +1687,7 @@ And the corresponding GPU implementation:
 And the corresponding GPU implementation:
 \begin{center}
 	\begin{equation}
-		log(\d) \times \left ( \p \times \frac{\s GB}{732 GB/s} \right ) + \times \frac{\s GB}{32 GB/s}  + \frac{\s GB}{68 GB/s} = \gpuPizT s
+		log(1024) \times \left ( \p \times \frac{\s GB}{732 GB/s} \right ) + \times \frac{\s GB}{32 GB/s}  + \frac{\s GB}{68 GB/s} = \gpuPizT s
 	\end{equation}
 \end{center}
 
@@ -1742,7 +1745,7 @@ And the corresponding GPU implementation:
  
 \begin{center}
 	\begin{equation}
-		log(\d) \times \left ( \p \times \frac{\s GB}{900 GB/s \times 6} \right ) + \frac{\s GB}{50 GB/s \times 2}  + \frac{\s GB}{170 GB/s \times 2} = \gpuSummitT s
+		log(1024) \times \left ( \p \times \frac{\s GB}{900 GB/s \times 6} \right ) + \frac{\s GB}{50 GB/s \times 2}  + \frac{\s GB}{170 GB/s \times 2} = \gpuSummitT s
 	\end{equation}
 \end{center}
 
@@ -1764,7 +1767,7 @@ This yields in a speed-up of:
 
 \begin{center}
 	\begin{equation}
-		\log(\d) \times \p \times \frac{ \s GB }{204.8 GB/s \times 2} = \cpuEiger s
+		\log(1024) \times \p \times \frac{ \s GB }{204.8 GB/s \times 2} = \cpuEiger s
 	\end{equation}
 \end{center}
 
@@ -1838,8 +1841,6 @@ We conclude that the GPU version with GPU Tree building enabled yields the best 
 In this section we will describe the stand-alone implementation of the accelerated ORB algorithm. We will develop this somewhat separately from the PKDGrav codebase in order to have smaller and easily understandable codebase. We will however use mdl2 from PKDGrav, which is used to distribute the workload among the processors in the system. We aim to use this platform for extensive empirical testing of different strategies and evaluate weather our the proposed method indeed outperforms the CPU version. 
 
 We will not describe every part of the code in detail, as this would exceed the scope of the thesis. However any performance critical details and all the important data-structures are described. Furthermore, we will pay special attention to the CUDA kernels and also memory management strategies, as they are of great importance.
-
-This implementation uses a local reshuffling method, where particles do not change their owner in terms of threads or processors. This also means, that there exists a operator thread which coordinates the ORB algorithm and keeps track of all the cells.
 
 A brief overview of the core elements:
 
@@ -1950,14 +1951,14 @@ As required by mdl, we make use of services, which are essentially a collection 
 The services we have implemented and which are crucial for the CPU version are:
 
 \begin{itemize}
-	\item $initService$ : Reads the particles and allocates memory on the CPU accordingly.
-	\item $finallizeService$ : Frees all the memory and ensures a memory leak free execution.  
-	\item $countLeftService$ : Counts the number of particles left of a provided cut position for each of the cells.
-	\item $countService$ : Counts the total number particles inside the domain for each of the provided cells.
-	\item $localReshuffleService$ : Reshuffles the particles locally, such that their memory locality corresponds to a cell. 
+	\item $init$ : Reads the particles and allocates memory on the CPU accordingly.
+	\item $finallize$ : Frees all the memory and ensures a memory leak free execution.  
+	\item $countLeft$ : Counts the number of particles left of a provided cut position for each of the cells.
+	\item $count$ : Counts the total number particles inside the domain for each of the provided cells.
+	\item $partition$ : Partitions the particles to preserve memory locality.
 \end{itemize}
 
-\subsubsection{countLeftService}
+\subsubsection{Count Left}
 
 The countLeftService takes as a input an array of cells and stores the counts in an output array. Each cell comes with a cut position and a cut axis, thus the service counts the number of particles to the left of this position in the given axis. 
 
@@ -1994,7 +1995,7 @@ Finally we simple iterate over the particles and count up, as previously mention
 \end{lstlisting}
 
 
-\subsubsection{countService}
+\subsubsection{Count}
 
 Counting the total number of particles is very trivial, given the cellToRange map. 
 
@@ -2008,7 +2009,7 @@ for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset) {
 
 \end{lstlisting}
 
-\subsubsection{localReshuffleService}
+\subsubsection{Partition}
 The local reshuffle service is responsible for rearranging the particles in such a way, that each range in the particles array, corresponds to a single cell. 
 Its implementation is equivalent to a hoar partition. The implementation is straight forward and there exists no known way to improve this, at least from an algorithmic perspective. There might be some ways to explore in terms of memory access speed, or even porting the algorithm to CUDA. 
  
@@ -2119,11 +2120,11 @@ The key concepts of the reduction are:
 	
 	\item \textbf{Increase Thread Occupancy} There exists an optimum when considering the number of operation performed by a single thread. In order to adapt the number of ops dynamically, we iterate over a certain number of elements in the global memory, as seen in figure \ref{cuda:reduction} lines 10-13. The input parameter n defines the total number of particles. Therefore if we reduce the total number of blocks by a factor of $r$, the while loop will iterate over $r$ elements. In our case we set $r$ to 32. 
 	
-	\item \textbf{Meta Programming} The reduction is optimized by using a template, which indicates the total number of thread per block, which is equivalent to the blockSize. Since the template is evaluated at compile time, all the if statements taking blockSize as a parameter in figure \ref{cuda:reduction} and figure \ref{cuda:warp-device} do not cause any performance loss. In fact, because we are able to unroll loops, which would be evaluated at runtime, we increase the performance of the code. 
+	\item \textbf{Meta Programming} The reduction is optimized by using a template, which indicates the total number of thread per block, which is equivalent to the blockSize. Since the template is evaluated at compile time, all the if statements taking blockSize as a parameter in figure \ref{cuda:reduction} and figure \ref{cuda:reduction} do not cause any performance loss. In fact, because we are able to unroll loops, which would be evaluated at runtime, we increase the performance of the code. 
 
 	\item \textbf{Avoid Shared Memory Bank Conflicts} In order to decrease the bank conflicts in the shared memory we want to make sure that threads in the same warp do not try to access the same memory bank. Therefore we offset each memory access by the total grid size, which is equivalent to the total number of blocks multiplied by the number of threads per block, as it can be seen on line 12 in figure \ref{cuda:reduction}.
 	
-	\item \textbf{Avoiding Warp Divergence} Each time we we have an control statement in the code, we introduce a divergence. On the GPU these divergences become especially bad when they are introduced inside a warp. This means that any of the threads of the 32 threads in a warp, have to execute a different code than the rest. For this reason, the $warpReduce$ method as seen in figure \ref{cuda:warp-device} is introduced. We can see on line 32 in figure \ref{cuda:reduction} that this method is only executed when we reach 32 elements in the shared memory, which remain to be added together. Inside the warp reduce method, we again encounter an unrolled loop, but in this case we have no if statements that could generate a divergence. The if statements which are present, are as mentioned, evaluated at compile time only. Inside a warp we are also not dependent on synchronization, thus the thread synchronization call can be omitted as well. Note that this implementation will perform many unnecessary operations, but this does not affect the performance negatively.
+	\item \textbf{Avoiding Warp Divergence} Each time we we have an control statement in the code, we introduce a divergence. On the GPU these divergences become especially bad when they are introduced inside a warp. This means that any of the threads of the 32 threads in a warp, have to execute a different code than the rest. For this reason, the $warpReduce$ method as seen in figure \ref{cuda:reduction} is introduced. We can see on line 32 in figure \ref{cuda:reduction} that this method is only executed when we reach 32 elements in the shared memory, which remain to be added together. Inside the warp reduce method, we again encounter an unrolled loop, but in this case we have no if statements that could generate a divergence. The if statements which are present, are as mentioned, evaluated at compile time only. Inside a warp we are also not dependent on synchronization, thus the thread synchronization call can be omitted as well. Note that this implementation will perform many unnecessary operations, but this does not affect the performance negatively.
 	
 \end{itemize}
 
@@ -2155,7 +2156,65 @@ __syncthreads();
 
 In our version we do not add up two elements with each iteration of the loop. This ensures that no memory access is attempted on global memory which is out of bounds. In the original version, if one is not careful, segmentation faults can occur on the GPU. Furthermore there are no performance penalties as we can simply increase the elements per thread if we wish to increase thread occupancy.
 
+
 We execute the reduction kernel once for each cell, where we distribute the particles within the cell among a set of blocks. The number of blocks can be determined by the number of particles in this cell $n_{cell}$ divided by the number of threads per block which is set to 256 and finally we devide this further by the number of elements per thread $r$. This makes the implementation straight forward but as we increase the number of cells, we make make more calls to the reduction kernel. This is problematic because each initialization of a kernel comes with some overhead. Therefore we should come up with solution, where each kernel processes a large number of elements. As of now we have up to $d$ kernel invocation, which oftentimes reaches around 1024. There are some solutions to this problem:
+
+
+
+\begin{figure}
+	\begin{lstlisting}[language=c++]
+template <unsigned int blockSize>
+extern __global__ void reduce(
+	float*g_idata,
+	unsigned int*g_odata, 
+	float cut, int n) {
+	extern __shared__ int sdata[];
+	
+	unsigned int tid = threadIdx.x;
+	unsigned int i = blockIdx.x*(blockSize) + threadIdx.x;
+	unsigned int gridSize = blockSize*gridDim.x;
+	sdata[tid] = 0;
+	
+	while (i < n) {
+		sdata[tid] += (g_idata[i] <= cut);
+		i += gridSize;
+	}
+	__syncthreads();
+	
+	if (blockSize >= 512) {
+		if (tid < 256) {sdata[tid] += sdata[tid + 256];}
+		__syncthreads();
+	}
+	if (blockSize >= 256) {
+		if (tid < 128) {sdata[tid] += sdata[tid + 128];}
+		 __syncthreads();
+	}
+	if (blockSize >= 128) {
+		if (tid < 64) {sdata[tid] += sdata[tid + 64];}
+		 __syncthreads();
+	}
+	if (tid < 32) {
+		warpReduce<blockSize>(sdata, tid);
+	}
+	if (tid == 0) {
+		g_odata[blockIdx.x] = sdata[0];
+	}
+}
+
+template <unsigned int blockSize>
+extern __device__ void warpReduce(
+volatile int *sdata, unsigned int tid) {
+	if (blockSize >= 64) sdata[tid] += sdata[tid + 32];
+	if (blockSize >= 32) sdata[tid] += sdata[tid + 16];
+	if (blockSize >= 16) sdata[tid] += sdata[tid + 8];
+	if (blockSize >= 8) sdata[tid] += sdata[tid + 4];
+	if (blockSize >= 4) sdata[tid] += sdata[tid + 2];
+	if (blockSize >= 2) sdata[tid] += sdata[tid + 1];
+}
+	\end{lstlisting}
+	\label{cuda:reduction}
+\end{figure}
+
 
 \begin{itemize}
 	\item \textbf{Single Kernel with Cell ID} We can build a reduction kernel where we take an additional array in global GPU memory as an input. The additional array has the same size as the particle position array, but it stores the cellID for each particle. Furthermore we increase the shared memory size to the product of the number of threads per block by the total number of cells which are currently being iterated over. This allows us perform the summation and store its results in the correct place in the shared memory. This version however, requires a very large shared memory, thus forcing us to reduce the number of threads per block. Furthermore we have to store another array for the cellID on the GPU. 
