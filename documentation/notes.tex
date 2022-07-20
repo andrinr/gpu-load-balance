@@ -1939,8 +1939,19 @@ As with all heap data-structures we have the following conditions:
 	\item The left child of cell at index $i$ can be accessed at the index $i\times2 + 1$. 
 \end{itemize}
 
+\begin{figure}[H]
+	\centering
+	\begin{forest}
+		[$cell_1$
+		[$cell_2$ [$cell_4$] [$cell_5$]][$cell_3$]  
+		]
+	\end{forest}
+	\caption{Tree with $d$ = 3}
+\end{figure}
+
 \vspace{0.5cm}
-Furthermore we can derive the following constraints given the number of leaf cells $d$:
+We can derive the following constraints given the number of leaf cells $d$. The constraints are helpful for many parts of the code.
+
 
 \begin{itemize}
 	\item We can compute the depth of the tree with: $\lceil log_2(d) \rceil$
@@ -1949,20 +1960,54 @@ Furthermore we can derive the following constraints given the number of leaf cel
 	\item The total number of cells are $2\times d - 1$.
 \end{itemize}
 
+If we apply the formulas to the example tree we can observe that the depth indeed corresponds to: $\lceil log_2(d) \rceil = 2$. The number of leaves on the second last level are  $2^{2} - 3 = 1$ and the number of leaves on the last level are $2 \times 3 - 2^{2} = 2$. Finally the total number of cells is $2\times 3 - 1 = 5$.
+
 \subsubsection{Class}
 The cell class consists of the following variables:
 
 \begin{itemize}
-	\item $id$: The id is a unique identification of the cell instance.
-	\item $nLeafCells$: this variable is equal to $d_{cell}$ and depicts the number of leaf cells which can be found when walking all possible child cells of this cell. 
+	\item $id$: The id is a unique identification of the cell instance and corresponds to the position in the heap data structure plus one. It useful to directly compute the indices of both child cells using the above shown formulas.
+	\item $nLeafCells$: this variable is equal to $d_{cell}$ and depicts the number of leaf cells which can be found when walking all possible child cells of this cell. This variable is important when building the tree as we need to keep track how often the cell has to be split. 
 	\item $lower$: The lower is 3D point coordinate which represents the lower boundary corner of the 3D volume $V_{cell}$ which is encompassed by this cells domain.
 	\item $upper$: The represents the upper boundary corner of the volume.	
 	\item $tmp$: The cell has room for additional data, which may be stored during executions of algorithms. 
 \end{itemize}
 
+The cell class has some helpful helper functions. \TODO{extend}
+
 \subsection{Operative}
 
-Describe operative code here. Mention why we use for loop instead of recursive version. Inlcude code? -> quiet long
+Since the recursive version as shown in \ref{proc:orb} is not very compiler friendly, meaning its hard to properly optimize it at compile time, we introduce another non recursive version.
+
+\TODO{Write here in pseudcode as C++ version to long}
+\begin{figure}
+	
+	\begin{algorithm}[H]
+		\caption{Unrolled ORB main routine}\label{euclid}
+		\begin{algorithmic}[1]
+			\Procedure{orb}{$\vec{lower}, \vec{upper}, d$}
+			\State $\vec{size} = \vec{upper} - \vec{lower}$
+			\State $i = maxIndex(\vec{size}_0, \vec{size}_1, \vec{size}_2)$ \Comment{Get index of max value}
+			\newline
+			\State $d^\prime_{i \times 2 } = \left \lceil\frac{d}{2} \right \rceil$
+			
+			\State $cut = cut(\vec{lower}_{i}, \vec{upper}_{i}, i, \frac{d^\prime}{d} )$
+			\State $mid = partition(split, axis)$
+			\newline
+			
+			\State $\vec{upper^\prime} = \vec{upper}$
+			\State $upperChild_{i} = cut$
+			\State $\vec{lower^\prime} = \vec{lower}$
+			\State $lowerChild_{i} = cut$
+			\newline
+			
+			\State \Call{orb}{$\vec{lower}, \vec{upper^\prime}, d^\prime $}
+			\State \Call{orb}{$\vec{lower^\prime}, \vec{upper}, d - d^\prime $}
+			\EndProcedure
+		\end{algorithmic}
+	\end{algorithm}
+	\label{proc:orb2}
+\end{figure}
 
 \subsection{Services}
 
@@ -2031,7 +2076,7 @@ for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset) {
 
 \subsubsection{Partition}
 The local reshuffle service is responsible for rearranging the particles in such a way, that each range in the particles array, corresponds to a single cell. 
-Its implementation is equivalent to a hoar partition. The implementation is straight forward and there exists no known way to improve this, at least from an algorithmic perspective. There might be some ways to explore in terms of memory access speed, or even porting the algorithm to CUDA. 
+Its implementation is equivalent to a hoare partition. The implementation is straight forward and there exists no known way to improve this, at least from an algorithmic perspective. There might be some ways to explore in terms of memory access speed, or even porting the algorithm to CUDA. 
  
 On line 31 till 37 we also update the cellToRangeMap in order to reflect the changes we have made in the particles array.
 
