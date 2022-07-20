@@ -2142,6 +2142,44 @@ CUDA gives us the ability to launch kernels, which are written in C with some ad
 
 Each kernel is executed exactly once for every thread and has private local memory, only accessible by the thread. Furthermore each kernel is part of a block, where a all threads within a block can be synchronized. We are also able to launch a kernel across multiple blocks, in this case however, the blocks cannot be synchronized on the device level. The only way to make sure all blocks have finished a task before executing a consecutive task, is to wait from the host side for the completion of the kernel, meaning the completion of all blocks associated with this kernel. The number of blocks and the number of threads per block can be defined dynamically during runtime. Since the GPU is limited in its computing and also memory capabilities, the number of blocks which are run in parallel are limited, therefore CUDA does not give us any guarantee, weather a set of blocks are run serially or in parallel.  
 
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+			
+			\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = west,
+			fill = white,
+			align=center,
+			minimum width = 3cm, 
+			minimum height = 3cm] (cpu1) at (0cm,0cm) {Block1};
+			
+			\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = west,
+			fill = white,
+			align=center,
+			minimum width = 3cm, 
+			minimum height = 3cm] (cpu1) at (3.2cm,0cm) {Block2};
+			
+			\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = west,
+			fill = white,
+			align=center,
+			minimum width = 3cm, 
+			minimum height = 3cm] (cpu1) at (6.4cm,0cm) {Block3};
+			
+			
+			
+		\end{tikzpicture}
+	\end{center}
+\end{figure}
+
 Each block has access to shared memory register, where the capacity of this register can also be defined at runtime by the host, the maximum shared memory size depends on the hardware but usually we have 48kB per block available. There are also upper limits for the number of threads per block, usually around 512 to 1024. With a shared memory size of 48kb and 1024 threads we get $\frac{48000b}{1024} = 46b$ per thread. This is equivalent to one float per thread. However usually we do not max out the thread counts per block, leaving us with more shared memory space per thread.Data in the shared memory exists only as long as the kernel exists and it cannot be accessed across different blocks. Kernel code can perform fast read and write operations on the shared memory. 
 
 Additionally to the shared memory, there exists global memory. Global memory is persistent even after a block or a kernel has finished. This allows for memory to be copied from the host to device, and reused over a long time period and across different blocks. Global memory is however a lot slower than shared memory and it is generally advised to copy data from global memory to shared memory before performing actual computations. After the computations have finished, the results can be written back to global memory.
