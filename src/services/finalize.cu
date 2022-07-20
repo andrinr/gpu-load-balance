@@ -1,4 +1,4 @@
-#include "finalize.cuh"
+#include "finalize.h"
 #include <blitz/array.h>
 #include <vector>
 
@@ -12,7 +12,25 @@ int ServiceFinalize::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     auto lcl = pst->lcl;
     ServiceFinalize::input in = *static_cast<input *>(vin);
 
-    if (in.acceleration == COUNT_PARTITION) {
+    if (in.params.GPU_COUNT) {
+        cudaFreeHost(lcl->particlesT.data());
+
+        cudaFree(lcl->d_particlesT);
+        cudaFree(lcl->d_results);
+        cudaFreeHost(lcl->h_results);
+    }
+
+    if (in.params.GPU_COUNT_ATOMIC) {
+        cudaFreeHost(lcl->h_cuts);
+        cudaFreeHost(lcl->h_begins);
+        cudaFreeHost(lcl->h_ends);
+        cudaFree(lcl->d_cuts);
+        cudaFree(lcl->d_begins);
+        cudaFree(lcl->d_ends);
+        cudaFree(lcl->d_index);
+    }
+
+    if (in.params.GPU_PARTITION) {
         cudaFree(lcl->d_particlesX);
         cudaFree(lcl->d_particlesY);
         cudaFree(lcl->d_particlesZ);
@@ -20,13 +38,6 @@ int ServiceFinalize::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
         cudaFree(lcl->d_offsetG);
     }
 
-    if (in.acceleration == COUNT) {
-        cudaFreeHost(lcl->particlesT.data());
-    }
-
-    cudaFree(lcl->d_particlesT);
-    cudaFree(lcl->d_results);
-    cudaFreeHost(lcl->h_results);
 
     return sizeof(output);
 }

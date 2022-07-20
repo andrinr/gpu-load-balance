@@ -5,7 +5,7 @@
 class ServiceCopyToDevice : public TraverseCombinePST {
 public:
     struct input {
-        GPU_ACCELERATION acceleration;
+        META_PARAMS params;
     }; // Array of Cells
     typedef int output;   // Array of counts
     explicit ServiceCopyToDevice(PST pst)

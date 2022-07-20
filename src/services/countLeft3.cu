@@ -1,4 +1,4 @@
-#include "countLeft.cuh"
+#include "countLefGPU.h"
 #include <blitz/array.h>
 #include <array>
 #include "../utils/condReduce.cuh"
@@ -70,7 +70,7 @@ extern __global__ void reduce(
         warpReduce<blockSize>(sdata, tid);
     }
     if (tid == 0) {
-        g_odata[blockIdx.x] = sdata[0];
+        g_odata[index] = sdata[0];
     }
 }
 
@@ -83,19 +83,9 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     const int nCells = nIn / sizeof(input);
     assert(nOut / sizeof(output) >= nCells);
 
-    //int bytes = nCounts * sizeof (uint);
-    // https://developer.nvidia.com/blog/how-overlap-data-transfers-cuda-cc/
-    unsigned int blockOffset = 0;
-    std::vector<float> cuts;
-    std::vector<float> begins;
-    std::vector<float> ends;
-    offsets[0] = 0;
-
-    // Make sure memcopy is done for this thread
-    // Could also improved but seems complicated
+    std::vector<float> cellIDs;
 
     int nBlocks = 0;
-
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
         auto cell = static_cast<Cell>(*(in + cellPtrOffset));
         int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
@@ -107,14 +97,50 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
 
         int begin = beginInd;
         for (int i = 0; i < nBlocksPerCell; ++i) {
-            cuts.push_back(cell.getCut());
-            begins.push_back(begin);
+            lcl->h_cuts[i] = cell.getCut();
+            lcl->h_begins[i] = begin;
             begin += N_THREADS * ELEMENTS_PER_THREAD;
-            ends.push_back(min(begin, endInd));
+            lcl->h_ends = min(begin, endInd);
+            cellIDs.push_back(cell.id);
         }
     }
 
+    CUDA_CHECK(cudaMemcpyAsync,(
+            lcl->h_begins,
+            lcl->d_begins,
+            sizeof (unsigned int) * nBlocks,
+            cudaMemcpyDeviceToHost,
+            lcl->streams(0)));
+
+    CUDA_CHECK(cudaMemcpyAsync,(
+            lcl->h_ends,
+            lcl->d_ends,
+            sizeof (unsigned int) * nBlocks,
+            cudaMemcpyDeviceToHost,
+            lcl->streams(0)));
+
+    CUDA_CHECK(cudaMemcpyAsync,(
+            lcl->h_cuts,
+            lcl->d_cuts,
+            sizeof (float) * nBlocks,
+            cudaMemcpyDeviceToHost,
+            lcl->streams(0)));
+
+    CUDA_CHECK(cudaMemset, (lcl->d_index, 0, sizeof(unsigned int)));
+
     // Execute the kernel
+    reduce<N_THREADS><<<
+            N_THREADS,
+            nBlocks,
+            N_THREADS * 2 * sizeof (unsigned int)
+            >>>(
+                lcl->d_particlesT,
+                lcl->d_begins,
+                lcl->d_ends,
+                lcl->d_cuts,
+                lcl->d_index,
+                lcl->d_results
+                    );
 
     CUDA_CHECK(cudaMemcpyAsync,(
             lcl->h_results,
@@ -123,7 +149,10 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
             cudaMemcpyDeviceToHost,
             lcl->streams(0)));
 
-   
+
+    for (int i = 0; i < nBlocks; ++i) {
+        out[cellIDs[i]] += lcl->h_results[i];
+    }
 
     return nCells * sizeof(output);
 }

@@ -19,6 +19,13 @@ public:
     unsigned int * h_results;
     unsigned int * d_offsetLeq;
     unsigned int * d_offsetG;
+    unsigned int * d_begins;
+    unsigned int * h_begins;
+    unsigned int * d_ends;
+    unsigned int * h_ends;
+    float * d_cuts;
+    float * h_cuts;
+    unsigned int * d_index;
     int nThreads;
     int nBlocks;
 

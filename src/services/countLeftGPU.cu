@@ -1,4 +1,4 @@
-#include "countLeft.cuh"
+#include "countLefGPU.h"
 #include <blitz/array.h>
 #include <array>
 #include "../utils/condReduce.cuh"

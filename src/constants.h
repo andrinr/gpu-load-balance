@@ -12,10 +12,11 @@ static const int d = 1 << 10;
 static const int MAX_CELLS = d * 2;
 static const int N_STREAMS = 1;
 
-enum GPU_ACCELERATION {
-    NONE,
-    COUNT,
-    COUNT_PARTITION
+struct META_PARAMS {
+    bool GPU_COUNT;
+    bool GPU_COUNT_ATOMIC;
+    bool GPU_PARTITION;
+    bool FAST_MEDIAN;
 };
 
 inline void CUDA_Abort(cudaError_t rc, const char *fname, const char *file, int line) {

@@ -77,14 +77,33 @@ add_executable(
         src/services/count.cpp
         src/services/init.cu
         src/services/copyToDevice.cu
-        src/services/countLeft.cu
+        src/services/countLeftGPU.cu
         src/services/countLeftAxis.cu
         src/services/partition.cpp
-        src/services/partition.cu
+        src/services/partitionGPU.cu
         src/services/finalize.cu
         src/services/makeAxis.cpp
         src/constants.h
         src/data/tipsy.h)
+
+set(SOURCE_FILES
+        src/constants.h
+        src/IO.h
+        src/cell.h
+        src/services/copyToDevice.h
+        src/services/count.h
+        src/services/countLefGPU.h
+        src/services/countLeft.h
+        src/services/countLeftAxis.h
+        src/services/finalize.h
+        src/services/init.h
+        src/services/makeAxis.h
+        src/services/partition.h
+        src/services/partitionGPU.h
+        src/services/pst.h
+        src/services/setadd.h
+        src/services/TraversePST.h
+        )
 
 target_include_directories(orbit PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set_target_properties(orbit PROPERTIES

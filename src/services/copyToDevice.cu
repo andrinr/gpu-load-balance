@@ -1,4 +1,4 @@
-#include "copyToDevice.cuh"
+#include "copyToDevice.h"
 #include <blitz/array.h>
 #include <vector>
 #include "../constants.h"
@@ -16,7 +16,7 @@ int ServiceCopyToDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     // We only need the first nParticles, since axis 0 is axis where cuts need to be found
 
 
-    if (in.acceleration == COUNT) {
+    if (in.params.GPU_COUNT and not in.params.GPU_PARTITION) {
         cudaMemcpyAsync(
                 lcl->d_particlesT,
                 lcl->particlesT.data(),
@@ -26,7 +26,7 @@ int ServiceCopyToDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
         );
     }
 
-    if (in.acceleration == COUNT_PARTITION) {
+    if (in.params.GPU_PARTITION) {
         blitz::Array<float, 1> x = lcl->particles(blitz::Range::all(), 0);
         blitz::Array<float, 1> y = lcl->particles(blitz::Range::all(), 1);
         blitz::Array<float, 1> z = lcl->particles(blitz::Range::all(), 2);

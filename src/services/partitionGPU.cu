@@ -1,4 +1,4 @@
-#include "partition.cuh"
+#include "partitionGPU.h"
 #include "../cell.h"
 #include <blitz/array.h>
 #include "../utils/condReduce.cuh"
@@ -17,6 +17,7 @@ static_assert(std::is_void<ServicePartitionGPU::output>() || std::is_trivial<Ser
 #define CONFLICT_FREE_OFFSET(n) ((n) >> LOG_NUM_BANKS)
 #endif
 
+/*
 __device__ void scan2(volatile unsigned int * s_idata, unsigned int thid, unsigned int n) {
     unsigned int offset = 1;
     for (unsigned int d = n>>1; d > 0; d >>= 1) // build sum in place up the tree
@@ -144,8 +145,8 @@ __global__ void partition2(
         g_odata[indexB] = g_idata[j];
         g_permutations[j] = indexB;
     }
-}*/
-
+}
+*/
 __device__ void scan(volatile unsigned int * s_idata, unsigned int thid, unsigned int n) {
     unsigned int offset = 1;
     for (unsigned int d = n>>1; d > 0; d >>= 1) // build sum in place up the tree

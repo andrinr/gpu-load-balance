@@ -6,13 +6,13 @@
 #include "services/pst.h"
 #include "services/setadd.h"
 #include "services/countLeft.h"
-#include "services/countLeft.cuh"
-#include "services/countLeftAxis.cuh"
-#include "services/copyToDevice.cuh"
-#include "services/finalize.cuh"
-#include "services/partition.cuh"
+#include "services/countLefGPU.h"
+#include "services/countLeftAxis.h"
+#include "services/copyToDevice.h"
+#include "services/finalize.h"
+#include "services/partitionGPU.h"
 #include "services/partition.h"
-#include "services/init.cuh"
+#include "services/init.h"
 #include "services/makeAxis.h"
 
 #include "constants.h"
@@ -28,7 +28,12 @@ int master(MDL vmdl,void *vpst) {
     float lower[3] = {-0.5, -0.5, -0.5};
     float upper[3] = {0.5, 0.5, 0.5};
 
-    const GPU_ACCELERATION acceleration = COUNT;
+    META_PARAMS params{
+            true,
+            true,
+            false,
+            false
+    };
 
     // user code
     Cell root(0, d, lower, upper);
@@ -42,13 +47,13 @@ int master(MDL vmdl,void *vpst) {
 
     cellHeap(0) = root;
 
-    ServiceInit::input iInit {N/mdl->Threads(), acceleration};
+    ServiceInit::input iInit {N/mdl->Threads(), params};
     ServiceInit::output oInit[1];
     mdl->RunService(PST_INIT, sizeof (ServiceInit::input), &iInit, oInit);
 
     // Only copy once
-    if (acceleration == COUNT_PARTITION) {
-        ServiceCopyToDevice::input iCopy {acceleration};
+    if (params.GPU_PARTITION) {
+        ServiceCopyToDevice::input iCopy {params};
         ServiceCopyToDevice::output oCopy[1];
         mdl->RunService(PST_COPYTODEVICE, sizeof (ServiceCopyToDevice::input), &iCopy, oCopy);
     }
@@ -67,7 +72,7 @@ int master(MDL vmdl,void *vpst) {
         blitz::Array<Cell, 1> cells = cellHeap(blitz::Range(a, b));
         ServiceCount::input *iCells = cells.data();
 
-        if (acceleration == NONE || acceleration == COUNT) {
+        if (not params.GPU_PARTITION) {
             ServiceMakeAxis::output oSwaps[1];
             mdl->RunService(PST_MAKEAXIS, nCells * sizeof(ServicePartition::input), iCells, oSwaps);
         }
@@ -75,8 +80,8 @@ int master(MDL vmdl,void *vpst) {
         mdl->RunService(PST_COUNT, nCells * sizeof(ServiceCount::input), iCells, oCounts);
 
         // Copy with each iteration as partition is done on GPU
-        if (acceleration == COUNT) {
-            ServiceCopyToDevice::input iCopy {acceleration};
+        if (params.GPU_COUNT && not params.GPU_PARTITION) {
+            ServiceCopyToDevice::input iCopy {params};
             ServiceCopyToDevice::output oCopy[1];
             mdl->RunService(PST_COPYTODEVICE, sizeof (ServiceCopyToDevice::input), &iCopy, oCopy);
         }
@@ -90,14 +95,14 @@ int master(MDL vmdl,void *vpst) {
             int *sumLeft;
             foundAll = true;
 
-            if (acceleration == COUNT_PARTITION) {
+            if (not params.GPU_COUNT) {
                 mdl->RunService(
                         PST_COUNTLEFTGPU,
                         nCells * sizeof(ServiceCountLeft::input),
                         iCells,
                         oCountsLeft);
             }
-            else if (acceleration == COUNT) {
+            else if (not params.GPU_PARTITION) {
                 mdl->RunService(
                         PST_COUNTLEFTAXISGPU,
                         nCells * sizeof(ServiceCountLeft::input),
@@ -164,24 +169,29 @@ int master(MDL vmdl,void *vpst) {
             //cellRight.log();
         }
 
-        if (acceleration == COUNT_PARTITION) {
+        if (params.GPU_PARTITION) {
             ServicePartitionGPU::output oPartition[1];
-            mdl->RunService(PST_PARTITIONGPU, nCells * sizeof(ServicePartitionGPU::input), iCells, oPartition);
+            mdl->RunService(
+                    PST_PARTITIONGPU,
+                    nCells * sizeof(ServicePartitionGPU::input),
+                    iCells,
+                    oPartition);
         }
         else {
             ServicePartition::output oPartition[1];
-            mdl->RunService(PST_PARTITION, nCells * sizeof(ServicePartition::input), iCells, oPartition);
+            mdl->RunService(
+                    PST_PARTITION,
+                    nCells * sizeof(ServicePartition::input),
+                    iCells,
+                    oPartition);
         }
     }
 
-    if (acceleration == COUNT || acceleration == COUNT_PARTITION) {
-        ServiceFinalize::input iFree[1];
+    if (params.GPU_COUNT){
+        ServiceFinalize::input iFree {params};
         ServiceFinalize::output oFree[1];
-        mdl->RunService(PST_FINALIZE, sizeof (int), iFree, oFree);
+        mdl->RunService(PST_FINALIZE, sizeof (ServiceFinalize::input), &iFree, oFree);
     }
-
-    //free(oCountsLeft);
-    //free(oCounts);
 
     return 0;
 }

@@ -6,7 +6,7 @@ class ServiceInit : public TraverseCombinePST {
 public:
     struct input {
         int nParticles;
-        GPU_ACCELERATION acceleration;
+        META_PARAMS params;
     };
     typedef int output;
     explicit ServiceInit(PST pst)

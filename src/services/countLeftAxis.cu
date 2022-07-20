@@ -1,4 +1,4 @@
-#include "countLeftAxis.cuh"
+#include "countLeftAxis.h"
 #include <blitz/array.h>
 #include <array>
 #include "../utils/condReduce.cuh"
