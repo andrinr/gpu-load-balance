@@ -84,7 +84,8 @@ add_executable(
         src/services/finalize.cu
         src/services/makeAxis.cpp
         src/constants.h
-        src/data/tipsy.h)
+        src/data/tipsy.h
+        src/services/countLeftGPUAtomic.cu)
 
 set(SOURCE_FILES
         src/constants.h

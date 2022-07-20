@@ -7,6 +7,7 @@
 #include "services/setadd.h"
 #include "services/countLeft.h"
 #include "services/countLefGPU.h"
+#include "services/countLeftGPUAtomic.h"
 #include "services/countLeftAxis.h"
 #include "services/copyToDevice.h"
 #include "services/finalize.h"
@@ -95,16 +96,23 @@ int master(MDL vmdl,void *vpst) {
             int *sumLeft;
             foundAll = true;
 
-            if (not params.GPU_COUNT) {
+            if (params.GPU_PARTITION) {
                 mdl->RunService(
                         PST_COUNTLEFTGPU,
                         nCells * sizeof(ServiceCountLeft::input),
                         iCells,
                         oCountsLeft);
             }
-            else if (not params.GPU_PARTITION) {
+            else if (not params.GPU_PARTITION and params.GPU_COUNT and not params.GPU_COUNT_ATOMIC) {
                 mdl->RunService(
                         PST_COUNTLEFTAXISGPU,
+                        nCells * sizeof(ServiceCountLeft::input),
+                        iCells,
+                        oCountsLeft);
+            }
+            else if (not params.GPU_PARTITION and params.GPU_COUNT and params.GPU_COUNT_ATOMIC){
+                mdl->RunService(
+                        PST_COUNTLEFTGPUATOMIC,
                         nCells * sizeof(ServiceCountLeft::input),
                         iCells,
                         oCountsLeft);
@@ -209,6 +217,7 @@ void *worker_init(MDL vmdl) {
     mdl->AddService(std::make_unique<ServiceCount>(pst));
     mdl->AddService(std::make_unique<ServiceCopyToDevice>(pst));
     mdl->AddService(std::make_unique<ServiceCountLeftGPU>(pst));
+    mdl->AddService(std::make_unique<ServiceCountLeftGPUAtomic>(pst));
     mdl->AddService(std::make_unique<ServiceCountLeftAxisGPU>(pst));
     mdl->AddService(std::make_unique<ServicePartition>(pst));
     mdl->AddService(std::make_unique<ServicePartitionGPU>(pst));

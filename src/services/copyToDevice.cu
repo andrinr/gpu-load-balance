@@ -31,29 +31,29 @@ int ServiceCopyToDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
         blitz::Array<float, 1> y = lcl->particles(blitz::Range::all(), 1);
         blitz::Array<float, 1> z = lcl->particles(blitz::Range::all(), 2);
 
-        cudaMemcpyAsync(
+        CUDA_CHECK(cudaMemcpyAsync,(
                 lcl->d_particlesX,
                 x.data(),
                 sizeof (float) * nParticles,
                 cudaMemcpyHostToDevice,
                 pst->lcl->streams(0)
-        );
+        ));
 
-        cudaMemcpyAsync(
+        CUDA_CHECK(cudaMemcpyAsync,(
                 lcl->d_particlesY,
                 y.data(),
                 sizeof (float) * nParticles,
                 cudaMemcpyHostToDevice,
                 pst->lcl->streams(0)
-        );
+        ));
 
-        cudaMemcpyAsync(
+        CUDA_CHECK(cudaMemcpyAsync,(
                 lcl->d_particlesZ,
                 z.data(),
                 sizeof (float) * nParticles,
                 cudaMemcpyHostToDevice,
                 pst->lcl->streams(0)
-        );
+        ));
     }
 
     return sizeof(output);

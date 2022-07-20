@@ -89,7 +89,7 @@ Knowing this we can split the computational effort required in modern N-Body sim
 \begin{enumerate}
 	\item \textbf{Load Balancing:} In supercomputers we need to distribute the particles equally among computing nodes to make use of the full processing capacity. This needs to be done using ORB in order for us to be able to leverage FFM.
 	\item \textbf{Tree Building:} ORB is used again on each node individually to build the fast multipole expansion.
-	\item \textbf{Force calculation and Integration:} We can then leverage the tree on a local and global level combined with FFM to integrate the forces between the particles.
+	\item \textbf{Force Calculation and Integration:} We can then leverage the tree on a local and global level combined with FFM to integrate the forces between the particles.
 \end{enumerate}
 
 Note that after each time step, the particles have new positions and therefore the space partitioning tree needs to be recomputed as well.
@@ -616,8 +616,9 @@ Let not apply the algorithm to our running example:
 %Finding the median of a large particle array is an essential step for ORB. We will thus explore different algorithms alongside their advantages and disadvantages for our specific use case.
 %Note that there exists approximation algorithms for example the median of medians algorithms. But the correctness guarantee of the median lying between 30\% and 70\% is not good enough in our case. If we were to implement such an approximation algorithms we would run into similar issues as described in \ref{sec:balancing}. But in this case the unequal memory balancing do not have the advantage of equal workload balancing, which in turn will worsen the performance and the maximum number of workable particles. Thus we will only consider approximation algorithms, if their approximation to the ideal values are very exact and can be determined.
 
- The $cut$ algorithm takes an array of particles, an axis, a left and right boundary as well as a percentage $r$ of particles which should be on the left side to the determined cut. Its goal is to return a position, such that the particles on the left side of the cut are equal to the percentage input parameter multiplied by all particles. The problem is equivalent to a root finding procedure since we are searching for the count on the left side of a certain value to be a fixed value. Therefore we can treat \TODO{Expand} Since we are operating on binary numbers with a limited precision, the bisection method is guaranteed to terminate after a certain number of steps. 
- Other approximate algorithms can converge quicker than the bisection method, however they are not guaranteed to converge.
+ The $cut$ algorithm takes an array of particles, an axis, a left and right boundary as well as a percentage $r$ of particles which should be on the left side to the determined cut. Its goal is to return a position, such that the particles on the left side of the cut are equal to the percentage input parameter multiplied by all particles. We can define a function $f(c)$ where the function evaluates the number of elements smaller than the cut value c minus half the number of total particles. Reformulated in this way, the problem is equivalent to a root finding problem. Because when the function evaluates to zero, we have found a cut plane positions where exactly half the particles are located to left side. There exists a lot of different solver for the root finding problem, the most stable and easiest to implement is however the bisection method.
+ 
+ Since we are operating on binary numbers with a limited precision, the bisection method is guaranteed to terminate after a certain number of steps. Other approximate algorithms can converge quicker, meaning they find the root in less time steps, than the bisection method, however they are not guaranteed to converge.
 
 \subsubsection{Bisection Method}
 
@@ -653,6 +654,7 @@ The first step is to make an estimation for a cut. In our case we simply assume 
 			\EndProcedure
 		\end{algorithmic}
 	\end{algorithm}
+\caption{Bisection Method}
 \label{proc:cut}
 \end{figure}
 
@@ -672,11 +674,7 @@ Let us consider the following example particle distribution where $particle_1$ a
 \end{figure}
 
 If we want to split this domain, there would not exists a correct split, where $nLeft$ is equal to $\frac{N}{2}$. In fact this example can be made more extreme by adding more particles which are distributed along a the line.
-The $\alpha$ value defines by how many particles the final cut value can be off from the actual ideal median value. In this case we would assign $particle_0$ to the left child cell and the other particles to the right child cell. Since we can extend this example where our $\alpha$ value should be equal to $N$, we also replace the while with a for loop. Since we have already shown that the maximum number of iterations is equal to $p$, we can make use of this to avoid infinite loops. 
-
-Considering the runtime improvements, we will show that the introduction of the $\alpha$ value brings some improvements. \TODO{Elaborate}
-
-
+The $\alpha$ value defines by how many particles the final cut value can be off from the actual ideal median value. In this case we would assign $particle_0$ to the left child cell and the other particles to the right child cell. Since we have seen that there exists counter examples, where no optimal solution can be found, with a reasonably small $\alpha$ we add another break condition which is fulfilled after 32 iterations. If no solution has been found after that many iterations, it is clear that we cannot improve the cut anymore, because we have reached the precision limit.
 
 \subsubsection{Runtime Analysis}
 
@@ -720,13 +718,12 @@ When thinking about this in terms of the recursive algorithm, maintaining this d
 
 \TODO{Add explanation}
 \begin{algorithm}[H]
-	\caption{Partition algorithm}\label{euclid}
 	\begin{algorithmic}[1]
 		\Procedure{partition}{$x, N_j, cut, axis$}
 		\State $i = 0$
 		
 		\For{$k \in {0,..N_j - 1}$}
-		\If{$\vec{x}_{k, axis} < split$}
+		\If{$\vec{x}_{k, axis} < cut$}
 		\State $i = i + 1$
 		\State $x_{i}, x_{k} = x_{k}, x_{i}$
 		\EndIf
@@ -735,6 +732,7 @@ When thinking about this in terms of the recursive algorithm, maintaining this d
 		\State $ x_{i}, x_{N_j-1} = x_{N_j-1}, x_{i}$
 		\EndProcedure
 	\end{algorithmic}
+\caption{Partition Method}
 \end{algorithm}
 
 The partition algorithm has a clearly observable runtime of $O(N)$ since we iterate over all particles once. Since we need to touch each element at least once to partition the entire array there is no better algorithm than this.

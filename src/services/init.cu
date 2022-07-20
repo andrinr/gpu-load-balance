@@ -77,16 +77,18 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
         const int nBlocks = (int) ceil((float) in.nParticles / (N_THREADS * ELEMENTS_PER_THREAD)) + MAX_CELLS;
         CUDA_CHECK(cudaMalloc, (&lcl->d_results, sizeof (unsigned int) * nBlocks));
 
+        //printf("ServiceInit: GPU_COUNT: %d blocks\n", nBlocks);
         if (in.params.GPU_COUNT_ATOMIC) {
+            //printf("ServiceInit: GPU_COUNT_ATOMIC\n");
             CUDA_CHECK(cudaMalloc, (&lcl->d_begins, sizeof (unsigned int) * nBlocks));
             CUDA_CHECK(cudaMalloc, (&lcl->d_ends, sizeof (unsigned int) * nBlocks));
-            CUDA_CHECK(cudaMalloc, (&lcl->d_cuts, sizeof (unsigned int) * nBlocks));
+            CUDA_CHECK(cudaMalloc, (&lcl->d_cuts, sizeof (float) * nBlocks));
 
             lcl->h_begins = (unsigned int*)malloc(nBlocks * sizeof(unsigned int));
             CUDA_CHECK(cudaMallocHost, ((void**)&lcl->h_begins, nBlocks * sizeof (unsigned int)));
             lcl->h_ends = (unsigned int*)malloc(nBlocks * sizeof(unsigned int));
             CUDA_CHECK(cudaMallocHost, ((void**)&lcl->h_ends, nBlocks * sizeof (unsigned int)));
-            lcl->d_cuts = (float*)malloc(nBlocks * sizeof(float));
+            lcl->h_cuts = (float*)malloc(nBlocks * sizeof(float));
             CUDA_CHECK(cudaMallocHost, ((void**)&lcl->h_cuts, nBlocks * sizeof (float)));
 
             CUDA_CHECK(cudaMalloc,(&lcl->d_index, sizeof (unsigned int)));

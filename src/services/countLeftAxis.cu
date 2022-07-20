@@ -106,7 +106,7 @@ int ServiceCountLeftAxisGPU::Service(PST pst,void *vin,int nIn,void *vout, int n
             <<<
                 nBlocks,
                 N_THREADS,
-                N_THREADS * sizeof (uint),
+                N_THREADS * sizeof (unsigned int),
                 lcl->streams(0)
             >>> (
                 lcl->d_particlesT + beginInd,
