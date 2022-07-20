@@ -80,7 +80,7 @@ int master(MDL vmdl,void *vpst) {
 
         mdl->RunService(PST_COUNT, nCells * sizeof(ServiceCount::input), iCells, oCounts);
 
-        // Copy with each iteration as partition is done on GPU
+        // Copy with each iteration as partition is done on CPU
         if (params.GPU_COUNT && not params.GPU_PARTITION) {
             ServiceCopyToDevice::input iCopy {params};
             ServiceCopyToDevice::output oCopy[1];

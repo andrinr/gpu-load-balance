@@ -9,13 +9,13 @@ static_assert(std::is_void<ServiceCountLeftGPUAtomic::input>()  || std::is_trivi
 static_assert(std::is_void<ServiceCountLeftGPUAtomic::output>() || std::is_trivial<ServiceCountLeftGPUAtomic::output>());
 
 template <unsigned int blockSize>
-extern __device__ void warpReduce(volatile unsigned int *sdata, unsigned int tid) {
-    if (blockSize >= 64) sdata[tid] += sdata[tid + 32];
-    if (blockSize >= 32) sdata[tid] += sdata[tid + 16];
-    if (blockSize >= 16) sdata[tid] += sdata[tid + 8];
-    if (blockSize >= 8) sdata[tid] += sdata[tid + 4];
-    if (blockSize >= 4) sdata[tid] += sdata[tid + 2];
-    if (blockSize >= 2) sdata[tid] += sdata[tid + 1];
+extern __device__ void warpReduce(volatile unsigned int *s_data, unsigned int tid) {
+    if (blockSize >= 64) s_data[tid] += s_data[tid + 32];
+    if (blockSize >= 32) s_data[tid] += s_data[tid + 16];
+    if (blockSize >= 16) s_data[tid] += s_data[tid + 8];
+    if (blockSize >= 8) s_data[tid] += s_data[tid + 4];
+    if (blockSize >= 4) s_data[tid] += s_data[tid + 2];
+    if (blockSize >= 2) s_data[tid] += s_data[tid + 1];
 }
 
 template <unsigned int blockSize>
@@ -27,7 +27,7 @@ extern __global__ void reduce(
         unsigned int * a_index,
         unsigned int * g_odata) {
 
-    extern __shared__ unsigned int sdata[];
+    __shared__ unsigned int s_data[blockSize];
     __shared__ unsigned int s_index;
 
     unsigned int tid = threadIdx.x;
@@ -37,42 +37,41 @@ extern __global__ void reduce(
     }
     __syncthreads();
 
-    unsigned int start = g_begins[s_index];
-    unsigned int end = g_ends[s_index];
-    unsigned int n = end - start;
-    float cut = g_cuts[s_index];
+    const unsigned int begin = g_begins[s_index];
+    const unsigned int end = g_ends[s_index];
+    const float cut = g_cuts[s_index];
 
-    unsigned int i = start + threadIdx.x;
-    unsigned int gridSize = blockSize*gridDim.x;
-    sdata[tid] = 0;
+    unsigned int i = begin + tid;
+    //const unsigned int gridSize = blockSize*gridDim.x;
+    s_data[tid] = 0;
 
-    while (i < n) {
-        sdata[tid] += (g_idata[i] <= cut);
-        i += gridSize;
+    while (i < end) {
+        s_data[tid] += (g_idata[i] <= cut);
+        i += blockSize;
     }
     __syncthreads();
 
     if (blockSize >= 512) {
         if (tid < 256) {
-            sdata[tid] += sdata[tid + 256];
+            s_data[tid] += s_data[tid + 256];
         }
         __syncthreads();
     }
     if (blockSize >= 256) {
         if (tid < 128) {
-            sdata[tid] += sdata[tid + 128];
+            s_data[tid] += s_data[tid + 128];
         } __syncthreads();
     }
     if (blockSize >= 128) {
         if (tid < 64) {
-            sdata[tid] += sdata[tid + 64];
+            s_data[tid] += s_data[tid + 64];
         } __syncthreads();
     }
     if (tid < 32) {
-        warpReduce<blockSize>(sdata, tid);
+        warpReduce<blockSize>(s_data, tid);
     }
     if (tid == 0) {
-        g_odata[s_index] = sdata[0];
+        g_odata[s_index] = s_data[0];
     }
 }
 
@@ -103,7 +102,6 @@ int ServiceCountLeftGPUAtomic::Service(PST pst,void *vin,int nIn,void *vout, int
             lcl->h_begins[blockPtr] = begin;
             begin += N_THREADS * ELEMENTS_PER_THREAD;
             lcl->h_ends[blockPtr] = min(begin, endInd);
-            printf("%i %i %f\n", begin, blockPtr, cell.getCut());
             cellIndices.push_back(cellPtrOffset);
             blockPtr++;
         }
@@ -152,6 +150,7 @@ int ServiceCountLeftGPUAtomic::Service(PST pst,void *vin,int nIn,void *vout, int
                 lcl->d_results
             );
 
+    //
     CUDA_CHECK(cudaMemcpyAsync,(
             lcl->h_results,
             lcl->d_results,
@@ -159,9 +158,9 @@ int ServiceCountLeftGPUAtomic::Service(PST pst,void *vin,int nIn,void *vout, int
             cudaMemcpyDeviceToHost,
             lcl->streams(0)));
 
+    CUDA_CHECK(cudaStreamSynchronize,(lcl->streams(0)));
+
     for (int i = 0; i < nBlocks; ++i) {
-        printf("index %i\n", cellIndices[i]);
-        printf("res %i\n", lcl->h_results[i]);
         out[cellIndices[i]] += lcl->h_results[i];
     }
 
