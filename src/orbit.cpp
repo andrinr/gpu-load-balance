@@ -62,6 +62,7 @@ int master(MDL vmdl,void *vpst) {
     unsigned int oCounts[MAX_CELLS];
     unsigned int oCountsLeft[MAX_CELLS];
 
+
     for (int l = 1; l < root.getNLevels(); ++l) {
 
         int a = std::pow(2, (l - 1)) - 1;

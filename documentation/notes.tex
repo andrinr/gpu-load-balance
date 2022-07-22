@@ -77,12 +77,19 @@
 \newpage
 \section{Introduction}
 
-The N-Body technique has been used for decades to simulate the Universe so we can compare theory with observations. This technique uses ``particles'' representing object such as planets and stars. As gravity operates over infinite distance it is necessary to consider all pair-wise interactions which makes a naive implementation $\mathcal{O}(n^2)$.
-It is clear that this does not scale particularly well with large particle counts.
 
+The N-Body technique has been used for decades to simulate the Universe so we can compare theory with observations. This technique uses ``particles'' representing object such as planets and stars. As gravity operates over infinite distance it is necessary to consider all pair-wise interactions which makes a naive implementation $\mathcal{O}(n^2)$. Clearly this does not scale particularly well with large particle counts.
 
-One common approach is to partition the space, in which the particles are contained, into a set of subspaces, also called cells, which are then stored in a tree data structure. The process of doing so is very similar to a k-d tree construction. However in our case, where we use a Orthogonal Recursive Bisection (ORB), we do not periodically switch between the individual axes when searching for a median. Instead we pick the axis in which the cell is largest, and search for a median in the particle positions of this axis. The resulting tree is then considered a space partitioning data structure and can be leveraged to perform a multipole expansions of each cell or subspace to approximate the forces acting between the particles. A mutlipole expansion is essentially a mathematical represnation of a group of objects into a single function, we discuss this in further detail later.
-This reduces the complexity of the algorithm to $\mathcal{O}(n\log{}n)$. More recently the Fast Multipole Method (FMM), also relying on the space partitioning data structure, has gained wider adoption. This technique further reduces the complexity to $\mathcal{O}(n)$. 
+One common approach is to partition the space, in which the particles are contained, into a set of subspaces, also called cells, which are then stored in a space partitioning tree data structure (SPTDS). Building such a data structure takes a significant chunk of time of the overall simulation time, however its usually done on the CPU, even though most supercomputers have powerful GPUs installed. Tree walking and building algorithms heavily rely on control statements such as if / else. GPU programming in contrast, benefits from large packable data arrays without any branch divergence. In this thesis we explore upper limits for the chosen tree building algorithms in terms of speed up over its CPU counterpart. We propose, implement and analyze an efficient way of building the SPTDS on the CPU and on the GPU. 
+
+\TODO{Describe measurement results here}
+
+\newpage
+\section{Background}
+
+We use the Orthogonal recursive bisection method in order to construct the SPTDS. 
+The procedure is very similar to a k-d tree construction. However in our case, we do not periodically switch between the individual axes when searching for a median. Instead we pick the axis in which the cell volume is largest, and search for a median in the particle positions of this axis. The resulting tree, a SPTDS, can then be leveraged to perform a multipole expansions of each cell or subspace to approximate the forces acting between the particles. A mutlipole expansion is essentially a mathematical representation of a group of objects as a single function.
+This reduces the complexity of the gravity calculations from $O(n^2)$ to $\mathcal{O}(n\log{}n)$. More recently the Fast Multipole Method (FMM), also relying on the space partitioning data structure, has gained wider adoption. This technique further reduces the complexity to $\mathcal{O}(n)$. 
 
 Knowing this we can split the computational effort required in modern N-Body simulations into three categories:
 
@@ -94,9 +101,57 @@ Knowing this we can split the computational effort required in modern N-Body sim
 
 Note that after each time step, the particles have new positions and therefore the space partitioning tree needs to be recomputed as well.
 
-Before the implementation of FMM into codes, and particularly before the era of modern accelerated computing (e.g., SIMD vectorization and GPU computing) the forces calculations (3.) dominated the computational cost. In more recent simulations, each category is about one third of the total calculation time\cite{2017ComAC...4....2P}. This makes the tree building (2.) and load balancing (1.) subjects to great performance gains, since GPU acceleration is usually not exploited. Tree walking and building algorithms heavily rely on control statements such as if / else. SIMD programming in contrast, benefits from large packable data arrays without any branch divergence. Therefore porting tree building code onto the GPU is no easy task and we aim to explore the possibilities and limitations.
+Before the implementation of FMM into codes, and particularly before the era of modern accelerated computing (e.g., SIMD vectorization and GPU computing) the forces calculations (3.) dominated the computational cost. In more recent simulations, each category is about one third of the total calculation time\cite{2017ComAC...4....2P}. This makes the tree building (2.) and load balancing (1.) subjects to great performance gains, since GPU acceleration is usually not exploited. 
 
 We propose to implement tree building on the GPU using CUDA to accelerate load balancing. We will consider implementing the same method for tree building in the future, but set the main target for load balancing.
+
+Our main objective in this work is to improve the runtime of astrophysical simulations, or more specifically PKDGrav. At the same time we want to minimize penalties with regards to $N$, the total number of particles, such that we can leverage a high $N$ to increase the precision of the simulation. Furthermore we want to adapt and optimize the algorithms with regards to the target data as introduced in \ref{section:target-data} and target computing systems.
+
+
+\subsection{Fast Multipole Expansion}
+
+A multipole expansion can be used to approximate a function. In our case, we aim to approximate the gravity field of the particles contained within a cell. This simplification of gravitational fields is used to group particles together such that the group can be treated as a single object. 
+
+For an intuitive understanding, one can imagine a large cluster of particles that is very far away from planet Earth. If we wish to compute the interactions between every single object of the cluster and Earth, we will need to perform $O(n^2)$ computations. However, since the object is reasonably far away, it does not make sense to compute every interaction. Instead, we summarize the cluster into a single object, which is represented as a function. We can then simply compute the interacting gravity between planet Earth and the function. Since we are bound by numerical accuracy anyways, the error term introduced by simplifying calculations with the fast multipole method can also be kept so small that it does not exceed the numerical error. Consequently, objects within our own solar system would be too close to planet Earth to approximate its effects using a multipole. In such cases, it is necessary to perform all $O(n^2)$ computations.
+
+After we have built the space partitioning tree, we compute the multipole for all cells in the tree. This allows us to dynamically select more or less detailed functions to represent a group of particles. Depending on the distance between the particle we want to determine the forces for and the particles which exert the forces, we might choose a higher or lower multipole expansion.
+
+As we have mentioned, when using ORB to create the space partitioning tree data structure, we always search for a median in the axis where the cell size is largest. This is the best method to avoid skewed shapes and approximate squarish shapes. 
+
+As described in \cite{Stadel2001}, "the opening radius of a cell is given by some constant factor times $r_{max}$". $r_{max}$ is the distance between the center of mass of a cell and its most distant corner. The opening radius correlates with the error ratio, which in turn influences how fine grained the timesteps many calculations have to be performed. Trivially, a square is the rectangle where the distance between any point and its most distant corner point is the smallest. Thus, we will want to approach more square-like shapes.
+
+The most straight forward way to avoid high ratios between the length and height of such a rectangle is to always split it along its longest axis.
+
+
+\subsection{Target Data and Notation}\label{section:target-data}
+
+The target data consists of $N$ particles where we use the following notations:
+
+\begin{itemize}
+	\item We define a particle as $par_i$  where $i \in \{0,...,N\}$. 
+	\item We define the space of binary numbers with a precision of $p$ as $\mathbb{B}_p$ where we have $a \in \mathbb{B}_p \Leftrightarrow a \in \{0,1\}^{p}$
+	\item We define the corner coordinates of root domain with $\vec{lower}, \vec{upper}$ where we have $\vec{lower}, \vec{upper} \in \mathbb{B}_p^3$. 
+	\item We define the coordinates of a particle $par_i$ as $\vec{x_i}$ for which holds $\{\vec{x} | \vec{lower} \leq \vec{x} \leq \vec{upper}, \vec{x} \in \mathbb{B}_p^3 \}$.
+	When refering to a single coordinate of a particle object we do so by writing $\vec{x}_{i,j}$. Finally the array of all particles positions in a single axis is denoted as $\vec{x}_{:,j}$. 
+	
+\end{itemize}
+
+The distribution of the entire dataset cannot easily be characterized. There may be areas with very dense distribution, separated by vastly unpopulated areas. Thus it is best to make no assumptions about the dataset and expect anything.
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+			\randistr{10}{5}{100}
+			\draw (0,0) rectangle (10, 5);
+			\filldraw  (0,0) circle (3pt) node [anchor=west]{};
+			\node[yshift=0.3cm, xshift=-0.3cm] at (0,0) {$-\frac{b}{2}$};
+			
+			\filldraw  (10,5) circle (3pt) node [anchor=west]{};
+			\node[yshift=0.3cm, xshift=-0.3cm] at (10,5) {$\frac{b}{2}$};
+		\end{tikzpicture}
+	\end{center}
+	\caption{Uniform random distribution of 3D coordinates in cube domain projected onto a 2d plane}
+\end{figure}
 
 \subsection{Load Balancing Procedure Overview}
 
@@ -228,64 +283,24 @@ The individual steps used for load balancing are as follows:
 
 
 \begin{figure}[H]
-	\begin{center}
-		\begin{tikzpicture}
-			\filldraw  (0,0) circle (3pt) node [anchor=west]{};
-			\filldraw[red]  (1,1) circle (3pt) node [anchor=west]{};
-			\draw[->, thick] (0,0) -- (1,1);
-			\draw[->, red, thick] (1,1) -- (2,2);
-		\end{tikzpicture}
-	\end{center}
+\begin{center}
+\begin{tikzpicture}
+\filldraw  (0,0) circle (3pt) node [anchor=west]{};
+\filldraw[red]  (1,1) circle (3pt) node [anchor=west]{};
+\draw[->, thick] (0,0) -- (1,1);
+\draw[->, red, thick] (1,1) -- (2,2);
+\end{tikzpicture}
+\end{center}
 \end{figure}
 \end{comment}
 
-\subsection{Fast Multipole Expansion}
-
-A multipole expansion can be used to approximate a function. In our case, we aim to approximate the gravity field of the particles contained within a cell. This simplification of gravitational fields is used to group particles together such that the group can be treated as a single object. 
-
-For an intuitive understanding, one can imagine a large cluster of particles that is very far away from planet Earth. If we wish to compute the interactions between every single object of the cluster and Earth, we will need to perform $O(n^2)$ computations. However, since the object is reasonably far away, it does not make sense to compute every interaction. Instead, we summarize the cluster into a single object, which is represented as a function. We can then simply compute the interacting gravity between planet Earth and the function. Since we are bound by numerical accuracy anyways, the error term introduced by simplifying calculations with the fast multipole method can also be kept so small that it does not exceed the numerical error. Consequently, objects within our own solar system would be too close to planet Earth to approximate its effects using a multipole. In such cases, it is necessary to perform all $O(n^2)$ computations.
-
-After we have built the space partitioning tree, we compute the multipole for all cells in the tree. This allows us to dynamically select more or less detailed functions to represent a group of particles. Depending on the distance between the particle we want to determine the forces for and the particles which exert the forces, we might choose a higher or lower multipole expansion.
-
-As we have mentioned, when using ORB to create the space partitioning tree data structure, we always search for a median in the axis where the cell size is largest. This is the best method to avoid skewed shapes and approximate squarish shapes. 
-
-As described in \cite{Stadel2001}, "the opening radius of a cell is given by some constant factor times $r_{max}$". $r_{max}$ is the distance between the center of mass of a cell and its most distant corner. The opening radius correlates with the error ratio, which in turn influences how fine grained the timesteps many calculations have to be performed. Trivially, a square is the rectangle where the distance between any point and its most distant corner point is the smallest. Thus, we will want to approach more square-like shapes.
-
-The most straight forward way to avoid high ratios between the length and height of such a rectangle is to always split it along its longest axis.
-
-\subsection{Target Data and Notation}\label{section:target-data}
-
-The target data consists of $N$ particles where we use the following notations:
-
-\begin{itemize}
-	\item We define a particle as $par_i$  where $i \in \{0,...,N\}$. 
-	\item We define the space of binary numbers with a precision of $p$ as $\mathbb{B}_p$ where we have $a \in \mathbb{B}_p \Leftrightarrow a \in \{0,1\}^{p}$
-	\item We define the corner coordinates of root domain with $\vec{lower}, \vec{upper}$ where we have $\vec{lower}, \vec{upper} \in \mathbb{B}_p^3$. 
-	\item We define the coordinates of a particle $par_i$ as $\vec{x_i}$ for which holds $\{\vec{x} | \vec{lower} \leq \vec{x} \leq \vec{upper}, \vec{x} \in \mathbb{B}_p^3 \}$.
-	When refering to a single coordinate of a particle object we do so by writing $\vec{x}_{i,j}$. Finally the array of all particles positions in a single axis is denoted as $\vec{x}_{:,j}$. 
-
-\end{itemize}
-
-The distribution of the entire dataset cannot easily be characterized. There may be areas with very dense distribution, separated by vastly unpopulated areas. Thus it is best to make no assumptions about the dataset and expect anything.
-
-\begin{figure}[H]
-	\begin{center}
-		\begin{tikzpicture}
-			\randistr{10}{5}{100}
-			\draw (0,0) rectangle (10, 5);
-			\filldraw  (0,0) circle (3pt) node [anchor=west]{};
-			\node[yshift=0.3cm, xshift=-0.3cm] at (0,0) {$-\frac{b}{2}$};
-			
-			\filldraw  (10,5) circle (3pt) node [anchor=west]{};
-			\node[yshift=0.3cm, xshift=-0.3cm] at (10,5) {$\frac{b}{2}$};
-		\end{tikzpicture}
-	\end{center}
-\caption{Uniform random distribution of 3D coordinates in cube domain projected onto a 2d plane}
-\end{figure}
 
 \subsection{PKDGrav}
 
-\subsection{Ralated Work}
+
+\newpage
+\section{Related Work}
+
 
 \TODO{Write how ORB is similar to quicksort, how individual parts could be done using thrust library.}
 \newpage
@@ -295,8 +310,6 @@ The distribution of the entire dataset cannot easily be characterized. There may
 %https://de.overleaf.com/learn/latex/TikZ_package
 %https://texample.net/tikz/examples/
 The ORB algorithm partitions a multi-dimensional domain into subdomains based on spatial proximity, by splitting a $k$-dimensional domain containing $N$ particles into $d$ subdomains each of $k$ dimensions. This can be done using a recusive process where all intermediate domains are stored in a binary tree. A node of this tree is referred to as a $cell$. A $cell$ is a datastructure which keeps track of the domain information and also keeps pointers to its two child cells. The final binary tree should have exactly $d$ leaf cells. 
-
-Our main objective in this work is to improve the runtime of astrophysical simulations, or more specifically PKDGrav. At the same time we want to minimize penalties with regards to $N$, the total number of particles, such that we can leverage a high $N$ to increase the precision of the simulation. Furthermore we want to adapt and optimize the algorithms with regards to the target data as introduced in \ref{section:target-data} and target computing systems (\ref{section:target-systems}).
 
 \subsection{By example} 
 For the purpose of explaining the algorithm both visually and by a numeric example, we consider the following minimal dataset:
@@ -574,9 +587,8 @@ The ideal cut plane is defined such that exactly $N_{leftChild}$ particles are l
 \end{figure}
 
 
-Since $d_{cellLeft} - d_{cellRight}$ must always be $\leq 1$, it must hold that the tree is a nearly complete binary tree. Therefore we can conclude that the height of the tree is equal to $\lceil log(d) \rceil$ and the total number of nodes (not only leaf nodes) is $log(d) \times d$. Since we have a nearly complete binary tree, we also have the possibility of storing it in a heap data-structure, which can in turn greatly increase the performance, since we will not have to perform a tree walk to access individual cells in the tree.
+Since $d_{cellLeft} - d_{cellRight}$ must always be $\leq 1$, it must hold that the tree is a nearly complete binary tree. Therefore we can conclude that the height of the tree is equal to $\lceil log(d) \rceil$ and the total number of nodes (not only leaf nodes) is $log(d) \times d$. Since we have a nearly complete binary tree, we also have the possibility of storing it as a heap\cite{algorithms} data-structure in an array.  This increase the performance of many tree operations, since we will not have to perform a tree walk to access individual cells in the tree. Furthermore child an parent cells can be accessed without pointers but directly by computing their index in the array.
 
-\Q{Cant we assume for the reader to know what a heap is?}
 \begin{figure}
 	
 	\begin{algorithm}[H]
@@ -606,8 +618,6 @@ Since $d_{cellLeft} - d_{cellRight}$ must always be $\leq 1$, it must hold that 
 \label{proc:orb}
 \end{figure}
 
-Let not apply the algorithm to our running example:
-
 \TODO{Insert step by step algorithm here}
 
 \subsection{Root finding}
@@ -616,7 +626,7 @@ Let not apply the algorithm to our running example:
 %Finding the median of a large particle array is an essential step for ORB. We will thus explore different algorithms alongside their advantages and disadvantages for our specific use case.
 %Note that there exists approximation algorithms for example the median of medians algorithms. But the correctness guarantee of the median lying between 30\% and 70\% is not good enough in our case. If we were to implement such an approximation algorithms we would run into similar issues as described in \ref{sec:balancing}. But in this case the unequal memory balancing do not have the advantage of equal workload balancing, which in turn will worsen the performance and the maximum number of workable particles. Thus we will only consider approximation algorithms, if their approximation to the ideal values are very exact and can be determined.
 
- The $cut$ algorithm takes an array of particles, an axis, a left and right boundary as well as a percentage $r$ of particles which should be on the left side to the determined cut. Its goal is to return a position, such that the particles on the left side of the cut are equal to the percentage input parameter multiplied by all particles. We can define a function $f(c)$ where the function evaluates the number of elements smaller than the cut value c minus half the number of total particles. Reformulated in this way, the problem is equivalent to a root finding problem. Because when the function evaluates to zero, we have found a cut plane positions where exactly half the particles are located to left side. There exists a lot of different solver for the root finding problem, the most stable and easiest to implement is however the bisection method.
+ The $cut$ algorithm takes an array of particles, an axis, a left and right boundary as well as a percentage $r$ of particles which should be on the left side to the determined cut. Its goal is to return a position, such that the particles on the left side of the cut are equal to the percentage input parameter multiplied by all particles. We can define a function $f(c)$ where the function evaluates the number of elements smaller than the cut value c minus half the number of total particles. Reformulated in this way, the problem is equivalent to a root finding problem. Because when the function evaluates to zero, we have found a cut plane positions where exactly half the particles are located to left side. There exists a lot of different solver for the root finding problem, the most stable and easiest to implement is however the bisection method. \TODO{explain a bit more in detail}
  
  Since we are operating on binary numbers with a limited precision, the bisection method is guaranteed to terminate after a certain number of steps. Other approximate algorithms can converge quicker, meaning they find the root in less time steps, than the bisection method, however they are not guaranteed to converge.
 
@@ -714,7 +724,7 @@ The underlying distribution is a normal distribution. \TODO{Add reference to sec
 
 We have already introduced all basic building blocks of the ORB algorithm. The only and final piece which is missing is the partition algorithm. We want to continuously update the array and in the words used before, have a direct correlation between $x_i$ and $i$. This allows us to group all particles, which are contained in a cell in a fixed range of indexes of the particles array. The advantages of this are two fold: Firstly we can access all particles within a cell in constant time, secondly this allows us to easily manipulate particles within a cell as a slice. The disadvantage is a slight increase in runtime which comes with the partitioning algorithm.
 
-When thinking about this in terms of the recursive algorithm, maintaining this data structure is pretty straight forward. Each time we split a cell into two children, we make sure that particles contained in the left child cell are found in a designated range of the particles array, and the exact same concept is applied to the right cell. The partition algorithm is equivalent to the common hoare partition algorithm. \TODO{Add reference}
+When thinking about this in terms of the recursive algorithm, maintaining this data structure is pretty straight forward. Each time we split a cell into two children, we make sure that particles contained in the left child cell are found in a designated range of the particles array, and the exact same concept is applied to the right cell. The partition algorithm is equivalent to the common hoare partition algorithm\cite{algorithms}. 
 
 \TODO{Add explanation}
 \begin{algorithm}[H]
@@ -1271,20 +1281,20 @@ We test the our hypothesis, that ORB is, for the most part, memory bandwidth bou
 
 For modern hardware, its fairly uncommon to release a peak flops value. Since 2008 Intel has introduced AVX (Advanced Vector Extensions), benchmarks performance largely depend upon the compiled assembly instructions, where the specific instructions vary a lot between implementation details. SIMD instructions can only be used when there is a contiguous memory access. Thus the peformance of the code depends on chosen memory layout as well as iteration method. Due to the lack of peak flop estimations, we build our own model to estimate the flops of the major parts of ORB. 
 
-AVX enables the processing of several floating point precision (32 bit) numbers simultaneously. AVX2, which is present in most modern hardware, enable the processing of 8 floating point instructions and its instructions have a CPI (cycles per instructions) of two on most chip architectures, where naturally a higher CPI correlates with an increased performance.
+AVX enables the processing of several floating point precision (32 bit) numbers simultaneously. AVX2, which is present in most modern hardware, enable the processing of 8 floating point instructions and its instructions have a CPI (cycles per instructions) of 0.5 on most chip architectures. A lower CPI, meaning the instruction takes only a fraction of a cycle, results in a higher efficiency. With a CPI of 0.5 we can issue two instructions in a single cycle, resulting in a doubled speed.
 
 We define in equation \ref{eq:avx}, a function to estimate the number of gigaflops for a given hardware. We define GHZ as the gigahertz which can be reached by the CPU, meanwhile $NF$ is the number of floats which can be processed simultaneously using AVX. $CPI$ is as mentioned the cycles per instructions for the AVX instruction set. Finally we have $np$ which is the number of processors and  we assume a perfect parallelization, meaning 100\% of the code can be parallelized.
 
 \begin{center}
 	\begin{equation}
-		gflops = GHZ * NF * CPI * np
+		gflops = GHZ * NF * CPI^{-1} * np
 	\end{equation}
 \label{eq:avx}
 \end{center}
 
-In terms of arithmetic intensity, we take a look at the code for counting of particles left of a specified cut plane. We ignore other parts of the code for now, as optimizing this part is one of the main targets for the thesis. The part where we count the number of particles which are to the left of a cut position, essentially comes down to this loop:
+Arithmetic intensity is usually measured in FLOPS per byte, meaning the number of floating point operations which are computed per byte which is loaded. We define the part of the cut algorithm, where we count the number of particles which are to the left of a cut position, as the count left. The count left is equivalent to line 6 in figure  \ref{proc:cut} and can be translated to the following c++ code:
 
-\begin{figure}
+\begin{figure}[H]
 	\begin{lstlisting}[language=c++]
 		for(auto p= startPtr; p<endPtr; ++p) nLeft += *p < cut;
 	\end{lstlisting}
@@ -1293,8 +1303,6 @@ In terms of arithmetic intensity, we take a look at the code for counting of par
 
 
 Where $p$ is a C-style array which stores the particles position and $nLeft$ gives the number of particles which are left of the $cut$. In terms of arithmetic intensity, we have the following operations:
-
-\Q{Add glossary for terms like arithemtic intensity?}
 
 \begin{enumerate}
 	\item Compare particle to cut
@@ -1307,6 +1315,7 @@ Which results in a total of 4 operations. Since a single float is stored using 4
 
 Since we have peak flops benchmarks available for all the NVIDIA P100 and V100s we do not need to make any estimations about the GPU flops. Estimating the arithmetic intensity for the GPU is a lot more complicated as it depends a lot on the specific implementation details. For now we will just assume the same arithmetic intensity as we have had for the CPU.
 
+\TODO{Explain connection from formula in the context of graphs}
 \begin{figure}[H]
 	\begin{center}
 		\begin{tikzpicture}
@@ -1484,7 +1493,7 @@ As it can be seen in figure \ref{fig:roofdaint} and \ref{fig:roofdaintGPU} both 
 	\end{center}
 \end{figure}
 
-As visible in figure \ref{fig:roofsummit} and \ref{fig:roofsummitPGU} the same applies to Summit. Its notable how the memory bandwidth only becomes the limiting factor when assuming a parallelization with 4 processors.
+As visible in figure \ref{fig:roofsummit} and \ref{fig:roofsummitGPU} the same applies to Summit. Its notable how the memory bandwidth only becomes the limiting factor when assuming a parallelization with 4 processors.
 
 \begin{figure}
 	[H]
@@ -1856,11 +1865,11 @@ We conclude that the GPU version with GPU Tree building enabled yields the best 
 \end{comment}
 
 \newpage
-\section{Implementation}
+\section{CPU Implementation}
 
-In this section we will describe the stand-alone implementation of the accelerated ORB algorithm. We will develop this somewhat separately from the PKDGrav codebase in order to have smaller and easily understandable codebase. We will however use mdl2 from PKDGrav, which is used to distribute the workload among the processors in the system. We aim to use this platform for extensive empirical testing of different strategies and evaluate weather our the proposed method indeed outperforms the CPU version. 
+In this section describe the stand-alone implementation of the accelerated ORB algorithm. We will develop this somewhat separately from the PKDGrav codebase in order to have smaller and easily understandable codebase. We will however use mdl2 from PKDGrav, which is used to distribute the workload among the processors in the system. In section \ref{sec:gpuimpl} we describe the GPU implementations. The CPU and GPU versions are merged in a single program, where different acceleration strategies can be selected and evaluated.
 
-We will not describe every part of the code in detail, as this would exceed the scope of the thesis. However any performance critical details and all the important data-structures are described. Furthermore, we will pay special attention to the CUDA kernels and also memory management strategies, as they are of great importance.
+We will refrain from describing each part of the code in detail, however any performance critical details and all the important data-structures are described. Furthermore, we will pay special attention to the CUDA kernels and also memory management strategies, first of all since only minor differences in coding style can have a great impact, because the kernel are the most crucial parts of the optimization and finally because it increases replicability of the code.
 
 A brief overview of the core elements:
 
@@ -1977,6 +1986,7 @@ The cell class has some helpful helper functions. \TODO{extend}
 
 \subsection{Operative}
 
+\TODO{Check if loop is really better when iterative. Or maybe dont argue too much}
 Since the recursive version as shown in \ref{proc:orb} is not very compiler friendly, meaning its hard to properly optimize it at compile time, we introduce another non recursive version.
 
 \TODO{Write here in pseudcode as C++ version to long}
@@ -2010,6 +2020,8 @@ Since the recursive version as shown in \ref{proc:orb} is not very compiler frie
 \end{figure}
 
 \subsection{Services}
+
+\TODO{Describe this in more detail}
 
 As required by mdl, we make use of services, which are essentially a collection of functions which can be sent to any set of processors in the computing system. We abstract every performance critical part of the orb main runtime, which can parallelized and distributed among processors.
 
@@ -2122,7 +2134,8 @@ for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset){
 }
 \end{lstlisting}
 
-\subsection{CUDA Implementations}
+\newpage
+\section{GPU Implementations}\label{sec:gpuimpl}
 
 CUDA is programming language, allowing us to access the GPU, without having to translate algorithms and concepts into shaders, which are largely designed for graphics processing, as it was the case with Shader Programming in OpenGL. Even though compute sharers allowed for increased flexibility, it was still far from easy to port even the most simple codes from c++ to glsl. In this section will provide a quick introduction into the relevant CUDA concepts, which were applied while writing GPU code.
 
@@ -2136,43 +2149,87 @@ We will implement two GPU accelerated versions:
 
 Note that the total number of particles, which can be simulated, will be reduced in both implementations, as the GPU memory is a lot smaller than the CPU memory. One could propose to load and offload several batches from the CPU to GPU but this comes with a significant overhead due to the slow memory bandwidth between the CPU and the GPU.
 
-\subsubsection{Relevant CUDA Concepts}
+\subsection{Relevant CUDA Concepts}
 
 CUDA gives us the ability to launch kernels, which are written in C with some additional CUDA specific syntax. These kernel can be run from the CPU, commonly refereed to as the host, and are then executed on the GPU, also known as the device. The device and the host have a separate memory and as seen in section \ref{sec:gmm} the transfer $I_{CG}$ rates between the GPU and CPU are generally slower, under performing $I_{C}$ and $I_G$ speeds. Therefore one of key the challenges when rewriting CPU code to GPU code is to limit data transfers between the GPU and CPU as much as possible.
 
 Each kernel is executed exactly once for every thread and has private local memory, only accessible by the thread. Furthermore each kernel is part of a block, where a all threads within a block can be synchronized. We are also able to launch a kernel across multiple blocks, in this case however, the blocks cannot be synchronized on the device level. The only way to make sure all blocks have finished a task before executing a consecutive task, is to wait from the host side for the completion of the kernel, meaning the completion of all blocks associated with this kernel. The number of blocks and the number of threads per block can be defined dynamically during runtime. Since the GPU is limited in its computing and also memory capabilities, the number of blocks which are run in parallel are limited, therefore CUDA does not give us any guarantee, weather a set of blocks are run serially or in parallel.  
 
+\newcommand{\warp}[3]{
+	\node[rectangle,
+	draw = black,
+	text = black,
+	anchor = center,
+	fill = white,
+	align=center,
+	minimum width = 2.8cm, 
+	minimum height = 1cm] at (#1cm,#2 cm) {};
+	
+	\foreach \i in {0,...,32}
+	{
+		\node[rectangle,
+		draw = black,
+		text = black,
+		anchor = center,
+		fill = yellow,
+		align=center,
+		minimum width = 2.8 cm / 32 cm, 
+		minimum height = 1cm] at (#1 cm - 1.4 cm + 2.8 / 32 * \i cm,#2 cm) {};
+	}
+
+	\node[anchor=west] at (#1cm, #2 cm + 0.25 cm) {$Warp_#3$};
+
+}
+
+\newcommand{\block}[3]{
+	\node[rectangle,
+	draw = black,
+	text = black,
+	anchor = center,
+	fill = white,
+	align=center,
+	minimum width = 3cm, 
+	minimum height = 5cm] (cpu1) at (#1cm,#2cm) {};
+	
+	\node[anchor=west] at (#1cm, #2 + 2.25 cm) {$Block_#3$};
+	
+
+	\warp{#1}{#2+1.25}{0};
+	\warp{#1}{#2+0.25}{1};
+	\warp{#1}{#2-1.25}{k};
+
+	
+	\node  at (#1 cm,#2 -0.4cm) [circle, fill, inner sep=0.5pt] {};
+	\node  at (#1 cm,#2-0.5cm) [circle, fill, inner sep=0.5pt] {};
+	\node  at (#1 cm,#2 -0.6cm) [circle, fill, inner sep=0.5pt] {};
+	
+	
+	\node[rectangle,
+	draw = black,
+	text = black,
+	anchor = center,
+	fill = white,
+	align=center,
+	minimum width = 2.8cm, 
+	minimum height = 1cm] (cpu1) at (#1 cm,#2 -2.5cm) {};
+	\node[anchor=center] at (#1 cm, #2 -2.25 cm) {$Shared Memory$};
+}
 
 \begin{figure}[H]
 	\begin{center}
 		\begin{tikzpicture}
 			
-			\node[rectangle,
-			draw = black,
-			text = black,
-			anchor = west,
-			fill = white,
-			align=center,
-			minimum width = 3cm, 
-			minimum height = 3cm] (cpu1) at (0cm,0cm) {Block1};
+			\block{0}{0}{0}
+			\block{3.2}{0}{1}
+			\block{7.4}{0}{n}
 			
-			\node[rectangle,
-			draw = black,
-			text = black,
-			anchor = west,
-			fill = white,
-			align=center,
-			minimum width = 3cm, 
-			minimum height = 3cm] (cpu1) at (3.2cm,0cm) {Block2};
+			% Dots
+			\node  at (5.2cm,0cm) [circle, fill, inner sep=0.5pt] {};
+			\node  at (5.3cm,0cm) [circle, fill, inner sep=0.5pt] {};
+			\node  at (5.4cm,0cm) [circle, fill, inner sep=0.5pt] {};
 			
-			\node[rectangle,
-			draw = black,
-			text = black,
-			anchor = west,
-			fill = white,
-			align=center,
-			minimum width = 3cm, 
-			minimum height = 3cm] (cpu1) at (6.4cm,0cm) {Block3};
+
+	
 			
 			
 			
@@ -2208,7 +2265,7 @@ Another important concept are warps. Each warp consists of 32 threads and all th
 
 Our primary focus for optimization is the binary cut algorithm, more specifically the counting method. Its implementation in CUDA is straight forward and performance improvement are guaranteed as shown in section \TODO{add reference}. 
 
-\subsubsection{GPU Accelerated Count Left}
+\subsection{GPU Accelerated Count Left}
 We have described a CPU implementation of the countLeftService. In this section we explain how we can port this problem to the GPU. In essence we can use a general reduction as a basis version, and adapt it to sum up up elements which fulfill a certain condition, where the condition is being smaller than a given value.
 
 Optimized reductions in CUDA are well documented and explained by the NVIDIA developer team. We make use of a reduction introduced by \TODO{Reference} and adapt it slightly to fit our needs. We will reiterate over the important optimization aspects and finally point out the specific adaptations we have made. 
