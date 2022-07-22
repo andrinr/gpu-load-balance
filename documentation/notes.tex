@@ -48,6 +48,9 @@
 \usepackage{mymacros}
 \usepackage{parallelP}
 
+% Better enumerate
+\usepackage{outlines}
+
 \lstset { %
     backgroundcolor=\color{black!5}, % set backgroundcolor
     basicstyle=\footnotesize,% basic font setting
@@ -87,8 +90,7 @@ One common approach is to partition the space, in which the particles are contai
 \newpage
 \section{Background}
 
-We use the Orthogonal recursive bisection method in order to construct the SPTDS. 
-The procedure is very similar to a k-d tree construction. However in our case, we do not periodically switch between the individual axes when searching for a median. Instead we pick the axis in which the cell volume is largest, and search for a median in the particle positions of this axis. The resulting tree, a SPTDS, can then be leveraged to perform a multipole expansions of each cell or subspace to approximate the forces acting between the particles. A mutlipole expansion is essentially a mathematical representation of a group of objects as a single function.
+We use the Orthogonal Recursive Bisection method in order to construct the SPTDS. The procedure is very similar to a k-d tree construction. However in our case, we do not periodically switch between the individual axes when searching for a median. Instead we pick the axis in which the cell volume is largest, and search for a median in the particle positions of this axis. The resulting tree, a SPTDS, can then be leveraged to perform a multipole expansions of each cell or subspace to approximate the forces acting between the particles. A mutlipole expansion is essentially a mathematical representation of a group of objects as a single function.
 This reduces the complexity of the gravity calculations from $O(n^2)$ to $\mathcal{O}(n\log{}n)$. More recently the Fast Multipole Method (FMM), also relying on the space partitioning data structure, has gained wider adoption. This technique further reduces the complexity to $\mathcal{O}(n)$. 
 
 Knowing this we can split the computational effort required in modern N-Body simulations into three categories:
@@ -300,6 +302,29 @@ The individual steps used for load balancing are as follows:
 
 \newpage
 \section{Related Work}
+
+ORB can be subdivided into the following steps:
+
+\begin{outline}[enumerate]
+	\1 Cut cells on last level in tree
+	\2 Make cut plane position guess
+	\2 Count number of particles left to the cut plane
+	\2 Repeat 1. till correct plane was found
+	\1 Partition particles
+	\1 Repeat till desired depth was reached
+\end{outline}
+
+Thrust has an implementation of a reduction, which can be used to perform step 1.b), a binary search is equivalent to the entire step 1. and finally it exposes a partition interface. Thrust is very high level and does not allow us to control memory operations, which are very crucial to a performant implementation of ORB. 
+
+So far there exists no...
+
+Not sure how this works exactly:
+$https://github.com/johnarobinson77/KdTreeGPU$
+
+Min Max binning. Probably does not work when axes are not switched periodically.
+$https://www.cg.tuwien.ac.at/research/publications/2013/Voglsam_2013_RRT/Voglsam_2013_RRT-Thesis.pdf$
+and the paper:
+$https://jcgt.org/published/0004/01/03/paper.pdf$ Lots of GPU memory overhead.
 
 
 \TODO{Write how ORB is similar to quicksort, how individual parts could be done using thrust library.}
@@ -1277,7 +1302,7 @@ In order to estimate the runtime of the algorithms we denote the number of parti
 
 \subsection{Roofline Performance Model}
 
-We test the our hypothesis, that ORB is, for the most part, memory bandwidth bound using the roofline model. In the roofline model, we compare the operational density, which is measured in FLOPS / per byte against the number of flops per minute. 
+We test the our hypothesis, that ORB is, for the most part, memory bandwidth bound using the roofline model. In the roofline model, we compare the arithmetic intensity, which is measured in FLOPS / per byte against the number of flops per minute. 
 
 For modern hardware, its fairly uncommon to release a peak flops value. Since 2008 Intel has introduced AVX (Advanced Vector Extensions), benchmarks performance largely depend upon the compiled assembly instructions, where the specific instructions vary a lot between implementation details. SIMD instructions can only be used when there is a contiguous memory access. Thus the peformance of the code depends on chosen memory layout as well as iteration method. Due to the lack of peak flop estimations, we build our own model to estimate the flops of the major parts of ORB. 
 
@@ -1313,7 +1338,32 @@ Where $p$ is a C-style array which stores the particles position and $nLeft$ giv
 
 Which results in a total of 4 operations. Since a single float is stored using 4 bytes, we receive 1.0 operations per byte. Note that AVX or any SIMD instructions do not influence the arithmetic intensity, as the number of floating point operations per byte remains the same. We simply perform a set of operations concurrently. What is however influenced by AVX, is the maximum number of GFLOPS which can be processed by the hardware. If we were to ignore AVX, the algorithm would clearly not be bound by memory, as its performance would lack behind the memory bandwidth. For this reason it is so important to consider AVX.
 
-Since we have peak flops benchmarks available for all the NVIDIA P100 and V100s we do not need to make any estimations about the GPU flops. Estimating the arithmetic intensity for the GPU is a lot more complicated as it depends a lot on the specific implementation details. For now we will just assume the same arithmetic intensity as we have had for the CPU.
+Since we have peak flops benchmarks available for all the NVIDIA P100 and V100s we do not need to make any estimations about the GPU flops. Estimating the arithmetic intensity for the GPU  is a lot more complicated as it depends a lot on the specific implementation details. For now we will just assume the same arithmetic intensity as we have had for the CPU.
+
+Lets us now consider Piz Daint. We can plug in the values which we have determined into the formula, where we do so for $np = 1, 2$ and $3$.
+
+\begin{center}
+	\begin{equation}
+		121.6 gflops = 3.8 * 8 * \frac{1}{0.5} * 2
+	\end{equation}
+	\label{eq:daintp1}
+\end{center}
+
+\begin{center}
+	\begin{equation}
+		243.2 gflops = 3.8 * 8 * \frac{1}{0.5} * 4
+	\end{equation}
+	\label{eq:daintp2}
+\end{center}
+
+\begin{center}
+	\begin{equation}
+		486.4 gflops = 3.8 * 8 * \frac{1}{0.5} * 8
+	\end{equation}
+	\label{eq:daintp3}
+\end{center}
+
+We plot those numbers as GFLOPS peak values for Piz Daint. 
 
 \TODO{Explain connection from formula in the context of graphs}
 \begin{figure}[H]
@@ -2137,9 +2187,7 @@ for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset){
 \newpage
 \section{GPU Implementations}\label{sec:gpuimpl}
 
-CUDA is programming language, allowing us to access the GPU, without having to translate algorithms and concepts into shaders, which are largely designed for graphics processing, as it was the case with Shader Programming in OpenGL. Even though compute sharers allowed for increased flexibility, it was still far from easy to port even the most simple codes from c++ to glsl. In this section will provide a quick introduction into the relevant CUDA concepts, which were applied while writing GPU code.
-
-Note that we are aware of the Thrust library an its implementation of partition, reductions and binary search. But the library does not allow us to manage the memory by ourselves, therefore we are forced to re-implement some concepts which are already introduced by thrust. 
+CUDA is programming language, allowing us to access the GPU, without having to translate algorithms and concepts into shaders, which are largely designed for graphics processing, as it was the case with Shader Programming in OpenGL. Even though compute sharers allowed for increased flexibility, it was still far from easy to port even the most simple codes from C++ to glsl. In this section will provide a quick introduction into the relevant CUDA concepts, which were applied while writing GPU code.
 
 We will implement two GPU accelerated versions:
 \begin{itemize}
