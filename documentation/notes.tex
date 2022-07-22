@@ -51,6 +51,10 @@
 % Better enumerate
 \usepackage{outlines}
 
+% snake lines
+\usetikzlibrary{decorations.pathmorphing}
+\tikzset{snake it/.style={decorate, decoration=snake}}
+
 \lstset { %
     backgroundcolor=\color{black!5}, % set backgroundcolor
     basicstyle=\footnotesize,% basic font setting
@@ -1363,7 +1367,7 @@ Lets us now consider Piz Daint. We can plug in the values which we have determin
 	\label{eq:daintp3}
 \end{center}
 
-We plot those numbers as GFLOPS peak values for Piz Daint. 
+We plot those numbers as GFLOPS peak values for Piz Daint, we add a line depicting the memory bandwidth which can 
 
 \TODO{Explain connection from formula in the context of graphs}
 \begin{figure}[H]
@@ -2204,26 +2208,22 @@ CUDA gives us the ability to launch kernels, which are written in C with some ad
 Each kernel is executed exactly once for every thread and has private local memory, only accessible by the thread. Furthermore each kernel is part of a block, where a all threads within a block can be synchronized. We are also able to launch a kernel across multiple blocks, in this case however, the blocks cannot be synchronized on the device level. The only way to make sure all blocks have finished a task before executing a consecutive task, is to wait from the host side for the completion of the kernel, meaning the completion of all blocks associated with this kernel. The number of blocks and the number of threads per block can be defined dynamically during runtime. Since the GPU is limited in its computing and also memory capabilities, the number of blocks which are run in parallel are limited, therefore CUDA does not give us any guarantee, weather a set of blocks are run serially or in parallel.  
 
 \newcommand{\warp}[3]{
+	
+	\foreach \i in {0,...,32}
+	{
+		\draw[orange, snake it] (#1 cm - 1.2 cm + 2.4 / 32 * \i cm,#2 cm - 0.3 cm) to
+		(#1 cm - 1.2 cm + 2.4 / 32 * \i cm,#2 cm + 0.3 cm);
+		
+	}
+
 	\node[rectangle,
 	draw = black,
 	text = black,
 	anchor = center,
-	fill = white,
 	align=center,
 	minimum width = 2.8cm, 
 	minimum height = 1cm] at (#1cm,#2 cm) {};
-	
-	\foreach \i in {0,...,32}
-	{
-		\node[rectangle,
-		draw = black,
-		text = black,
-		anchor = center,
-		fill = yellow,
-		align=center,
-		minimum width = 2.8 cm / 32 cm, 
-		minimum height = 1cm] at (#1 cm - 1.4 cm + 2.8 / 32 * \i cm,#2 cm) {};
-	}
+
 
 	\node[anchor=west] at (#1cm, #2 cm + 0.25 cm) {$Warp_#3$};
 
@@ -2256,9 +2256,9 @@ Each kernel is executed exactly once for every thread and has private local memo
 	draw = black,
 	text = black,
 	anchor = center,
-	fill = white,
+	fill = yellow,
 	align=center,
-	minimum width = 2.8cm, 
+	minimum width = 3cm, 
 	minimum height = 1cm] (cpu1) at (#1 cm,#2 -2.5cm) {};
 	\node[anchor=center] at (#1 cm, #2 -2.25 cm) {$Shared Memory$};
 }
@@ -2266,6 +2266,15 @@ Each kernel is executed exactly once for every thread and has private local memo
 \begin{figure}[H]
 	\begin{center}
 		\begin{tikzpicture}
+			
+			\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = center,
+			align=center,
+			minimum width = 11.5cm, 
+			minimum height = 9cm] (cpu1) at (3.75 cm, -1cm) {};
+			\node[anchor=center] at (3.75 cm, -4 cm) {$Global Memory$};
 			
 			\block{0}{0}{0}
 			\block{3.2}{0}{1}
@@ -2277,7 +2286,17 @@ Each kernel is executed exactly once for every thread and has private local memo
 			\node  at (5.4cm,0cm) [circle, fill, inner sep=0.5pt] {};
 			
 
-	
+			\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = center,
+			fill = yellow,
+			align=center,
+			minimum width = 10.5cm, 
+			minimum height = 1cm] (cpu1) at (3.75 cm,-4cm) {};
+			\node[anchor=west] at (3.75 cm, -4 cm) {$Global Memory$};
+			
+			
 			
 			
 			
