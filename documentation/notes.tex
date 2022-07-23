@@ -44,16 +44,17 @@
 \pgfplotsset{compat = newest}
 \usepgfplotslibrary{fillbetween}
 
-% Dependencies
-\usepackage{mymacros}
-\usepackage{parallelP}
-
 % Better enumerate
 \usepackage{outlines}
 
 % snake lines
 \usetikzlibrary{decorations.pathmorphing}
 \tikzset{snake it/.style={decorate, decoration=snake}}
+
+% Dependencies
+\usepackage{mymacros}
+\usepackage{parallelP}
+\usepackage{cuda}
 
 \lstset { %
     backgroundcolor=\color{black!5}, % set backgroundcolor
@@ -2146,52 +2147,54 @@ Its implementation is equivalent to a hoare partition. The implementation is str
  
 On line 31 till 37 we also update the cellToRangeMap in order to reflect the changes we have made in the particles array.
 
-\begin{lstlisting}[language=c++]
-for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset){
-	auto cell = static_cast<Cell>(*(in + cellPtrOffset));
-	
-	int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
-	int endInd = pst->lcl->cellToRangeMap(cell.id, 1);
-	
-	int i = beginInd-1, j = endInd;
-	float cut = cell.getCut();
-	
-	while(true)
-	{
-		do
-		{
-			i++;
-		} while(lcl->particles(i, cell.cutAxis) < cut && i <= endInd);
-		
-		do
-		{
-			j--;
-		} while(lcl->particles(j, cell.cutAxis) > cut && j >= beginInd);
-		
-		if(i >= j) {
-			break;
+\begin{figure}[H]
+	\begin{lstlisting}[language=c++]
+		for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset){
+			auto cell = static_cast<Cell>(*(in + cellPtrOffset));
+			
+			int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
+			int endInd = pst->lcl->cellToRangeMap(cell.id, 1);
+			
+			int i = beginInd-1, j = endInd;
+			float cut = cell.getCut();
+			
+			while(true)
+			{
+				do
+				{
+					i++;
+				} while(lcl->particles(i, cell.cutAxis) < cut && i <= endInd);
+				
+				do
+				{
+					j--;
+				} while(lcl->particles(j, cell.cutAxis) > cut && j >= beginInd);
+				
+				if(i >= j) {
+					break;
+				}
+				
+				swap(lcl->particles, i, j);
+			}
+			
+			swap(lcl->particles, i, endInd -1);
+			
+			lcl->cellToRangeMap(cell.getLeftChildId(), 0) =
+			lcl->cellToRangeMap(cell.id, 0);
+			lcl->cellToRangeMap(cell.getLeftChildId(), 1) = i;
+			
+			lcl->cellToRangeMap(cell.getRightChildId(), 0) = i;
+			lcl->cellToRangeMap(cell.getRightChildId(), 1) =
+			lcl->cellToRangeMap(cell.id, 1);
+			
 		}
-		
-		swap(lcl->particles, i, j);
-	}
-	
-	swap(lcl->particles, i, endInd -1);
-	
-	lcl->cellToRangeMap(cell.getLeftChildId(), 0) =
-	lcl->cellToRangeMap(cell.id, 0);
-	lcl->cellToRangeMap(cell.getLeftChildId(), 1) = i;
-	
-	lcl->cellToRangeMap(cell.getRightChildId(), 0) = i;
-	lcl->cellToRangeMap(cell.getRightChildId(), 1) =
-	lcl->cellToRangeMap(cell.id, 1);
-	
-}
-\end{lstlisting}
+	\end{lstlisting}
+\end{figure}
 
 \newpage
 \section{GPU Implementations}\label{sec:gpuimpl}
 
-CUDA is programming language, allowing us to access the GPU, without having to translate algorithms and concepts into shaders, which are largely designed for graphics processing, as it was the case with Shader Programming in OpenGL. Even though compute sharers allowed for increased flexibility, it was still far from easy to port even the most simple codes from C++ to glsl. In this section will provide a quick introduction into the relevant CUDA concepts, which were applied while writing GPU code.
+CUDA is programming language developed by NVIDIA allowing us to write code which is run directly on the graphics card.
 
 We will implement two GPU accelerated versions:
 \begin{itemize}
@@ -2199,69 +2202,39 @@ We will implement two GPU accelerated versions:
 	\item \textbf{Version B}: GPU Accelerated Count Left and Partition
 \end{itemize}
 
-Note that the total number of particles, which can be simulated, will be reduced in both implementations, as the GPU memory is a lot smaller than the CPU memory. One could propose to load and offload several batches from the CPU to GPU but this comes with a significant overhead due to the slow memory bandwidth between the CPU and the GPU.
+Note that the total number of particles, which can be simulated, will be reduced in both implementations, as the GPU memory is a lot smaller than the CPU memory. One could propose to load and offload several batches from the CPU to GPU but, this comes with a significant overhead due to the slow memory bandwidth between the CPU and the GPU $I_{GC}$
+
 
 \subsection{Relevant CUDA Concepts}
 
 CUDA gives us the ability to launch kernels, which are written in C with some additional CUDA specific syntax. These kernel can be run from the CPU, commonly refereed to as the host, and are then executed on the GPU, also known as the device. The device and the host have a separate memory and as seen in section \ref{sec:gmm} the transfer $I_{CG}$ rates between the GPU and CPU are generally slower, under performing $I_{C}$ and $I_G$ speeds. Therefore one of key the challenges when rewriting CPU code to GPU code is to limit data transfers between the GPU and CPU as much as possible.
 
-Each kernel is executed exactly once for every thread and has private local memory, only accessible by the thread. Furthermore each kernel is part of a block, where a all threads within a block can be synchronized. We are also able to launch a kernel across multiple blocks, in this case however, the blocks cannot be synchronized on the device level. The only way to make sure all blocks have finished a task before executing a consecutive task, is to wait from the host side for the completion of the kernel, meaning the completion of all blocks associated with this kernel. The number of blocks and the number of threads per block can be defined dynamically during runtime. Since the GPU is limited in its computing and also memory capabilities, the number of blocks which are run in parallel are limited, therefore CUDA does not give us any guarantee, weather a set of blocks are run serially or in parallel.  
+\begin{figure}[H]
+	\begin{lstlisting}[language=c++]
+reduce<<<
+	nBlocks,
+	nThreads,
+	nThreads * bytesPerThread,
+	stream
+>>>(
+	param
+);
+	\end{lstlisting}
+\caption{Calling a CUDA kernel}
+\label{cuda:call}
+\end{figure}
 
-\newcommand{\warp}[3]{
-	
-	\foreach \i in {0,...,32}
-	{
-		\draw[orange, snake it] (#1 cm - 1.2 cm + 2.4 / 32 * \i cm,#2 cm - 0.3 cm) to
-		(#1 cm - 1.2 cm + 2.4 / 32 * \i cm,#2 cm + 0.3 cm);
-		
-	}
+Each kernel is executed exactly once for every thread and has private local memory, only accessible by the thread. Furthermore each kernel is part of a block, where a typical kernel is usually called with hundreds to thousands of blocks. Each block has access to shared memory register, where the capacity of this register can be defined at runtime by the host. The maximum shared memory size depends on the hardware but usually there are 48kB per block available. There are also upper limits for the number of threads per block, usually around 512 to 1024. With a shared memory size of 48kb and 1024 threads we get $\frac{48000b}{1024} = 46b$ per thread. This is equivalent to a little bit more than one float per thread. However usually we do not max out the thread counts per block, leaving us with more shared memory space per thread. 
 
-	\node[rectangle,
-	draw = black,
-	text = black,
-	anchor = center,
-	align=center,
-	minimum width = 2.8cm, 
-	minimum height = 1cm] at (#1cm,#2 cm) {};
+Data in the shared memory exists only as long as the kernel exists and it cannot be accessed across different blocks. Race conditions do apply to shared memory, but threads in a block can be synchronized, thus enabling us to ensure a deterministic result. 
 
+Additionally to the shared memory, there exists global memory. Global memory is persistent even after a block or a kernel has finished, allowing for data to be copied from the host to device, and reused over a long time period and across different blocks. Global memory is however significantly slower than shared memory and it is best practice to copy data from global memory to shared memory before performing actual computations on it. After the computations have finished, the results can be written back to global memory.
 
-	\node[anchor=west] at (#1cm, #2 cm + 0.25 cm) {$Warp_#3$};
+Whilst threads within a block can be synchronized, this is not the case for the blocks launched from a kernel. The only real synchronization technique, is to wait for a kernel, meaning all blocks associated with this kernel, to finish and execute a consecutive task using another kernel. The number of blocks and the number of threads per block can be defined dynamically during runtime as seen in figure \ref{cuda:call}.
 
-}
+Since the GPU is limited in its computing and also memory capabilities, the number of blocks which are run in parallel are limited, therefore CUDA cannot give us any guarantee, weather a set of blocks are run serially or in parallel. Some of the blocks might be run in parallel, meanwhile other are run serially. This very constraint, forces the programmer to rethink algorithms and think of ways, how individual subproblems can be run somewhat independently of each other. 
 
-\newcommand{\block}[3]{
-	\node[rectangle,
-	draw = black,
-	text = black,
-	anchor = center,
-	fill = white,
-	align=center,
-	minimum width = 3cm, 
-	minimum height = 5cm] (cpu1) at (#1cm,#2cm) {};
-	
-	\node[anchor=west] at (#1cm, #2 + 2.25 cm) {$Block_#3$};
-	
-
-	\warp{#1}{#2+1.25}{0};
-	\warp{#1}{#2+0.25}{1};
-	\warp{#1}{#2-1.25}{k};
-
-	
-	\node  at (#1 cm,#2 -0.4cm) [circle, fill, inner sep=0.5pt] {};
-	\node  at (#1 cm,#2-0.5cm) [circle, fill, inner sep=0.5pt] {};
-	\node  at (#1 cm,#2 -0.6cm) [circle, fill, inner sep=0.5pt] {};
-	
-	
-	\node[rectangle,
-	draw = black,
-	text = black,
-	anchor = center,
-	fill = yellow,
-	align=center,
-	minimum width = 3cm, 
-	minimum height = 1cm] (cpu1) at (#1 cm,#2 -2.5cm) {};
-	\node[anchor=center] at (#1 cm, #2 -2.25 cm) {$Shared Memory$};
-}
+There exists however a way to communicate between blocks in a safe way. Atomic operations can be performed on global memory without any race conditions.
 
 \begin{figure}[H]
 	\begin{center}
@@ -2273,9 +2246,19 @@ Each kernel is executed exactly once for every thread and has private local memo
 			anchor = center,
 			align=center,
 			minimum width = 11.5cm, 
-			minimum height = 9cm] (cpu1) at (3.75 cm, -1cm) {};
-			\node[anchor=center] at (3.75 cm, -4 cm) {$Global Memory$};
+			minimum height = 7.5cm] (cpu1) at (3.75 cm, -0.75cm) {};
+			\node[anchor=center] at (9 cm, 2.75 cm) {$GPU$};
 			
+			\node[rectangle,
+			draw = black,
+			text = black,
+			anchor = center,
+			align=center,
+			minimum width = 11.5cm, 
+			minimum height = 1.5cm] (cpu1) at (3.75 cm, -6cm) {};
+			\node[anchor=center] at (9 cm, -5.5 cm) {$CPU$};
+			
+		
 			\block{0}{0}{0}
 			\block{3.2}{0}{1}
 			\block{7.4}{0}{n}
@@ -2292,9 +2275,9 @@ Each kernel is executed exactly once for every thread and has private local memo
 			anchor = center,
 			fill = yellow,
 			align=center,
-			minimum width = 10.5cm, 
+			minimum width = 11.5cm, 
 			minimum height = 1cm] (cpu1) at (3.75 cm,-4cm) {};
-			\node[anchor=west] at (3.75 cm, -4 cm) {$Global Memory$};
+			\node[anchor=west] at (2.5 cm, -4 cm) {$Global Memory$};
 			
 			
 			
@@ -2304,11 +2287,7 @@ Each kernel is executed exactly once for every thread and has private local memo
 	\end{center}
 \end{figure}
 
-Each block has access to shared memory register, where the capacity of this register can also be defined at runtime by the host, the maximum shared memory size depends on the hardware but usually we have 48kB per block available. There are also upper limits for the number of threads per block, usually around 512 to 1024. With a shared memory size of 48kb and 1024 threads we get $\frac{48000b}{1024} = 46b$ per thread. This is equivalent to one float per thread. However usually we do not max out the thread counts per block, leaving us with more shared memory space per thread.Data in the shared memory exists only as long as the kernel exists and it cannot be accessed across different blocks. Kernel code can perform fast read and write operations on the shared memory. 
-
-Additionally to the shared memory, there exists global memory. Global memory is persistent even after a block or a kernel has finished. This allows for memory to be copied from the host to device, and reused over a long time period and across different blocks. Global memory is however a lot slower than shared memory and it is generally advised to copy data from global memory to shared memory before performing actual computations. After the computations have finished, the results can be written back to global memory.
-
-Another important concept are warps. Each warp consists of 32 threads and all threads within a warp are executed in parallel, given that there is no warp divergence. Because warps are executed in parallel, there is no need for synchronization. A warp divergence can occur, if there is a control statements within a warp, where two or more threads from the same warp execute a different code. This leads to a decrease in performance and should be avoided whenever possible.
+Finally we have warps. Each warp consists of 32 threads and all threads within a warp are executed in parallel, given that there is no warp divergence. Because warps are executed in parallel, there is no need for synchronization. A warp divergence can occur, if there is a control statements within a warp, where two or more threads from the same warp execute a different code. This leads to a decrease in performance and should be avoided whenever possible.
 
 \begin{figure}
 	\begin{center}
@@ -2388,7 +2367,7 @@ We execute the reduction kernel once for each cell, where we distribute the part
 
 
 
-\begin{figure}
+\begin{figure}[H]
 	\begin{lstlisting}[language=c++]
 template <unsigned int blockSize>
 extern __global__ void reduce(

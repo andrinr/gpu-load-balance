@@ -1,0 +1,56 @@
+
+\newcommand{\warp}[3]{
+	
+	\foreach \i in {0,...,32}
+	{
+		\draw[orange, snake it] (#1 cm - 1.2 cm + 2.4 / 32 * \i cm,#2 cm - 0.3 cm) to
+		(#1 cm - 1.2 cm + 2.4 / 32 * \i cm,#2 cm + 0.3 cm);
+		
+	}
+	
+	\node[rectangle,
+	draw = black,
+	text = black,
+	anchor = center,
+	align=center,
+	minimum width = 2.8cm, 
+	minimum height = 1cm] at (#1cm,#2 cm) {};
+	
+	
+	\node[anchor=west] at (#1cm, #2 cm + 0.25 cm) {$Warp_#3$};
+	
+}
+
+\newcommand{\block}[3]{
+	\node[rectangle,
+	draw = black,
+	text = black,
+	anchor = center,
+	fill = white,
+	align=center,
+	minimum width = 3cm, 
+	minimum height = 5cm] (cpu1) at (#1cm,#2cm) {};
+	
+	\node[anchor=west] at (#1cm, #2 + 2.25 cm) {$Block_#3$};
+	
+	
+	\warp{#1}{#2+1.25}{0};
+	\warp{#1}{#2+0.25}{1};
+	\warp{#1}{#2-1.25}{k};
+	
+	
+	\node  at (#1 cm,#2 -0.4cm) [circle, fill, inner sep=0.5pt] {};
+	\node  at (#1 cm,#2-0.5cm) [circle, fill, inner sep=0.5pt] {};
+	\node  at (#1 cm,#2 -0.6cm) [circle, fill, inner sep=0.5pt] {};
+	
+	
+	\node[rectangle,
+	draw = black,
+	text = black,
+	anchor = center,
+	fill = yellow,
+	align=center,
+	minimum width = 3cm, 
+	minimum height = 1cm] (cpu1) at (#1 cm,#2 -2.5cm) {};
+	\node[anchor=center] at (#1 cm, #2 -2.5 cm) {$Shared Memory$};
+}
