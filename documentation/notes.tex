@@ -622,7 +622,7 @@ Since $d_{cellLeft} - d_{cellRight}$ must always be $\leq 1$, it must hold that 
 \begin{figure}
 	
 	\begin{algorithm}[H]
-		\caption{The ORB main routine}\label{euclid}
+		\caption{The ORB main routine}\label{proc:orbmain}
 		\begin{algorithmic}[1]
 			\Procedure{orb}{$\vec{lower}, \vec{upper}, d$}
 			\State $\vec{size} = \vec{upper} - \vec{lower}$
@@ -1952,7 +1952,7 @@ We have observed cases, where iterating over a blitz array does not enable AVX, 
 
 \subsection{Mapping cells to particles}
 
-Since only the operative needs to keep track of the cells, we need a separate data-structure which defines the range of particles which are encompassed inside the volume of a cell, for each thread. We solve this problem with a 2D array, where we map from a cell ID to its start index in the particles array, as well as its end index. Of course, this array needs to be updated each time we perform a reshuffling.
+Since only the operative needs to keep track of the cells, we need a separate data-structure which defines the range of particles which are encompassed inside the volume of a cell, for each thread. We solve this problem with a 2D array, where we map from a cell ID to its start index in the particles array, as well as its end index. Of course, this array needs to be updated each time we perform a partition.
 
 \subsection{Cell}
 
@@ -2011,6 +2011,7 @@ As with all heap data-structures we have the following conditions:
 		]
 	\end{forest}
 	\caption{Tree with $d$ = 3}
+	\label{fig:extree}
 \end{figure}
 
 \vspace{0.5cm}
@@ -2024,7 +2025,7 @@ We can derive the following constraints given the number of leaf cells $d$. The 
 	\item The total number of cells are $2\times d - 1$.
 \end{itemize}
 
-If we apply the formulas to the example tree we can observe that the depth indeed corresponds to: $\lceil log_2(d) \rceil = 2$. The number of leaves on the second last level are  $2^{2} - 3 = 1$ and the number of leaves on the last level are $2 \times 3 - 2^{2} = 2$. Finally the total number of cells is $2\times 3 - 1 = 5$.
+In the example tree depicted in figure \ref{fig:extree} we indeed observe that the depth corresponds to: $\lceil log_2(d) \rceil = 2$, the number of leaves on the second last level is  $2^{2} - 3 = 1$ and the number of leaves on the last level are $2 \times 3 - 2^{2} = 2$. Finally the total number of cells is $2\times 3 - 1 = 5$.
 
 \subsubsection{Class}
 The cell class consists of the following variables:
@@ -2039,46 +2040,12 @@ The cell class consists of the following variables:
 
 The cell class has some helpful helper functions. \TODO{extend}
 
-\subsection{Operative}
-
-\TODO{Check if loop is really better when iterative. Or maybe dont argue too much}
-Since the recursive version as shown in \ref{proc:orb} is not very compiler friendly, meaning its hard to properly optimize it at compile time, we introduce another non recursive version.
-
-\TODO{Write here in pseudcode as C++ version to long}
-\begin{figure}
-	
-	\begin{algorithm}[H]
-		\caption{Unrolled ORB main routine}\label{euclid}
-		\begin{algorithmic}[1]
-			\Procedure{orb}{$\vec{lower}, \vec{upper}, d$}
-			\State $\vec{size} = \vec{upper} - \vec{lower}$
-			\State $i = maxIndex(\vec{size}_0, \vec{size}_1, \vec{size}_2)$ \Comment{Get index of max value}
-			\newline
-			\State $d^\prime_{i \times 2 } = \left \lceil\frac{d}{2} \right \rceil$
-			
-			\State $cut = cut(\vec{lower}_{i}, \vec{upper}_{i}, i, \frac{d^\prime}{d} )$
-			\State $mid = partition(split, axis)$
-			\newline
-			
-			\State $\vec{upper^\prime} = \vec{upper}$
-			\State $upperChild_{i} = cut$
-			\State $\vec{lower^\prime} = \vec{lower}$
-			\State $lowerChild_{i} = cut$
-			\newline
-			
-			\State \Call{orb}{$\vec{lower}, \vec{upper^\prime}, d^\prime $}
-			\State \Call{orb}{$\vec{lower^\prime}, \vec{upper}, d - d^\prime $}
-			\EndProcedure
-		\end{algorithmic}
-	\end{algorithm}
-	\label{proc:orb2}
-\end{figure}
 
 \subsection{Services}
 
 \TODO{Describe this in more detail}
 
-As required by mdl, we make use of services, which are essentially a collection of functions which can be sent to any set of processors in the computing system. We abstract every performance critical part of the orb main runtime, which can parallelized and distributed among processors.
+As required by mdl, we make use of services, which are essentially a collection of functions which can be sent to any set of processors in the computing system. 
 
 The services we have implemented and which are crucial for the CPU version are:
 
@@ -2089,6 +2056,16 @@ The services we have implemented and which are crucial for the CPU version are:
 	\item $count$ : Counts the total number particles inside the domain for each of the provided cells.
 	\item $partition$ : Partitions the particles to preserve memory locality.
 \end{itemize}
+
+\subsection{Operative}
+
+
+The operative is essentially a C++ implementation of the code shown in figure \ref{proc:orbmain}. Since recursive algorithms are harder to optimize for the compiler, we use a for loop instead.
+
+The main task of the operative is to coordinate all services and interpret their results. 
+
+
+
 
 \subsubsection{Count Left}
 
@@ -2192,49 +2169,54 @@ On line 31 till 37 we also update the cellToRangeMap in order to reflect the cha
 \end{figure}
 
 \newpage
-\section{GPU Implementations}\label{sec:gpuimpl}
+\section{GPU Implementation}\label{sec:gpuimpl}
 
 CUDA is programming language developed by NVIDIA allowing us to write code which is run directly on the graphics card.
 
-We will implement two GPU accelerated versions:
-\begin{itemize}
-	\item \textbf{Version A}: GPU Accelerated Count Left
-	\item \textbf{Version B}: GPU Accelerated Count Left and Partition
-\end{itemize}
-
-Note that the total number of particles, which can be simulated, will be reduced in both implementations, as the GPU memory is a lot smaller than the CPU memory. One could propose to load and offload several batches from the CPU to GPU but, this comes with a significant overhead due to the slow memory bandwidth between the CPU and the GPU $I_{GC}$
+Note that the total number of particles, which can be simulated, will be reduced in both implementations, as the GPU memory is a lot smaller than the CPU memory. One could propose to load and offload several batches from the CPU to GPU but, this comes with a significant overhead due to the slow memory bandwidth between the CPU and the GPU $I_{GC}$.
 
 
 \subsection{Relevant CUDA Concepts}
 
-CUDA gives us the ability to launch kernels, which are written in C with some additional CUDA specific syntax. These kernel can be run from the CPU, commonly refereed to as the host, and are then executed on the GPU, also known as the device. The device and the host have a separate memory and as seen in section \ref{sec:gmm} the transfer $I_{CG}$ rates between the GPU and CPU are generally slower, under performing $I_{C}$ and $I_G$ speeds. Therefore one of key the challenges when rewriting CPU code to GPU code is to limit data transfers between the GPU and CPU as much as possible.
+CUDA gives us the ability to launch kernels, which are written in C with some additional CUDA specific syntax. These kernel can be run from the CPU, commonly refereed to as the host, and are then executed on the GPU, also known as the device. The device and the host have a separate memory and as seen in section \ref{sec:gmm} the transfer $I_{CG}$ rates between the GPU and CPU are generally slower, under performing $I_{C}$ and $I_G$ speeds. Therefore one of key the challenges when rewriting CPU code to GPU code is to limit data transfers between the GPU and CPU as much as possible. Furthermore we have divide our problems into subproblems, where each subproblem is then executed on a block. CUDA cannot give any guarantees considering the order of execution of these blocks, therefore we have to fundamentally rethink algorithms when porting them from CPU to GPU code, where some algorithms are more or less fitted. Generally we only think about problems which are applied on large data arrays, the less connection between the individual results exists, the easier it is to implement an GPU version of the computation. Furthermore we can assume that problems with less branching work better on the GPU due to various reasons, which we will explain in detail later. 
+
+Building a tree is therefore a rather challenging problem as there are many computations which influence another and building a tree involves a lot of branching, at least when it is done in a conventional manner. 
 
 \begin{figure}[H]
 	\begin{lstlisting}[language=c++]
-reduce<<<
+add<<<
 	nBlocks,
 	nThreads,
 	nThreads * bytesPerThread,
 	stream
 >>>(
-	param
+	param1,
+	param2
 );
 	\end{lstlisting}
 \caption{Calling a CUDA kernel}
 \label{cuda:call}
 \end{figure}
 
-Each kernel is executed exactly once for every thread and has private local memory, only accessible by the thread. Furthermore each kernel is part of a block, where a typical kernel is usually called with hundreds to thousands of blocks. Each block has access to shared memory register, where the capacity of this register can be defined at runtime by the host. The maximum shared memory size depends on the hardware but usually there are 48kB per block available. There are also upper limits for the number of threads per block, usually around 512 to 1024. With a shared memory size of 48kb and 1024 threads we get $\frac{48000b}{1024} = 46b$ per thread. This is equivalent to a little bit more than one float per thread. However usually we do not max out the thread counts per block, leaving us with more shared memory space per thread. 
+A kernel is executed exactly once for every kernel, where a block consists of many kernels. The number of kernels per block and the total number of blocks can be defined by the user as seen in the kernel call syntax in figure \ref{cuda:call} on line 2 and 3. 
 
-Data in the shared memory exists only as long as the kernel exists and it cannot be accessed across different blocks. Race conditions do apply to shared memory, but threads in a block can be synchronized, thus enabling us to ensure a deterministic result. 
 
-Additionally to the shared memory, there exists global memory. Global memory is persistent even after a block or a kernel has finished, allowing for data to be copied from the host to device, and reused over a long time period and across different blocks. Global memory is however significantly slower than shared memory and it is best practice to copy data from global memory to shared memory before performing actual computations on it. After the computations have finished, the results can be written back to global memory.
+\subsubsection{Warps}
 
-Whilst threads within a block can be synchronized, this is not the case for the blocks launched from a kernel. The only real synchronization technique, is to wait for a kernel, meaning all blocks associated with this kernel, to finish and execute a consecutive task using another kernel. The number of blocks and the number of threads per block can be defined dynamically during runtime as seen in figure \ref{cuda:call}.
+Each consecutive grouping of 32 threads form a warp. All threads within a warp are executed in parallel, given that there is no warp divergence. Because warps are executed in parallel, there is no need for synchronization between the threads of the same warp. A warp divergence can occur, if there is a control statements, where two or more threads from the same warp execute a different code. This leads to a decrease in performance and should be avoided whenever possible.
 
-Since the GPU is limited in its computing and also memory capabilities, the number of blocks which are run in parallel are limited, therefore CUDA cannot give us any guarantee, weather a set of blocks are run serially or in parallel. Some of the blocks might be run in parallel, meanwhile other are run serially. This very constraint, forces the programmer to rethink algorithms and think of ways, how individual subproblems can be run somewhat independently of each other. 
+\subsubsection{Memory}
 
-There exists however a way to communicate between blocks in a safe way. Atomic operations can be performed on global memory without any race conditions.
+Each block has access to shared memory register, where the capacity of this register can be defined at runtime by the host as seen in figure \ref{cuda:call} on line 4. The maximum shared memory size depends on the hardware but usually there are 48kB per block available. There are also upper limits for the number of threads per block, usually \TODO{B or b??} around 512 to 1024. With a shared memory size of 48kb and 1024 threads we get $\frac{48000b}{1024} = 46b$ per thread. This is equivalent to a little bit more than one float per thread. However usually we do not max out the thread counts per block, leaving us with more shared memory space per thread. 
+
+Data in the shared memory exists only as long as the kernel exists and it cannot be accessed across different blocks. Race conditions do apply to shared memory, but threads in a block can be synchronized, therefore it is not safe to have writes from multiple threads on the same shared memory address. There exists a CUDA command $\_\_synchtreads()$ which allows us to synchronize all threads within a block, enabling us to control the execution order of individual statements.
+
+Additionally to the shared memory, there exists global memory. Global memory is persistent even after a block or a kernel has finished and is the only way to send data between the device and the host. Since the data is not deleted after a kernel has finished, we can and should reuse the data whenever possible for other kernels, reducing the memory transfer overhead. Global memory is significantly slower than shared memory and it is best practice to copy data from global memory to shared memory before performing actual computations on it, thus reducing the total number of memory accesses on global memory. After the computations have finished, the results can be written back from shared to global memory.
+
+\subsubsection{Memory Access Patterns}
+
+\TODO{Write about this}
+
 
 \begin{figure}[H]
 	\begin{center}
@@ -2258,7 +2240,7 @@ There exists however a way to communicate between blocks in a safe way. Atomic o
 			minimum height = 1.5cm] (cpu1) at (3.75 cm, -6cm) {};
 			\node[anchor=center] at (9 cm, -5.5 cm) {$CPU$};
 			
-		
+			
 			\block{0}{0}{0}
 			\block{3.2}{0}{1}
 			\block{7.4}{0}{n}
@@ -2268,7 +2250,7 @@ There exists however a way to communicate between blocks in a safe way. Atomic o
 			\node  at (5.3cm,0cm) [circle, fill, inner sep=0.5pt] {};
 			\node  at (5.4cm,0cm) [circle, fill, inner sep=0.5pt] {};
 			
-
+			
 			\node[rectangle,
 			draw = black,
 			text = black,
@@ -2279,16 +2261,17 @@ There exists however a way to communicate between blocks in a safe way. Atomic o
 			minimum height = 1cm] (cpu1) at (3.75 cm,-4cm) {};
 			\node[anchor=west] at (2.5 cm, -4 cm) {$Global Memory$};
 			
-			
-			
-			
-			
 		\end{tikzpicture}
 	\end{center}
 \end{figure}
 
-Finally we have warps. Each warp consists of 32 threads and all threads within a warp are executed in parallel, given that there is no warp divergence. Because warps are executed in parallel, there is no need for synchronization. A warp divergence can occur, if there is a control statements within a warp, where two or more threads from the same warp execute a different code. This leads to a decrease in performance and should be avoided whenever possible.
+\subsubsection{Synchronization}
 
+Whilst threads within a block can be synchronized, this is not the case for the blocks launched from a kernel. The only real synchronization technique, is to wait for a kernel, meaning all blocks associated with this kernel, to finish and execute a consecutive task using another kernel. 
+
+Since the GPU is limited in its computing and also memory capabilities, the number of blocks which are run in parallel are limited, therefore CUDA cannot give us any guarantee, weather a set of blocks are run serially or in parallel. Some of the blocks might be run in parallel, meanwhile others are run serially. This very constraint, forces the programmer to rethink algorithms and think of ways, how individual subproblems can be run somewhat independently of each other. 
+
+There exists however a way to communicate between blocks in a safe way. Atomic operations can be performed on global memory without any race conditions.
 \begin{figure}
 	\begin{center}
 		\begin{tikzpicture}
@@ -2309,9 +2292,10 @@ Finally we have warps. Each warp consists of 32 threads and all threads within a
 	\label{u}
 \end{figure}
 
-Our primary focus for optimization is the binary cut algorithm, more specifically the counting method. Its implementation in CUDA is straight forward and performance improvement are guaranteed as shown in section \TODO{add reference}. 
 
 \subsection{GPU Accelerated Count Left}
+
+
 We have described a CPU implementation of the countLeftService. In this section we explain how we can port this problem to the GPU. In essence we can use a general reduction as a basis version, and adapt it to sum up up elements which fulfill a certain condition, where the condition is being smaller than a given value.
 
 Optimized reductions in CUDA are well documented and explained by the NVIDIA developer team. We make use of a reduction introduced by \TODO{Reference} and adapt it slightly to fit our needs. We will reiterate over the important optimization aspects and finally point out the specific adaptations we have made. 
@@ -2360,6 +2344,51 @@ while (i < n) {
 __syncthreads();
 \end{lstlisting}
 
+\newcommand{\kernel}[3]{
+\foreach \i in {1,...,#3}
+{
+	\draw[darkgray, line width=4pt] 
+	({#1 cm / #3 cm * (\i-1 cm)  - 0.2 cm * (\i-1 cm)} ,#2 cm) -- 
+	+({(#1 cm / #3 cm)  - 0.2 cm}, 0cm);
+	
+}
+}
+	
+
+\begin{figure}
+	\begin{center}
+		\begin{tikzpicture}
+			% draw horizontal line   
+			\kernel{10}{4}{4};
+			
+			\draw[thick, -Triangle] (-0.5cm,0cm) -- (-.5cm,-3cm) node[font=\scriptsize,below left=3pt and -8pt]{t};
+			
+			% l1
+			\draw[darkgray, line width=4pt] 
+			(0,0) -- +(12,0);
+			
+			% l2
+			\draw[darkgray, line width=4pt] 
+			(0cm,-1cm) -- +(4.75cm,0);
+			
+			\draw[darkgray, line width=4pt] 
+			(5.25cm,-1cm) -- +(4.75cm,0);
+			
+			
+			\draw[darkgray, line width=4pt] 
+			(0cm,-2cm) -- +(2.25cm,0);
+			
+			\draw[darkgray, line width=4pt] 
+			(2.75cm,-2cm) -- +(2.25cm,0);
+
+
+			
+		\end{tikzpicture}
+	\end{center}
+	\caption{timeline}
+	\label{u}
+\end{figure}
+
 In our version we do not add up two elements with each iteration of the loop. This ensures that no memory access is attempted on global memory which is out of bounds. In the original version, if one is not careful, segmentation faults can occur on the GPU. Furthermore there are no performance penalties as we can simply increase the elements per thread if we wish to increase thread occupancy.
 
 
@@ -2369,53 +2398,62 @@ We execute the reduction kernel once for each cell, where we distribute the part
 
 \begin{figure}[H]
 	\begin{lstlisting}[language=c++]
+
 template <unsigned int blockSize>
 extern __global__ void reduce(
-	float*g_idata,
-	unsigned int*g_odata, 
-	float cut, int n) {
-	extern __shared__ int sdata[];
+float * g_idata,
+unsigned int * g_begins,
+unsigned int * g_ends,
+float * g_cuts,
+unsigned int * a_index,
+unsigned int * g_odata) {
+	
+	__shared__ unsigned int s_data[blockSize];
+	__shared__ unsigned int s_index;
 	
 	unsigned int tid = threadIdx.x;
-	unsigned int i = blockIdx.x*(blockSize) + threadIdx.x;
-	unsigned int gridSize = blockSize*gridDim.x;
-	sdata[tid] = 0;
 	
-	while (i < n) {
-		sdata[tid] += (g_idata[i] <= cut);
-		i += gridSize;
+	if (tid == 0) {
+		s_index = atomicAdd(a_index, 1);
+	}
+	__syncthreads();
+	
+	const unsigned int begin = g_begins[s_index];
+	const unsigned int end = g_ends[s_index];
+	const float cut = g_cuts[s_index];
+	
+	unsigned int i = begin + tid;
+	//const unsigned int gridSize = blockSize*gridDim.x;
+	s_data[tid] = 0;
+	
+	while (i < end) {
+		s_data[tid] += (g_idata[i] <= cut);
+		i += blockSize;
 	}
 	__syncthreads();
 	
 	if (blockSize >= 512) {
-		if (tid < 256) {sdata[tid] += sdata[tid + 256];}
+		if (tid < 256) {
+			s_data[tid] += s_data[tid + 256];
+		}
 		__syncthreads();
 	}
 	if (blockSize >= 256) {
-		if (tid < 128) {sdata[tid] += sdata[tid + 128];}
-		 __syncthreads();
+		if (tid < 128) {
+			s_data[tid] += s_data[tid + 128];
+		} __syncthreads();
 	}
 	if (blockSize >= 128) {
-		if (tid < 64) {sdata[tid] += sdata[tid + 64];}
-		 __syncthreads();
+		if (tid < 64) {
+			s_data[tid] += s_data[tid + 64];
+		} __syncthreads();
 	}
 	if (tid < 32) {
-		warpReduce<blockSize>(sdata, tid);
+		warpReduce<blockSize>(s_data, tid);
 	}
 	if (tid == 0) {
-		g_odata[blockIdx.x] = sdata[0];
+		g_odata[s_index] = s_data[0];
 	}
-}
-
-template <unsigned int blockSize>
-extern __device__ void warpReduce(
-volatile int *sdata, unsigned int tid) {
-	if (blockSize >= 64) sdata[tid] += sdata[tid + 32];
-	if (blockSize >= 32) sdata[tid] += sdata[tid + 16];
-	if (blockSize >= 16) sdata[tid] += sdata[tid + 8];
-	if (blockSize >= 8) sdata[tid] += sdata[tid + 4];
-	if (blockSize >= 4) sdata[tid] += sdata[tid + 2];
-	if (blockSize >= 2) sdata[tid] += sdata[tid + 1];
 }
 	\end{lstlisting}
 	\label{cuda:reduction}
