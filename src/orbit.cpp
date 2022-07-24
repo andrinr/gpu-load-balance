@@ -9,7 +9,7 @@
 #include "services/countLefGPU.h"
 #include "services/countLeftGPUAtomic.h"
 #include "services/countLeftAxis.h"
-#include "services/copyToDevice.h"
+#include "services/copyParticles.h"
 #include "services/finalize.h"
 #include "services/partitionGPU.h"
 #include "services/partition.h"
@@ -83,9 +83,9 @@ int master(MDL vmdl,void *vpst) {
 
         // Copy with each iteration as partition is done on CPU
         if (params.GPU_COUNT && not params.GPU_PARTITION) {
-            ServiceCopyToDevice::input iCopy {params};
-            ServiceCopyToDevice::output oCopy[1];
-            mdl->RunService(PST_COPYTODEVICE, sizeof (ServiceCopyToDevice::input), &iCopy, oCopy);
+            ServiceCopyParticles::input iCopy {params};
+            ServiceCopyParticles::output oCopy[1];
+            mdl->RunService(PST_COPYPARTICLES, sizeof (ServiceCopyToDevice::input), &iCopy, oCopy);
         }
 
         // Loop
@@ -216,7 +216,7 @@ void *worker_init(MDL vmdl) {
     mdl->AddService(std::make_unique<ServiceCountLeft>(pst));
     mdl->AddService(std::make_unique<ServiceInit>(pst));
     mdl->AddService(std::make_unique<ServiceCount>(pst));
-    mdl->AddService(std::make_unique<ServiceCopyToDevice>(pst));
+    mdl->AddService(std::make_unique<ServiceCopyParticles>(pst));
     mdl->AddService(std::make_unique<ServiceCountLeftGPU>(pst));
     mdl->AddService(std::make_unique<ServiceCountLeftGPUAtomic>(pst));
     mdl->AddService(std::make_unique<ServiceCountLeftAxisGPU>(pst));

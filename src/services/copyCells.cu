@@ -1,13 +1,13 @@
-#include "copyToDevice.h"
+#include "copyParticles.h"
 #include <blitz/array.h>
 #include <vector>
 #include "../constants.h"
 // Make sure that the communication structure is "trivial" so that it
 // can be moved around with "memcpy" which is required for MDL.
-static_assert(std::is_void<ServiceCopyToDevice::input>()  || std::is_trivial<ServiceCopyToDevice::input>());
-static_assert(std::is_void<ServiceCopyToDevice::output>() || std::is_trivial<ServiceCopyToDevice::output>());
+static_assert(std::is_void<ServiceCopyParticles::input>()  || std::is_trivial<ServiceCopyParticles::input>());
+static_assert(std::is_void<ServiceCopyParticles::output>() || std::is_trivial<ServiceCopyParticles::output>());
 
-int ServiceCopyToDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
+int ServiceCopyParticles::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     // store streams / initialize in local data
     auto lcl = pst->lcl;
     ServiceCopyToDevice::input in = *static_cast<input *>(vin);
@@ -59,7 +59,7 @@ int ServiceCopyToDevice::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     return sizeof(output);
 }
 
-int ServiceCopyToDevice::Combine(void *vout,void *vout2,int nIn,int nOut1,int nOut2) {
+int ServiceCopyParticles::Combine(void *vout,void *vout2,int nIn,int nOut1,int nOut2) {
 
     return 0;
 }

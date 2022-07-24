@@ -2213,10 +2213,12 @@ Data in the shared memory exists only as long as the kernel exists and it cannot
 
 Additionally to the shared memory, there exists global memory. Global memory is persistent even after a block or a kernel has finished and is the only way to send data between the device and the host. Since the data is not deleted after a kernel has finished, we can and should reuse the data whenever possible for other kernels, reducing the memory transfer overhead. Global memory is significantly slower than shared memory and it is best practice to copy data from global memory to shared memory before performing actual computations on it, thus reducing the total number of memory accesses on global memory. After the computations have finished, the results can be written back from shared to global memory.
 
+\subsubsection{Asynchronous Operations}
+
+
 \subsubsection{Memory Access Patterns}
 
-\TODO{Write about this}
-
+Global memory is fetched from memory in 32 Byte packages, which translates to $\frac{32}{4} = 8$ floats. A simple aligned sequential memory access pattern, where each tread reads a single float from global memory, results in 4 transaction per warp (32 threads). 
 
 \begin{figure}[H]
 	\begin{center}

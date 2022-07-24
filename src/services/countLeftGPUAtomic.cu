@@ -45,6 +45,7 @@ extern __global__ void reduce(
     //const unsigned int gridSize = blockSize*gridDim.x;
     s_data[tid] = 0;
 
+    // unaligned coalesced g memory access
     while (i < end) {
         s_data[tid] += (g_idata[i] <= cut);
         i += blockSize;
