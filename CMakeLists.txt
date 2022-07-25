@@ -77,6 +77,7 @@ add_executable(
         src/services/count.cpp
         src/services/init.cu
         src/services/copyParticles.cu
+        src/services/copyCells.cu
         src/services/countLeftGPU.cu
         src/services/countLeftAxis.cu
         src/services/partition.cpp

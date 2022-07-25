@@ -100,9 +100,6 @@ int ServiceCountLeftGPUAtomic::Service(PST pst,void *vin,int nIn,void *vout, int
         int begin = beginInd;
         for (int i = 0; i < nBlocksPerCell; ++i) {
             lcl->h_cuts[blockPtr] = cell.getCut();
-            lcl->h_begins[blockPtr] = begin;
-            begin += N_THREADS * ELEMENTS_PER_THREAD;
-            lcl->h_ends[blockPtr] = min(begin, endInd);
             cellIndices.push_back(cellPtrOffset);
             blockPtr++;
         }
@@ -110,22 +107,6 @@ int ServiceCountLeftGPUAtomic::Service(PST pst,void *vin,int nIn,void *vout, int
 
         out[cellPtrOffset] = 0;
     }
-
-    //printf("nBlocks: %d\n", nBlocks);
-    CUDA_CHECK(cudaMemcpyAsync,(
-            lcl->d_begins,
-            lcl->h_begins,
-            sizeof (unsigned int) * nBlocks,
-            cudaMemcpyHostToDevice,
-            lcl->streams(0)
-    ));
-
-    CUDA_CHECK(cudaMemcpyAsync,(
-            lcl->d_ends,
-            lcl->h_ends,
-            sizeof (unsigned int) * nBlocks,
-            cudaMemcpyHostToDevice,
-            lcl->streams(0)));
 
     CUDA_CHECK(cudaMemcpyAsync,(
             lcl->d_cuts,
@@ -157,7 +138,8 @@ int ServiceCountLeftGPUAtomic::Service(PST pst,void *vin,int nIn,void *vout, int
             lcl->d_results,
             sizeof (unsigned int) * nBlocks,
             cudaMemcpyDeviceToHost,
-            lcl->streams(0)));
+            lcl->streams(0)
+    ));
 
     CUDA_CHECK(cudaStreamSynchronize,(lcl->streams(0)));
 

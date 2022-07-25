@@ -10,6 +10,7 @@
 #include "services/countLeftGPUAtomic.h"
 #include "services/countLeftAxis.h"
 #include "services/copyParticles.h"
+#include "services/copyCells.h"
 #include "services/finalize.h"
 #include "services/partitionGPU.h"
 #include "services/partition.h"
@@ -54,9 +55,9 @@ int master(MDL vmdl,void *vpst) {
 
     // Only copy once
     if (params.GPU_PARTITION) {
-        ServiceCopyToDevice::input iCopy {params};
-        ServiceCopyToDevice::output oCopy[1];
-        mdl->RunService(PST_COPYTODEVICE, sizeof (ServiceCopyToDevice::input), &iCopy, oCopy);
+        ServiceCopyParticles::input iCopy {params};
+        ServiceCopyParticles::output oCopy[1];
+        mdl->RunService(PST_COPYPARTICLES, sizeof (ServiceCopyParticles::input), &iCopy, oCopy);
     }
 
     unsigned int oCounts[MAX_CELLS];
@@ -85,7 +86,12 @@ int master(MDL vmdl,void *vpst) {
         if (params.GPU_COUNT && not params.GPU_PARTITION) {
             ServiceCopyParticles::input iCopy {params};
             ServiceCopyParticles::output oCopy[1];
-            mdl->RunService(PST_COPYPARTICLES, sizeof (ServiceCopyToDevice::input), &iCopy, oCopy);
+            mdl->RunService(PST_COPYPARTICLES, sizeof (ServiceCopyParticles::input), &iCopy, oCopy);
+        }
+
+        if (params.GPU_COUNT_ATOMIC) {
+            ServiceCopyCells::output oCopy[1];
+            mdl->RunService(PST_COPYCELLS, nCells * sizeof (ServiceCopyCells::input), iCells, oCopy);
         }
 
         // Loop
@@ -217,6 +223,7 @@ void *worker_init(MDL vmdl) {
     mdl->AddService(std::make_unique<ServiceInit>(pst));
     mdl->AddService(std::make_unique<ServiceCount>(pst));
     mdl->AddService(std::make_unique<ServiceCopyParticles>(pst));
+    mdl->AddService(std::make_unique<ServiceCopyCells>(pst));
     mdl->AddService(std::make_unique<ServiceCountLeftGPU>(pst));
     mdl->AddService(std::make_unique<ServiceCountLeftGPUAtomic>(pst));
     mdl->AddService(std::make_unique<ServiceCountLeftAxisGPU>(pst));
