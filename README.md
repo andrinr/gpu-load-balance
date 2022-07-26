@@ -44,8 +44,11 @@ Using Nvidia Nsight:
 todo
 
 ## Open questions
-- Atomic operations on arrays, how does it work?
-  - Does not interfere
-- How to do the profiling
-- l
-- 
+-ssh daint
+arehmann@ela.cscs.ch's password:
+Password:
+Password:
+Password:
+andrin@daint.cscs.ch's password:
+Received disconnect from UNKNOWN port 65535:2: Too many authentication failures
+Disconnected from UNKNOWN port 65535

@@ -23,6 +23,8 @@ public:
     unsigned int * h_begins;
     unsigned int * d_ends;
     unsigned int * h_ends;
+    unsigned int * h_nLefts;
+    unsigned int * d_nLefts;
     float * d_cuts;
     float * h_cuts;
     unsigned int * d_index;

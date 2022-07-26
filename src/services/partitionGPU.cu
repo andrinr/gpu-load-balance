@@ -178,6 +178,10 @@ __device__ void scan(volatile unsigned int * s_idata, unsigned int thid, unsigne
 
 template <unsigned int blockSize>
 __global__ void partition(
+        unsigned int * g_begins,
+        unsigned int * g_ends,
+        unsigned int * g_nLeft,
+        float * g_cuts,
         unsigned int * g_offsetLessEquals,
         unsigned int * g_offsetGreater,
         float * g_idata,
@@ -197,7 +201,6 @@ __global__ void partition(
 
     unsigned int i = blockIdx.x * blockSize * 2 + 2 * tid;
     unsigned int j = blockIdx.x * blockSize * 2 + 2 * tid + 1;
-    //unsigned int gridSize = blockSize*2*gridDim.x;
 
     bool f1, f2;
     if (i < n) {
@@ -302,9 +305,33 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     int countLeq[nCells];
     int countG[nCells];
 
+    std::vector<unsigned  int> cellIndices;
+
     CUDA_CHECK(cudaMemset, (lcl->d_offsetLeq, 0, sizeof(unsigned int) * nCells));
     CUDA_CHECK(cudaMemset, (lcl->d_offsetG, 0, sizeof(unsigned int) * nCells));
 
+    int nBlocks = 0;
+    int blockPtr = 0;
+    for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
+        auto cell = static_cast<Cell>(*(in + cellPtrOffset));
+        unsigned int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
+        unsigned int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
+        unsigned int n = endInd - beginInd;
+
+        unsigned int nBlocksPerCell = (int) ceil((float) n / (N_THREADS * ELEMENTS_PER_THREAD));
+
+        int begin = beginInd;
+        for (int i = 0; i < nBlocksPerCell; ++i) {
+            lcl->h_nLefts[blockPtr] = lcl->h_countsLeft(cellPtrOffset);
+            cellIndices.push_back(cellPtrOffset);
+            blockPtr++;
+        }
+        nBlocks += nBlocksPerCell;
+
+        out[cellPtrOffset] = 0;
+    }
+
+    /*
     // Primary axis to temporary
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
         out[cellPtrOffset] = 0;

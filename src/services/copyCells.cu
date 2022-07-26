@@ -28,13 +28,18 @@ int ServiceCopyCells::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
         unsigned int endInd =  lcl->cellToRangeMap(cell.id, 1);
         unsigned int n = endInd - beginInd;
 
-        unsigned int nBlocksPerCell = (int) ceil((float) n / (N_THREADS * ELEMENTS_PER_THREAD));
+        unsigned int nBlocksPerCell = (int) floor((float) n / (N_THREADS * ELEMENTS_PER_THREAD));
 
         int begin = beginInd;
+        // We favour over occupying blocks than underoccupying them
         for (int i = 0; i < nBlocksPerCell; ++i) {
             lcl->h_begins[blockPtr] = begin;
             begin += N_THREADS * ELEMENTS_PER_THREAD;
-            lcl->h_ends[blockPtr] = min(begin, endInd);
+            if (i == nBlocksPerCell - 1) {
+                lcl->h_ends[blockPtr] = endInd;
+            } else {
+                lcl->h_ends[blockPtr] = begin;
+            }
             blockPtr++;
         }
         nBlocks += nBlocksPerCell;

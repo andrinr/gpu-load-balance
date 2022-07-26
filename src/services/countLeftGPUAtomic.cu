@@ -27,22 +27,13 @@ extern __global__ void reduce(
         unsigned int * g_odata) {
 
     __shared__ unsigned int s_data[blockSize];
-    //__shared__ unsigned int s_index;
 
     unsigned int tid = threadIdx.x;
-
-    /*
-    if (tid == 0) {
-        s_index = atomicAdd(a_index, 1);
-    }
-    __syncthreads();*/
-
     const unsigned int begin = g_begins[blockIdx.x];
     const unsigned int end = g_ends[blockIdx.x];
     const float cut = g_cuts[blockIdx.x];
 
     unsigned int i = begin + tid;
-    //const unsigned int gridSize = blockSize*gridDim.x;
     s_data[tid] = 0;
 
     // unaligned coalesced g memory access
@@ -95,7 +86,7 @@ int ServiceCountLeftGPUAtomic::Service(PST pst,void *vin,int nIn,void *vout, int
         unsigned int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
         unsigned int n = endInd - beginInd;
 
-        unsigned int nBlocksPerCell = (int) ceil((float) n / (N_THREADS * ELEMENTS_PER_THREAD));
+        unsigned int nBlocksPerCell = (int) floor((float) n / (N_THREADS * ELEMENTS_PER_THREAD));
 
         int begin = beginInd;
         for (int i = 0; i < nBlocksPerCell; ++i) {
