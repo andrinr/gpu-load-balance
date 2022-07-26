@@ -1,6 +1,6 @@
 
 for j in $(seq 0 $1); do 
-    rm out/measurements$((2**$j)).csv
+    rm measurements$((2**$j)).csv
     touch out/measurements$((2**$j)).csv
 
     echo "time, N, np" >> out/measurements$((2**$j)).csv

@@ -815,113 +815,6 @@ Finally we partition $cell_2$ into $cell_4$ and $cell_5$ with the cut position 0
 
 Note how all particles from $cell_4$ are contained in the range of 0-1. The particles of $cell_5$ in 2-3 and finally the particles contained in the volume of $cell_3$ can be found in 4-7.
 
-\subsection{Parallelize ORB }\label{sec:parellize-orb}
-
-In the context of parallelization, we define the number of processors as $np$. When the goal of the algorithm is workload balancing, we will want to set $d = np$ to end up with exactly as many leaf cells as we have processors. In the context of a supercomputing system $np$ is usually equivalent to the number of nodes in the system.
-
-Initially we assume that each processor has a random unique subset of all the particles stored in its memory, this has two reasons. For one we run into memory limitations quickly when trying to load all the particles onto a single node, furthermore memory bandwidths limitations can be multiplied by the number of processors and are thus a lot higher. 
-
-Let us now apply this to our running example where we have 3 nodes.
-
-\begin{figure}[H]
-	
-	\centering
-	\begin{tikzpicture}
-		\begin{axis}
-			[
-			nodes near coords,
-			xmin=-0.,
-			xmax=1.,
-			ymin=-0.,
-			ymax=1.,
-			title=Recursion depth 0,
-			legend cell align=left
-			]
-			
-			\addplot    +[
-			only marks,
-			point meta=explicit symbolic,
-			restrict expr to domain={\thisrow{o1}}{0:0}, 
-			] table [
-			x=x, 
-			y=y, 
-			meta=id, 
-			col sep=comma] 
-			{particles10.csv};
-			
-			\addplot    +[
-			only marks,
-			point meta=explicit symbolic,
-			restrict expr to domain={\thisrow{o1}}{1:1}, 
-			] table [
-			x=x, 
-			y=y, 
-			meta=id, 
-			col sep=comma] 
-			{particles10.csv};
-			
-			\addplot    +[
-			only marks,
-			point meta=explicit symbolic,
-			restrict expr to domain={\thisrow{o1}}{2:2}, 
-			] table [
-			x=x, 
-			y=y, 
-			meta=id, 
-			col sep=comma] 
-			{particles10.csv};
-			
-			\legend{$p0$,$p1$,$p3$}
-			
-			%\draw [fill=red!20](0.0,0.0) rectangle (1, 1);
-			%\node[below] at (0.5, 1){$cell_1$};
-		\end{axis}
-	\end{tikzpicture}
-	\caption{Example particles distributed randomly across 3 nodes}
-\end{figure}
-
-The ORB algorithm is only executed form the operative node, all other nodes are purely worker nodes and perform certain parts of the algorithm. In our case one of the most performance intensive tasks is found on line 6 from the cut procedure as seen in figure \ref{proc:cut}. Not only is it costly, its also a task that can only be executed from the node, which owns the particles array, i.e. its stored in its memory. Therefore the worker nodes count the number of particles on the left side of a 2D cut plane individually and send back the results to the operative thread as seen in figure \ref{fig:orbp}. Besides the counting we also have the partitioning which also concerns the particles array and thus can only be executed by its corresponding owner. Consequently the procedure is also executed on the worker nodes individually. Note that the operative node can also perform work, thus become a worker node at times. This can be seen in figure \ref{fig:orbp}, where p0 is the operative node, but still performs partition and counting operations.
-
-\begin{figure}[H]
-	\begin{center}
-		\begin{tikzpicture}
-			
-			\timeline{6}{16}{3}
-			
-			
-			\parallelloop{-2}{15.5}{8}{0.5}{loop till desired tree depth is reached};
-			
-			\parallelloop{-1}{11.5}{7}{3.5}{loop till cut found};
-			
-			\communication{Broadcast cells}{0}{7}{15};
-			
-			\process{partition}{0}{14};
-			\process{partition}{2}{14};
-			\process{partition}{4}{14};
-			\process{partition}{6}{14};
-			
-			\process{compute\\ cut}{0}{11};
-			
-			
-			\communication{Broadcast cut from operative}{0}{7}{8};
-			
-			\process{count \& \\ count left}{0}{7};
-			\process{count \& \\ count left}{2}{7};
-			\process{count \& \\ count left}{4}{7};
-			\process{count \& \\ count left}{6}{7};
-			
-			
-			\communication{Reduce count to operative}{0}{7}{4};
-			
-			\process{generate\\ new \\ cells}{0}{3};
-			
-		\end{tikzpicture}
-	\end{center}
-	\caption{Parallelized ORB for np = 4}
-	\label{fig:orbp}
-\end{figure}
-
-
 \begin{comment}
 \subsubsection{Global Partitioning}
 
@@ -1329,6 +1222,7 @@ Arithmetic intensity is usually measured in FLOPS per byte, meaning the number o
 		for(auto p= startPtr; p<endPtr; ++p) nLeft += *p < cut;
 	\end{lstlisting}
 \caption{Counting the particles left of a cut plane}
+
 \end{figure}
 
 
@@ -1345,30 +1239,31 @@ Which results in a total of 4 operations. Since a single float is stored using 4
 
 Since we have peak flops benchmarks available for all the NVIDIA P100 and V100s we do not need to make any estimations about the GPU flops. Estimating the arithmetic intensity for the GPU  is a lot more complicated as it depends a lot on the specific implementation details. For now we will just assume the same arithmetic intensity as we have had for the CPU.
 
-Lets us now consider Piz Daint. We can plug in the values which we have determined into the formula, where we do so for $np = 1, 2$ and $3$.
+Lets us compute the maximally achievable gflops for Piz Daint. To do so, we plug in the corresponding datapoints from figure \ref{fig:datapoints} into the formula \ref{eq:avx} for $np = 1, 2$ and $3$.
 
 \begin{center}
 	\begin{equation}
-		121.6 gflops = 3.8 * 8 * \frac{1}{0.5} * 2
+		3.8 * 8 * \frac{1}{0.5} * 2 = 121.6 gflops
 	\end{equation}
 	\label{eq:daintp1}
 \end{center}
 
 \begin{center}
 	\begin{equation}
-		243.2 gflops = 3.8 * 8 * \frac{1}{0.5} * 4
+		3.8 * 8 * \frac{1}{0.5} * 4 = 243.2 gflops
 	\end{equation}
 	\label{eq:daintp2}
 \end{center}
 
 \begin{center}
 	\begin{equation}
-		486.4 gflops = 3.8 * 8 * \frac{1}{0.5} * 8
+		3.8 * 8 * \frac{1}{0.5} * 8 = 486.4 gflops
 	\end{equation}
 	\label{eq:daintp3}
 \end{center}
 
-We plot those numbers as GFLOPS peak values for Piz Daint, we add a line depicting the memory bandwidth which can 
+The results are depicted as horizontal lines in \ref{fig:roofdaint}. The memory bandwidth is plotted as a line with an equivalent slope. Finally we add a dotted line representing the arithmetic intensity of the Count Left procedure. 
+To interpret the roofline mode, one has to follow the dotted line starting from the bottom. Weather it intersect with line representing the maximal performance or the memory bandwidth first, gives an indication weather the program is performance or memory bound. 
 
 \TODO{Explain connection from formula in the context of graphs}
 \begin{figure}[H]
@@ -1937,10 +1832,6 @@ A brief overview of the core elements:
 
 For this project we will use C++ 17 along with CUDA 11.3, OpenMPI 4.1.0 and Blitz++ 1.0.2 \cite{blitzcpp}. 
 
-\subsection{MDL}
-
-Briefly explain how mdl exactly works. 
-
 \subsection{Particles}
 
 To implement the particles array, we use C-style arrays interchangeably with blitz++ arrays. The blitz++ array is a wrapper class around C-style arrays, which helps with pointer management and can speed up the debugging process by keeping track of the array size and checking access indexes. Furthermore, we can easily create slices and make borrowed copies. 
@@ -1953,6 +1844,7 @@ We have observed cases, where iterating over a blitz array does not enable AVX, 
 \subsection{Mapping cells to particles}
 
 Since only the operative needs to keep track of the cells, we need a separate data-structure which defines the range of particles which are encompassed inside the volume of a cell, for each thread. We solve this problem with a 2D array, where we map from a cell ID to its start index in the particles array, as well as its end index. Of course, this array needs to be updated each time we perform a partition.
+
 
 \subsection{Cell}
 
@@ -2040,29 +1932,26 @@ The cell class consists of the following variables:
 
 The cell class has some helpful helper functions. \TODO{extend}
 
+\subsection{MDL}
+
+MDL is essentially an abstraction layer around a multiprocessor communication as well as a multiprocessor scheduler. It decomposes threads into worker and a master threads and builds a tree hierarchy around the threads. The coordination works with a object called services, where the master can start services, the service objects then traverse the tree of threads until every thread has received the input data of the service. A service can be run via a method called $RunService$ where the input data is given via simple pointers. With the help of void pointers, we can use any object or array of objects as an input or output of the service. 
 
 \subsection{Services}
 
-\TODO{Describe this in more detail}
 
-As required by mdl, we make use of services, which are essentially a collection of functions which can be sent to any set of processors in the computing system. 
+There are several implementation of services, but in our case we make use of the traverse combine service. As the name says, it traverses the tree of threads until all threads are reached, then the predefined computations are executed on the input data. After the computations have finished, the results traverse the tree in the opposite direction, until they reach the master thread which initialized the service in the first place. MDL also exposes a function which allows us to define, how we treat two data packages when they are combined.
 
-The services we have implemented and which are crucial for the CPU version are:
+The most important services for the CPU version are:
+
 
 \begin{itemize}
 	\item $init$ : Reads the particles and allocates memory on the CPU accordingly.
 	\item $finallize$ : Frees all the memory and ensures a memory leak free execution.  
 	\item $countLeft$ : Counts the number of particles left of a provided cut position for each of the cells.
+	\item $makeAxis$ : 
 	\item $count$ : Counts the total number particles inside the domain for each of the provided cells.
 	\item $partition$ : Partitions the particles to preserve memory locality.
 \end{itemize}
-
-\subsection{Operative}
-
-
-The operative is essentially a C++ implementation of the code shown in figure \ref{proc:orbmain}. Since recursive algorithms are harder to optimize for the compiler, we use a for loop instead.
-
-The main task of the operative is to coordinate all services and interpret their results. 
 
 
 
@@ -2077,30 +1966,30 @@ We then take a slice of the particles array and store a pointer to the data in $
 Finally we simple iterate over the particles and count up, as previously mentioned, this can enable AVX, given hardware support and the proper compile flags. Usually $-march=native$ along with $O3$ will enable AVX. 
 
 \begin{lstlisting}[language=c++]
- for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset){
-	auto cell = static_cast<Cell>(*(in + cellPtrOffset));
-	
-	if (cell.foundCut) {
-		continue;
-	}
-	int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
-	int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
-	
-	blitz::Array<float,1> particles =
+	for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset){
+		auto cell = static_cast<Cell>(*(in + cellPtrOffset));
+		
+		if (cell.foundCut) {
+			continue;
+		}
+		int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
+		int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
+		
+		blitz::Array<float,1> particles =
 		pst->lcl->particlesAxis(blitz::Range(beginInd, endInd));
-	
-	float * startPtr = particles.data();
-	float * endPtr = startPtr + (endInd - beginInd);
-	
-	int nLeft = 0;
-	float cut = cell.getCut();
-	for(auto p= startPtr; p<endPtr; ++p)
-	{
-		nLeft += *p < cut;
+		
+		float * startPtr = particles.data();
+		float * endPtr = startPtr + (endInd - beginInd);
+		
+		int nLeft = 0;
+		float cut = cell.getCut();
+		for(auto p= startPtr; p<endPtr; ++p)
+		{
+			nLeft += *p < cut;
+		}
+		
+		out[cellPtrOffset] = nLeft;
 	}
-	
-	out[cellPtrOffset] = nLeft;
-}
 \end{lstlisting}
 
 
@@ -2109,19 +1998,19 @@ Finally we simple iterate over the particles and count up, as previously mention
 Counting the total number of particles is very trivial, given the cellToRange map. 
 
 \begin{lstlisting}[language=c++]
-for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset) {
-	auto cell = static_cast<Cell>(*(in + cellPtrOffset));
-	out[cellPtrOffset] = 
+	for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset) {
+		auto cell = static_cast<Cell>(*(in + cellPtrOffset));
+		out[cellPtrOffset] = 
 		lcl->cellToRangeMap(cell.id,1) - 
 		lcl->cellToRangeMap(cell.id,0);
-}
-
+	}
+	
 \end{lstlisting}
 
 \subsubsection{Partition}
 The local reshuffle service is responsible for rearranging the particles in such a way, that each range in the particles array, corresponds to a single cell. 
 Its implementation is equivalent to a hoare partition. The implementation is straight forward and there exists no known way to improve this, at least from an algorithmic perspective. There might be some ways to explore in terms of memory access speed, or even porting the algorithm to CUDA. 
- 
+
 On line 31 till 37 we also update the cellToRangeMap in order to reflect the changes we have made in the particles array.
 
 \begin{figure}[H]
@@ -2167,6 +2056,120 @@ On line 31 till 37 we also update the cellToRangeMap in order to reflect the cha
 		}
 	\end{lstlisting}
 \end{figure}
+
+
+\subsection{Parallel implementation of ORB }\label{sec:parellize-orb}
+
+In the context of parallelization, we define the number of processors as $np$. When the goal of the algorithm is workload balancing, we will want to set $d = np$ to end up with exactly as many leaf cells as we have processors. In the context of a supercomputing system $np$ is usually equivalent to the number of nodes in the system.
+
+Initially we assume that each processor has a random unique subset of all the particles stored in its memory, this has two reasons. For one we run into memory limitations quickly when trying to load all the particles onto a single node, furthermore memory bandwidths limitations can be multiplied by the number of processors and are thus a lot higher. 
+
+Let us now apply this to our running example where we have 3 nodes.
+
+\begin{figure}[H]
+	
+	\centering
+	\begin{tikzpicture}
+		\begin{axis}
+			[
+			nodes near coords,
+			xmin=-0.,
+			xmax=1.,
+			ymin=-0.,
+			ymax=1.,
+			title=Recursion depth 0,
+			legend cell align=left
+			]
+			
+			\addplot    +[
+			only marks,
+			point meta=explicit symbolic,
+			restrict expr to domain={\thisrow{o1}}{0:0}, 
+			] table [
+			x=x, 
+			y=y, 
+			meta=id, 
+			col sep=comma] 
+			{particles10.csv};
+			
+			\addplot    +[
+			only marks,
+			point meta=explicit symbolic,
+			restrict expr to domain={\thisrow{o1}}{1:1}, 
+			] table [
+			x=x, 
+			y=y, 
+			meta=id, 
+			col sep=comma] 
+			{particles10.csv};
+			
+			\addplot    +[
+			only marks,
+			point meta=explicit symbolic,
+			restrict expr to domain={\thisrow{o1}}{2:2}, 
+			] table [
+			x=x, 
+			y=y, 
+			meta=id, 
+			col sep=comma] 
+			{particles10.csv};
+			
+			\legend{$p0$,$p1$,$p3$}
+			
+			%\draw [fill=red!20](0.0,0.0) rectangle (1, 1);
+			%\node[below] at (0.5, 1){$cell_1$};
+		\end{axis}
+	\end{tikzpicture}
+	\caption{Example particles distributed randomly across 3 nodes}
+\end{figure}
+
+The ORB algorithm is only executed form the operative node, all other nodes are purely worker nodes and perform certain parts of the algorithm. In our case one of the most performance intensive tasks is found on line 6 from the cut procedure as seen in figure \ref{proc:cut}. Not only is it costly, its also a task that can only be executed from the node, which owns the particles array, i.e. its stored in its memory. Therefore the worker nodes count the number of particles on the left side of a 2D cut plane individually and send back the results to the operative thread as seen in figure \ref{fig:orbp}. Besides the counting we also have the partitioning which also concerns the particles array and thus can only be executed by its corresponding owner. Consequently the procedure is also executed on the worker nodes individually. Note that the operative node can also perform work, thus become a worker node at times. This can be seen in figure \ref{fig:orbp}, where p0 is the operative node, but still performs partition and counting operations.
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+			
+			\timeline{6}{13}{3}
+			
+			
+			\parallelloop{-2}{11.5}{8}{1.5}{loop till tree built};
+			
+			\parallelloop{-1}{9.5}{7}{5.5}{loop till cut found};
+			
+			\communication{Init}{0}{7}{12};
+			
+			\communication{Count}{0}{7}{11};
+			
+			
+			\communication{Make Axis}{0}{7}{10};
+			
+			\communication{Count Left}{0}{7}{9};
+			
+			\process{improve \\ cut}{0}{8};
+		
+			
+			\communication{Partition}{0}{7}{5};
+			
+			\communication{Finalize}{0}{7}{1};
+			
+			\process{generate\\ new \\ cells}{0}{4};
+			
+		\end{tikzpicture}
+	\end{center}
+	\caption{Parallelized ORB CPU version}
+	\label{fig:orbp}
+\end{figure}
+
+
+
+\subsection{Sch}
+
+
+The operative is essentially a C++ implementation of the code shown in figure \ref{proc:orbmain}. Since recursive algorithms are harder to optimize for the compiler, we use a for loop instead.
+
+The main task of the operative is to coordinate all services and interpret their results. 
+
+
 
 \newpage
 \section{GPU Implementation}\label{sec:gpuimpl}
@@ -2309,6 +2312,44 @@ Optimized reductions in CUDA are well documented and explained by the NVIDIA dev
 
 We split the array of particles which are contained within one cell into smaller slices, where each slice fits one block. Then the subproblems or blocks can be run independently from each other, in other words individual blocks can be executed in parallel or also serially without any conflicts or need for block level synchronization. After running the conditional summation on each slice of the array, we end up with a an array of results. These results can then be summed together on CPU using a simple iterator. Alternatively we could invoke another sum reduction kernel for this task.
 
+
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+			
+			\timeline{6}{14}{3}
+			
+			
+			\parallelloop{-2}{12.5}{8}{1.5}{loop till tree built};
+			
+			\parallelloop{-1}{9.5}{7}{5.5}{loop till cut found};
+			
+			\communication{Init}{0}{7}{13};
+			
+			\communication{Count}{0}{7}{12};
+			
+			\communication{Make Axis}{0}{7}{11};
+			
+			\communication{Copy Particles To GPU}{0}{7}{10};
+			
+			\communication{Count Left GPU}{0}{7}{9};
+			
+			\process{improve \\ cut}{0}{8};
+			
+			
+			\communication{Partition}{0}{7}{5};
+			
+			\communication{Finalize}{0}{7}{1};
+			
+			\process{generate\\ new \\ cells}{0}{4};
+			
+		\end{tikzpicture}
+	\end{center}
+	\caption{Parallelized ORB GPU version}
+	\label{fig:orbgpup}
+\end{figure}
+
 The key concepts of the reduction are:
 
 \begin{itemize}
@@ -2360,6 +2401,7 @@ __syncthreads();
 	
 }
 }
+	
 	
 
 \begin{figure}
@@ -2472,12 +2514,93 @@ unsigned int * g_odata) {
 	\item \textbf{Block Padding} Another solution would be to introduce a padding with a constant value of 0 after each slice of particles which are contained within one cell. This padding range starts with the last particle within the cell and ends with the last array index which is still contained within the same block. Therefore we only need to keep track of which block processes which cell and are able to reconstruct the actual counts for each cell. We need to increase the array which stores the particle positions by a maximum of threads per kernel times the maximum number of items per thread times $d$. In a normal setup only a fraction of the total memory size needed. However it requires us correctly load \TODO{continue}
 \end{itemize}
 
+\subsection{GPU Accelerated Count Left With Atomics}
+
+
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+			
+			\timeline{6}{15}{3}
+			
+			
+			\parallelloop{-2}{13.5}{8}{1.5}{loop till tree built};
+			
+			\parallelloop{-1}{9.5}{7}{5.5}{loop till cut found};
+			
+			\communication{Init}{0}{7}{14};
+			
+			\communication{Count}{0}{7}{13};
+			
+			\communication{Make Axis}{0}{7}{12};
+			
+			\communication{Copy Particles To GPU}{0}{7}{11};
+			
+			\communication{Copy Cells To GPU}{0}{7}{10};
+			
+			\communication{Count Left GPU}{0}{7}{9};
+			
+			\process{improve \\ cut}{0}{8};
+			
+			
+			\communication{Partition}{0}{7}{5};
+			
+			\communication{Finalize}{0}{7}{1};
+			
+			\process{generate\\ new \\ cells}{0}{4};
+			
+		\end{tikzpicture}
+	\end{center}
+	\caption{Parallelized ORB GPU version 2}
+	\label{fig:orbgpup2}
+\end{figure}
+
 
 \subsubsection{GPU Accelerated Partitioning}
 
 The main bottlenecks of the orb algorithm are now the data transfer between the CPU and GPU and the partitioning of the data. Both problems can be resolved by partitioning the array on the GPU directly thus also removing the need to transfer the data back and forth between the CPU and the GPU.
 
 We describe measurements which were done using the reduction in CUDA, we mention how the reduction cannot necessarily be improved a lot and that the data transfer between the GPU and CPU is the main bottleneck now. We mention how building the tree on the does not make a lot of sense. We explain why instead we focus our efforts to implement a GPU reshuffling method, which can improve runtime by reducing the reshuffling costs and also remove CPU GPU transfers between invocations of the binary cut algorithm altogether. 
+
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+			
+			\timeline{6}{15}{3}
+			
+			
+			\parallelloop{-2}{13.5}{8}{1.5}{loop till tree built};
+			
+			\parallelloop{-1}{9.5}{7}{5.5}{loop till cut found};
+			
+			\communication{Init}{0}{7}{14};
+			
+			\communication{Count}{0}{7}{13};
+			
+			\communication{Make Axis}{0}{7}{12};
+			
+			\communication{Copy Particles To GPU}{0}{7}{11};
+			
+			\communication{Copy Cells To GPU}{0}{7}{10};
+			
+			\communication{Count Left GPU}{0}{7}{9};
+			
+			\process{improve \\ cut}{0}{8};
+			
+			
+			\communication{Partition}{0}{7}{5};
+			
+			\communication{Finalize}{0}{7}{1};
+			
+			\process{generate\\ new \\ cells}{0}{4};
+			
+		\end{tikzpicture}
+	\end{center}
+	\caption{Parallelized ORB GPU version 2}
+	\label{fig:orbgpup2}
+\end{figure}
 
 We add a timeline which is based on measurements with a CUDA enhanced binary cut algorithm. 
 \begin{figure}[H]

@@ -33,7 +33,7 @@ int master(MDL vmdl,void *vpst) {
     META_PARAMS params{
             true,
             true,
-            false,
+            true,
             false
     };
 
@@ -155,12 +155,21 @@ int master(MDL vmdl,void *vpst) {
                     // good optimization, but can it be proven to give a result?
                     // Take more constrained version of both, which should ensure it?
                     // Could maybe also be proven.
-                    //cells(i).cutMarginRight -= diffPct * (cells(i).cutMarginRight - cells(i).cutMarginLeft);
-                    cells(i).cutMarginRight = cells(i).getCut();
+                    if (params.FAST_MEDIAN)
+                    {
+                        cells(i).cutMarginRight -= diffPct * (cells(i).cutMarginRight - cells(i).cutMarginLeft);
+                    }
+                    else {
+                        cells(i).cutMarginRight = cells(i).getCut();
+                    }
                     foundAll = false;
                 } else {
-                    //cells(i).cutMarginLeft -= diffPct * (cells(i).cutMarginRight - cells(i).cutMarginLeft);
-                    cells(i).cutMarginLeft = cells(i).getCut();
+                    if (params.FAST_MEDIAN) {
+                        cells(i).cutMarginLeft -= diffPct * (cells(i).cutMarginRight - cells(i).cutMarginLeft);
+                    }
+                    else {
+                        cells(i).cutMarginLeft = cells(i).getCut();
+                    }
                     foundAll = false;
                 }
             }
