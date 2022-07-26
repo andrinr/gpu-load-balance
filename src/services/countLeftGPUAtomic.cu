@@ -24,22 +24,22 @@ extern __global__ void reduce(
         unsigned int * g_begins,
         unsigned int * g_ends,
         float * g_cuts,
-        unsigned int * a_index,
         unsigned int * g_odata) {
 
     __shared__ unsigned int s_data[blockSize];
-    __shared__ unsigned int s_index;
+    //__shared__ unsigned int s_index;
 
     unsigned int tid = threadIdx.x;
 
+    /*
     if (tid == 0) {
         s_index = atomicAdd(a_index, 1);
     }
-    __syncthreads();
+    __syncthreads();*/
 
-    const unsigned int begin = g_begins[s_index];
-    const unsigned int end = g_ends[s_index];
-    const float cut = g_cuts[s_index];
+    const unsigned int begin = g_begins[blockIdx.x];
+    const unsigned int end = g_ends[blockIdx.x];
+    const float cut = g_cuts[blockIdx.x];
 
     unsigned int i = begin + tid;
     //const unsigned int gridSize = blockSize*gridDim.x;
@@ -72,7 +72,7 @@ extern __global__ void reduce(
         warpReduce<blockSize>(s_data, tid);
     }
     if (tid == 0) {
-        g_odata[s_index] = s_data[0];
+        g_odata[blockIdx.x] = s_data[0];
     }
 }
 
@@ -115,7 +115,7 @@ int ServiceCountLeftGPUAtomic::Service(PST pst,void *vin,int nIn,void *vout, int
             cudaMemcpyHostToDevice,
             lcl->streams(0)));
 
-    CUDA_CHECK(cudaMemset, (lcl->d_index, 0, sizeof(unsigned int)));
+    //CUDA_CHECK(cudaMemset, (lcl->d_index, 0, sizeof(unsigned int)));
 
     // Execute the kernel
     reduce<N_THREADS><<<
@@ -128,7 +128,6 @@ int ServiceCountLeftGPUAtomic::Service(PST pst,void *vin,int nIn,void *vout, int
                 lcl->d_begins,
                 lcl->d_ends,
                 lcl->d_cuts,
-                lcl->d_index,
                 lcl->d_results
             );
 

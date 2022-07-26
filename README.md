@@ -45,6 +45,7 @@ todo
 
 ## Open questions
 - Atomic operations on arrays, how does it work?
+  - Does not interfere
 - How to do the profiling
 - l
 - 

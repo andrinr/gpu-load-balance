@@ -19,7 +19,7 @@ extern __device__ void warpReduce(volatile int *sdata, unsigned int tid) {
     if (blockSize >= 2) sdata[tid] += sdata[tid + 1];
 }
 
-template <unsigned int blockSize, bool leq>
+template <unsigned int blockSize>
 extern __global__ void reduce(float *g_idata, unsigned int*g_odata, float cut, int n) {
     extern __shared__ int sdata[];
 
@@ -29,11 +29,7 @@ extern __global__ void reduce(float *g_idata, unsigned int*g_odata, float cut, i
     sdata[tid] = 0;
 
     while (i < n) {
-        if (leq){
-            sdata[tid] += (g_idata[i] <= cut);
-        } else {
-            sdata[tid] += (g_idata[i] > cut);
-        }
+        sdata[tid] += (g_idata[i] <= cut);
         i += gridSize;
     }
     __syncthreads();
@@ -97,12 +93,10 @@ int ServiceCountLeftAxisGPU::Service(PST pst,void *vin,int nIn,void *vout, int n
 
         if (n > 1 << 12) {
             const int nBlocks = (int) ceil((float) n / (N_THREADS * ELEMENTS_PER_THREAD));
-            const bool leq = true;
-
             // Kernel launches are serialzed within stream !
             // increase number of streams per thread
 
-            reduce<N_THREADS, leq>
+            reduce<N_THREADS>
             <<<
                 nBlocks,
                 N_THREADS,

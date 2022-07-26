@@ -27,7 +27,7 @@ int ServiceFinalize::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
         cudaFree(lcl->d_cuts);
         cudaFree(lcl->d_begins);
         cudaFree(lcl->d_ends);
-        cudaFree(lcl->d_index);
+        //cudaFree(lcl->d_index);
     }
 
     if (in.params.GPU_PARTITION) {

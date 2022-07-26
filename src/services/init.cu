@@ -91,7 +91,7 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
             lcl->h_cuts = (float*)malloc(nBlocks * sizeof(float));
             CUDA_CHECK(cudaMallocHost, ((void**)&lcl->h_cuts, nBlocks * sizeof (float)));
 
-            CUDA_CHECK(cudaMalloc,(&lcl->d_index, sizeof (unsigned int)));
+            //CUDA_CHECK(cudaMalloc,(&lcl->d_index, sizeof (unsigned int)));
         }
 
         unsigned int* h_results = (unsigned int*)malloc(nBlocks * sizeof(unsigned int));

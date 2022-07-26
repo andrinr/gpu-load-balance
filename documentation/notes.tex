@@ -134,6 +134,22 @@ The most straight forward way to avoid high ratios between the length and height
 
 The target data consists of $N$ particles where we use the following notations:
 
+constrained realization
+Gaussian random distribution, modified to match the measured power.
+
+The higher the resolution the more accurate the result.
+
+Large scales are more uniform, small scale 
+
+smallest thing you want to be able to resolve. 
+
+boxes around a giga parsec
+
+want to be able to resolve galaxies, milky way 10^12 solar masses,
+
+want to be able to resolve smaller galaxies, 10^8 for a single particle
+ 
+
 \begin{itemize}
 	\item We define a particle as $par_i$  where $i \in \{0,...,N\}$. 
 	\item We define the space of binary numbers with a precision of $p$ as $\mathbb{B}_p$ where we have $a \in \mathbb{B}_p \Leftrightarrow a \in \{0,1\}^{p}$
@@ -330,6 +346,9 @@ Min Max binning. Probably does not work when axes are not switched periodically.
 $https://www.cg.tuwien.ac.at/research/publications/2013/Voglsam_2013_RRT/Voglsam_2013_RRT-Thesis.pdf$
 and the paper:
 $https://jcgt.org/published/0004/01/03/paper.pdf$ Lots of GPU memory overhead.
+
+mass assignment
+
 
 
 \TODO{Write how ORB is similar to quicksort, how individual parts could be done using thrust library.}
@@ -2312,7 +2331,8 @@ Optimized reductions in CUDA are well documented and explained by the NVIDIA dev
 
 We split the array of particles which are contained within one cell into smaller slices, where each slice fits one block. Then the subproblems or blocks can be run independently from each other, in other words individual blocks can be executed in parallel or also serially without any conflicts or need for block level synchronization. After running the conditional summation on each slice of the array, we end up with a an array of results. These results can then be summed together on CPU using a simple iterator. Alternatively we could invoke another sum reduction kernel for this task.
 
-
+The entire schedule of the ORB is depicted in figure \ref{fig:orbgpup}. In a first step we call the initialize service, where the necessary data is allocated on the CPU and the GPU, and the particles are loaded. Next we already enter the main loop from the ORB, which iterates as until we have built a SPTDS with the desired size. In this loop the count service is called, this lets us know which cell has how many particles summed over all the threads in the system. To prepare the data for the GPU transfer we make the temporary array, which is then sent to the GPU. 
+Everything is now set to start counting the particles left of the initial cut and improve the cut until we found a nearly perfect cut. Finally split all particles which have currently been processed and partition the particle arrays on each thread. The tree building loop is then repeated or we exit the loop and call the finalize service to free the memory which was allocated in the init service.
 
 \begin{figure}[H]
 	\begin{center}
@@ -2338,11 +2358,12 @@ We split the array of particles which are contained within one cell into smaller
 			\process{improve \\ cut}{0}{8};
 			
 			
-			\communication{Partition}{0}{7}{5};
+			\process{generate\\ new \\ cells}{0}{5};
+						
+			\communication{Partition}{0}{7}{2};
 			
 			\communication{Finalize}{0}{7}{1};
 			
-			\process{generate\\ new \\ cells}{0}{4};
 			
 		\end{tikzpicture}
 	\end{center}
@@ -2350,48 +2371,22 @@ We split the array of particles which are contained within one cell into smaller
 	\label{fig:orbgpup}
 \end{figure}
 
-The key concepts of the reduction are:
+The actual kernel code is depicted in figure \ref{cuda:reduction}, the most important performance crucial details of the code are:
 
 \begin{itemize}
 	\item \textbf{Leverage Shared Memory} 
-	In the code depicted in figure \ref{cuda:reduction} on line 3 we invocate the shared memory, where its size is dynamic as marked with the extern keyword. In a next step (lines 10-13) we apply our condition and copy the results to shared memory. This allows us to work exclusively with shared memory, reducing the amount of costly accesses performed on global memory.
+	In the code on line 17 we invocate the shared memory, where is equivalent to the block size, which corresponds to a single float per thread. In a next step (lines 24-27) we apply our condition and copy the results to shared memory. This allows us to work exclusively with shared memory, reducing the amount of costly accesses performed on global memory.
 	
-	\item \textbf{Increase Thread Occupancy} There exists an optimum when considering the number of operation performed by a single thread. In order to adapt the number of ops dynamically, we iterate over a certain number of elements in the global memory, as seen in figure \ref{cuda:reduction} lines 10-13. The input parameter n defines the total number of particles. Therefore if we reduce the total number of blocks by a factor of $r$, the while loop will iterate over $r$ elements. In our case we set $r$ to 32. 
+	\item \textbf{Increase Thread Occupancy} There exists an optimum when considering the number of operation performed by a single thread. In order to adapt the number of ops dynamically, we iterate over a certain number of elements in the global memory, as seen in lines 24-27. The input parameter n defines the total number of particles. Therefore if we reduce the total number of blocks by a factor of $r$, the while loop will iterate over $r$ elements. In our case we set $r$ to 32. 
 	
-	\item \textbf{Meta Programming} The reduction is optimized by using a template, which indicates the total number of thread per block, which is equivalent to the blockSize. Since the template is evaluated at compile time, all the if statements taking blockSize as a parameter in figure \ref{cuda:reduction} and figure \ref{cuda:reduction} do not cause any performance loss. In fact, because we are able to unroll loops, which would be evaluated at runtime, we increase the performance of the code. 
-
-	\item \textbf{Avoid Shared Memory Bank Conflicts} In order to decrease the bank conflicts in the shared memory we want to make sure that threads in the same warp do not try to access the same memory bank. Therefore we offset each memory access by the total grid size, which is equivalent to the total number of blocks multiplied by the number of threads per block, as it can be seen on line 12 in figure \ref{cuda:reduction}.
+	\item \textbf{Meta Programming} The reduction is optimized by using a template, which indicates the total number of thread per block, which is equivalent to the blockSize. Since the template is evaluated at compile time, all the if statements taking blockSize as a parameter in figure do not cause any performance loss. In fact, because we are able to unroll loops, which would be evaluated at runtime, we increase the performance of the code. 
 	
-	\item \textbf{Avoiding Warp Divergence} Each time we we have an control statement in the code, we introduce a divergence. On the GPU these divergences become especially bad when they are introduced inside a warp. This means that any of the threads of the 32 threads in a warp, have to execute a different code than the rest. For this reason, the $warpReduce$ method as seen in figure \ref{cuda:reduction} is introduced. We can see on line 32 in figure \ref{cuda:reduction} that this method is only executed when we reach 32 elements in the shared memory, which remain to be added together. Inside the warp reduce method, we again encounter an unrolled loop, but in this case we have no if statements that could generate a divergence. The if statements which are present, are as mentioned, evaluated at compile time only. Inside a warp we are also not dependent on synchronization, thus the thread synchronization call can be omitted as well. Note that this implementation will perform many unnecessary operations, but this does not affect the performance negatively.
+	\item \textbf{Avoiding Warp Divergence} Each time we we have an control statement in the code, we introduce a divergence. On the GPU these divergences become especially bad when they are introduced inside a warp. This means that any of the threads of the 32 threads in a warp, have to execute a different code than the rest. For this reason, the $warpReduce$ method as on line 2-9 is introduced. We can see on line 32 in figure \ref{cuda:reduction} that this method is only executed when we reach 32 elements in the shared memory, which remain to be added together. Inside the warp reduce method, we again encounter an unrolled loop, but in this case we have no if statements that could generate a divergence. The if statements which are present, are as mentioned, evaluated at compile time only. Inside a warp we are also not dependent on synchronization, thus the thread synchronization call can be omitted as well. Note that this implementation will perform many unnecessary operations, but this does not affect the performance negatively.
 	
 \end{itemize}
 
-The main difference between the proposed version and our version is that we changed the following part: 
 
-\begin{lstlisting}[language=c++];
-unsigned int i = blockIdx.x*(blockSize*2) + tid;
-unsigned int gridSize = blockSize*2*gridDim.x;
-sdata[tid] = 0;
-while (i < n) { 
-	sdata[tid] += g_idata[i] + g_idata[i+blockSize]; 
-	i += gridSize; 
-}
-__syncthreads();
-\end{lstlisting}
-to:
-
-\begin{lstlisting}[language=c++]
-unsigned int i = blockIdx.x*(blockSize) + threadIdx.x;
-unsigned int gridSize = blockSize*gridDim.x;
-sdata[tid] = 0;
-
-while (i < n) {
-	sdata[tid] += (g_idata[i] <= cut);
-	i += gridSize;
-}
-__syncthreads();
-\end{lstlisting}
-
+\begin{comment}
 \newcommand{\kernel}[3]{
 \foreach \i in {1,...,#3}
 {
@@ -2402,8 +2397,6 @@ __syncthreads();
 }
 }
 	
-	
-
 \begin{figure}
 	\begin{center}
 		\begin{tikzpicture}
@@ -2437,17 +2430,116 @@ __syncthreads();
 	\caption{timeline}
 	\label{u}
 \end{figure}
+\end{comment}
 
-In our version we do not add up two elements with each iteration of the loop. This ensures that no memory access is attempted on global memory which is out of bounds. In the original version, if one is not careful, segmentation faults can occur on the GPU. Furthermore there are no performance penalties as we can simply increase the elements per thread if we wish to increase thread occupancy.
+We execute the reduction kernel once for each cell, where we distribute the particles within the cell among a set of blocks. The number of blocks can be determined by the number of particles in this cell $n_{cell}$ divided by the number of threads per block which is set to 256 and finally we divide this further by the number of elements per thread $r$. This makes the implementation straight forward but as we increase the number of cells, we make make more calls to the reduction kernel. This is problematic because each initialization of a kernel comes with some overhead, degrading the performance gradually with the tree traversal, as the overhead to computation ratio becomes more and more unfavorable.  
+
+\begin{figure}[H]
+	\begin{lstlisting}[language=c++]
+template <unsigned int blockSize>
+extern __device__ void warpReduce(volatile int *sdata, unsigned int tid) {
+	if (blockSize >= 64) sdata[tid] += sdata[tid + 32];
+	if (blockSize >= 32) sdata[tid] += sdata[tid + 16];
+	if (blockSize >= 16) sdata[tid] += sdata[tid + 8];
+	if (blockSize >= 8) sdata[tid] += sdata[tid + 4];
+	if (blockSize >= 4) sdata[tid] += sdata[tid + 2];
+	if (blockSize >= 2) sdata[tid] += sdata[tid + 1];
+}
+
+template <unsigned int blockSize>
+extern __global__ void reduce(
+	float *g_idata,
+	 unsigned int*g_odata, 
+	 float cut, 
+	 int n) {
+	__shared__ int sdata[blockSize];
+	
+	unsigned int tid = threadIdx.x;
+	unsigned int i = blockIdx.x*(blockSize) + threadIdx.x;
+	unsigned int gridSize = blockSize*gridDim.x;
+	sdata[tid] = 0;
+	
+	while (i < n) {
+		sdata[tid] += (g_idata[i] <= cut);
+		i += gridSize;
+	}
+	__syncthreads();
+	
+	if (blockSize >= 512) {
+		if (tid < 256) {
+			sdata[tid] += sdata[tid + 256];
+		}
+		__syncthreads();
+	}
+	if (blockSize >= 256) {
+		if (tid < 128) {
+			sdata[tid] += sdata[tid + 128];
+		} __syncthreads();
+	}
+	if (blockSize >= 128) {
+		if (tid < 64) {
+			sdata[tid] += sdata[tid + 64];
+		} __syncthreads();
+	}
+	if (tid < 32) {
+		warpReduce<blockSize>(sdata, tid);
+	}
+	if (tid == 0) {
+		g_odata[blockIdx.x] = sdata[0];
+	}
+}
+	\end{lstlisting}
+	\caption{Reduction in CUDA}
+	\label{cuda:reduction}
+\end{figure}
 
 
-We execute the reduction kernel once for each cell, where we distribute the particles within the cell among a set of blocks. The number of blocks can be determined by the number of particles in this cell $n_{cell}$ divided by the number of threads per block which is set to 256 and finally we devide this further by the number of elements per thread $r$. This makes the implementation straight forward but as we increase the number of cells, we make make more calls to the reduction kernel. This is problematic because each initialization of a kernel comes with some overhead. Therefore we should come up with solution, where each kernel processes a large number of elements. As of now we have up to $d$ kernel invocation, which oftentimes reaches around 1024. There are some solutions to this problem:
+\subsection{GPU Accelerated Count Left With Atomics}
 
+To solve the degrading performance problem we make some changes to the kernel and the overall schedule. The main idea is to prepare all the necessary data for each of the running blocks, meaning each block knows over which slice of the particles data is has to iterate, furthermore it knows the cut position, which can vary depending on which cell the particles belong to.
+Using the atomic add on a global index variable, we can make sure that each 
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+			
+			\timeline{6}{15}{3}
+			
+			
+			\parallelloop{-2}{13.5}{8}{1.5}{loop till tree built};
+			
+			\parallelloop{-1}{9.5}{7}{5.5}{loop till cut found};
+			
+			\communication{Init}{0}{7}{14};
+			
+			\communication{Count}{0}{7}{13};
+			
+			\communication{Make Axis}{0}{7}{12};
+			
+			\communication{Copy Particles To GPU}{0}{7}{11};
+			
+			\communication{Copy Cells To GPU}{0}{7}{10};
+			
+			\communication{Count Left GPU}{0}{7}{9};
+			
+			\process{improve \\ cut}{0}{8};
+			
+			
+			\communication{Partition}{0}{7}{5};
+			
+			\communication{Finalize}{0}{7}{1};
+			
+			\process{generate\\ new \\ cells}{0}{4};
+			
+		\end{tikzpicture}
+	\end{center}
+	\caption{Parallelized ORB GPU version 2}
+	\label{fig:orbgpup2}
+\end{figure}
 
 
 \begin{figure}[H]
 	\begin{lstlisting}[language=c++]
-
 template <unsigned int blockSize>
 extern __global__ void reduce(
 float * g_idata,
@@ -2505,57 +2597,9 @@ unsigned int * g_odata) {
 	}
 }
 	\end{lstlisting}
-	\label{cuda:reduction}
+	\caption{Reduction in CUDA}
+	\label{cuda:reduction2}
 \end{figure}
-
-
-\begin{itemize}
-	\item \textbf{Single Kernel with Cell ID} We can build a reduction kernel where we take an additional array in global GPU memory as an input. The additional array has the same size as the particle position array, but it stores the cellID for each particle. Furthermore we increase the shared memory size to the product of the number of threads per block by the total number of cells which are currently being iterated over. This allows us perform the summation and store its results in the correct place in the shared memory. This version however, requires a very large shared memory, thus forcing us to reduce the number of threads per block. Furthermore we have to store another array for the cellID on the GPU. 
-	\item \textbf{Block Padding} Another solution would be to introduce a padding with a constant value of 0 after each slice of particles which are contained within one cell. This padding range starts with the last particle within the cell and ends with the last array index which is still contained within the same block. Therefore we only need to keep track of which block processes which cell and are able to reconstruct the actual counts for each cell. We need to increase the array which stores the particle positions by a maximum of threads per kernel times the maximum number of items per thread times $d$. In a normal setup only a fraction of the total memory size needed. However it requires us correctly load \TODO{continue}
-\end{itemize}
-
-\subsection{GPU Accelerated Count Left With Atomics}
-
-
-
-\begin{figure}[H]
-	\begin{center}
-		\begin{tikzpicture}
-			
-			\timeline{6}{15}{3}
-			
-			
-			\parallelloop{-2}{13.5}{8}{1.5}{loop till tree built};
-			
-			\parallelloop{-1}{9.5}{7}{5.5}{loop till cut found};
-			
-			\communication{Init}{0}{7}{14};
-			
-			\communication{Count}{0}{7}{13};
-			
-			\communication{Make Axis}{0}{7}{12};
-			
-			\communication{Copy Particles To GPU}{0}{7}{11};
-			
-			\communication{Copy Cells To GPU}{0}{7}{10};
-			
-			\communication{Count Left GPU}{0}{7}{9};
-			
-			\process{improve \\ cut}{0}{8};
-			
-			
-			\communication{Partition}{0}{7}{5};
-			
-			\communication{Finalize}{0}{7}{1};
-			
-			\process{generate\\ new \\ cells}{0}{4};
-			
-		\end{tikzpicture}
-	\end{center}
-	\caption{Parallelized ORB GPU version 2}
-	\label{fig:orbgpup2}
-\end{figure}
-
 
 \subsubsection{GPU Accelerated Partitioning}
 
