@@ -1,12 +1,12 @@
-#include "countLeftGPUAtomic.h"
+#include "countLeftGPUAxis.h"
 #include <blitz/array.h>
 #include <array>
 #include "../utils/condReduce.cuh"
 
 // Make sure that the communication structure is "trivial" so that it
 // can be moved around with "memcpy" which is required for MDL.
-static_assert(std::is_void<ServiceCountLeftGPUAtomic::input>()  || std::is_trivial<ServiceCountLeftGPUAtomic::input>());
-static_assert(std::is_void<ServiceCountLeftGPUAtomic::output>() || std::is_trivial<ServiceCountLeftGPUAtomic::output>());
+static_assert(std::is_void<ServiceCountLeftGPUAxis::input>()  || std::is_trivial<ServiceCountLeftGPUAxis::input>());
+static_assert(std::is_void<ServiceCountLeftGPUAxis::output>() || std::is_trivial<ServiceCountLeftGPUAxis::output>());
 
 template <unsigned int blockSize>
 extern __device__ void warpReduce(volatile unsigned int *s_data, unsigned int tid) {
@@ -67,7 +67,7 @@ extern __global__ void reduce(
     }
 }
 
-int ServiceCountLeftGPUAtomic::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
+int ServiceCountLeftGPUAxis::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     // store streams / initialize in local d
     // ata
     auto lcl = pst->lcl;
@@ -140,7 +140,7 @@ int ServiceCountLeftGPUAtomic::Service(PST pst,void *vin,int nIn,void *vout, int
     return nCells * sizeof(output);
 }
 
-int ServiceCountLeftGPUAtomic::Combine(void *vout,void *vout2,int nIn,int nOut1,int nOut2) {
+int ServiceCountLeftGPUAxis::Combine(void *vout,void *vout2,int nIn,int nOut1,int nOut2) {
     auto out  = static_cast<output *>(vout);
     auto out2 = static_cast<output *>(vout2);
     int nCounts = nIn / sizeof(input);

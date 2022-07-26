@@ -7,14 +7,13 @@
 
 static const int N_THREADS = 256;
 static const int ELEMENTS_PER_THREAD = 16;
-static const int N = 1 << 25;
-static const int d = 1 << 10;
+static const int N = 1 << 10;
+static const int d = 1 << 3;
 static const int MAX_CELLS = d * 2;
 static const int N_STREAMS = 1;
 
 struct META_PARAMS {
     bool GPU_COUNT;
-    bool GPU_COUNT_ATOMIC;
     bool GPU_PARTITION;
     bool FAST_MEDIAN;
 };

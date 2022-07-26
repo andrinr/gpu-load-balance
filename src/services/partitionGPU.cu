@@ -195,26 +195,26 @@ __global__ void permute(
 
     if (i < end) {
         if (axis == rollAxis) {
-            g_odata[i] = g_particlesX[g_permutations[i]];
+            g_odata[g_permutations[i]] = g_particlesX[i];
         }
         else if (axis == rollAxis + 1) {
-            g_odata[i] = g_particlesY[g_permutations[i]];
+            g_odata[g_permutations[i]] = g_particlesY[i];
         }
         else {
-            g_odata[i] = g_particlesZ[g_permutations[i]];
+            g_odata[g_permutations[i]] = g_particlesZ[i];
         }
         //g_odata[g_permutations[i]] = g_idata[i];
     }
 
     if (j < end) {
         if (axis == rollAxis) {
-            g_odata[j] = g_particlesX[g_permutations[j]];
+            g_odata[g_permutations[j]] = g_particlesX[j];
         }
         else if (axis == rollAxis + 1) {
-            g_odata[j] = g_particlesY[g_permutations[j]];
+            g_odata[g_permutations[j]] = g_particlesY[j];
         }
         else {
-            g_odata[j] = g_particlesZ[g_permutations[j]];
+            g_odata[g_permutations[j]] = g_particlesZ[j];
         }
         //g_odata[g_permutations[j]] = g_idata[j];
     }
@@ -300,8 +300,8 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
             cudaMemcpyHostToDevice,
             lcl->streams(0)));
 
-    CUDA_CHECK(cudaMalloc, (&lcl->d_offsetG, sizeof(unsigned int) * nCells));
-    CUDA_CHECK(cudaMalloc, (&lcl->d_offsetLeq, sizeof(unsigned int) * nCells));
+    CUDA_CHECK(cudaMemset, (lcl->d_offsetLeq, 0, sizeof(unsigned int) * nCells));
+    CUDA_CHECK(cudaMemset, (lcl->d_offsetG, 0, sizeof(unsigned int) * nCells));
 
     partition<N_THREADS><<<
         nBlocks,
@@ -441,7 +441,7 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
                 lcl->cellToRangeMap(cell.id, 1);
     }
 
-    /*
+
     blitz::Array<float, 1> x = lcl->particles(blitz::Range::all(), 0);
     blitz::Array<float, 1> y = lcl->particles(blitz::Range::all(), 1);
     blitz::Array<float, 1> z = lcl->particles(blitz::Range::all(), 2);
@@ -478,7 +478,7 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
         }
         printf("\n---------------\n\n");
 
-    }*/
+    }
 
     return 0;
 }

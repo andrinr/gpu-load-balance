@@ -79,14 +79,13 @@ add_executable(
         src/services/copyParticles.cu
         src/services/copyCells.cu
         src/services/countLeftGPU.cu
-        src/services/countLeftAxis.cu
+        src/services/countLeftGPUAxis.cu
         src/services/partition.cpp
         src/services/partitionGPU.cu
         src/services/finalize.cu
         src/services/makeAxis.cpp
         src/constants.h
-        src/data/tipsy.h
-        src/services/countLeftGPUAtomic.cu)
+        src/data/tipsy.h)
 
 set(SOURCE_FILES
         src/constants.h
