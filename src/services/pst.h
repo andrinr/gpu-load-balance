@@ -25,6 +25,10 @@ public:
     unsigned int * h_ends;
     unsigned int * h_nLefts;
     unsigned int * d_nLefts;
+    unsigned int * h_cellIndices;
+    unsigned int * d_cellIndices;
+    unsigned int * h_axis;
+    unsigned int * d_axis;
     float * d_cuts;
     float * h_cuts;
     unsigned int * d_index;

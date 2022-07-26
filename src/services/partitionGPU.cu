@@ -8,145 +8,6 @@
 static_assert(std::is_void<ServicePartitionGPU::input>()  || std::is_trivial<ServicePartitionGPU::input>());
 static_assert(std::is_void<ServicePartitionGPU::output>() || std::is_trivial<ServicePartitionGPU::output>());
 
-#define NUM_BANKS 16
-#define LOG_NUM_BANKS 4
-#ifdef ZERO_BANK_CONFLICTS
-#define CONFLICT_FREE_OFFSET(n) \
-((n) >> NUM_BANKS + (n) >> (2 * LOG_NUM_BANKS))
-#else
-#define CONFLICT_FREE_OFFSET(n) ((n) >> LOG_NUM_BANKS)
-#endif
-
-/*
-__device__ void scan2(volatile unsigned int * s_idata, unsigned int thid, unsigned int n) {
-    unsigned int offset = 1;
-    for (unsigned int d = n>>1; d > 0; d >>= 1) // build sum in place up the tree
-    {
-        __syncthreads();
-        if (thid < d)
-        {
-            unsigned int ai = offset*(2*thid+1)-1;
-            unsigned int bi = offset*(2*thid+2)-1;
-            s_idata[bi] += s_idata[ai];
-        }
-        offset *= 2;
-    }
-    if (thid == 0) { s_idata[n - 1] = 0; } // clear the last element
-    for (unsigned int d = 1; d < n; d *= 2) // traverse down tree & build scan
-    {
-        offset >>= 1;
-        __syncthreads();
-        if (thid < d)
-        {
-            unsigned int ai = offset*(2*thid+1)-1;
-            unsigned int bi = offset*(2*thid+2)-1;
-            unsigned int t = s_idata[ai];
-            s_idata[ai] = s_idata[bi];
-            s_idata[bi] += t;
-        }
-    }
-}
-
-template <unsigned int blockSize>
-__global__ void partition2(
-        unsigned int * g_offsetLessEquals,
-        unsigned int * g_offsetGreater,
-        float * g_idata,
-        float * g_odata,
-        unsigned int * g_permutations,
-        float pivot,
-        unsigned int nLeft,
-        unsigned int n) {
-
-    int ai = thid;
-    int bi = thid + (blockSize);
-    int bankOffsetA = CONFLICT_FREE_OFFSET(ai);
-    int bankOffsetB = CONFLICT_FREE_OFFSET(ai);
-
-    __shared__ unsigned int s_lessEquals[blockSize * 2];
-    __shared__ unsigned int s_greater[blockSize * 2];
-
-    __shared__ unsigned int s_offsetLessEquals;
-    __shared__ unsigned int s_offsetGreater;
-
-    unsigned int tid = threadIdx.x;
-    unsigned int l = blockIdx.x * blockSize * 2;
-
-    unsigned int i = blockIdx.x * blockSize * 2 + 2 * tid;
-    unsigned int j = blockIdx.x * blockSize * 2 + 2 * tid + 1;
-
-    temp[ai + bankOffsetA] = g_idata[ai];
-    temp[bi + bankOffsetB] = g_idata[bi];
-    //unsigned int gridSize = blockSize*2*gridDim.x;
-
-    temp[ai + bankOffsetA] = g_idata[ai + ];
-    temp[bi + bankOffsetB] = g_idata[bi];
-    bool f1, f2;
-    if (i < n) {
-        f1 = g_idata[ai + l] <= pivot;
-        f2 = not f1;
-        // potential to avoid bank conflicts here
-        s_lessEquals[ai + bankOffsetA] = f1;
-        s_greater[ai + bankOffsetA] = f2;
-    }
-    else {
-        f1 = false;
-        f2 = false;
-        s_lessEquals[ai + bankOffsetA] = 0;
-        s_greater[ai + bankOffsetA] = 0;
-    }
-
-    bool f3, f4;
-    if (j < n) {
-        f3 = g_idata[bi + left] <= pivot;
-        f4 = not f3;
-        // potential to avoid bank conflicts here
-        s_lessEquals[bi + bankOffsetB] = f3;
-        s_greater[bi + bankOffsetB] = f4;
-    }
-    else {
-        f3 = false;
-        f4 = false;
-        s_lessEquals[bi + bankOffsetB] = 0;
-        s_greater[bi + bankOffsetB] = 0;
-    }
-
-    __syncthreads();
-
-    scan(s_lessEquals, tid, blockSize * 2 );
-    scan(s_greater, tid, blockSize * 2);
-
-    __syncthreads();
-
-    // Avoid another kernel
-    if (tid == blockSize - 1) {
-        // result shared among kernel
-        // atomicAdd returns old
-        // exclusive scan does not include the last element
-        s_offsetLessEquals = atomicAdd(g_offsetLessEquals, s_lessEquals[blockSize * 2 - 1] + f3);
-        s_offsetGreater = atomicAdd(g_offsetGreater, s_greater[blockSize * 2 - 1] + f4);
-    }
-
-    __syncthreads();
-
-    // avoiding warp divergence
-    unsigned int indexA = (s_lessEquals[2*tid] + s_offsetLessEquals) * f1 +
-                          (s_greater[2*tid] + s_offsetGreater + nLeft) * f2;
-
-    unsigned int indexB = (s_lessEquals[2*tid+1] + s_offsetLessEquals) * f3 +
-                          (s_greater[2*tid+1] + s_offsetGreater + nLeft) * f4;
-
-    if (i < n) {
-        g_odata[indexA] = g_idata[i];
-        g_permutations[i] = indexA;
-    }
-
-    if (j < n) {
-        g_odata[indexB] = g_idata[j];
-        g_permutations[j] = indexB;
-    }
-}
-*/
 __device__ void scan(volatile unsigned int * s_idata, unsigned int thid, unsigned int n) {
     unsigned int offset = 1;
     for (unsigned int d = n>>1; d > 0; d >>= 1) // build sum in place up the tree
@@ -181,15 +42,16 @@ __global__ void partition(
         unsigned int * g_begins,
         unsigned int * g_ends,
         unsigned int * g_nLeft,
+        unsigned int * g_axis,
+        unsigned int * g_cellIndices,
         float * g_cuts,
         unsigned int * g_offsetLessEquals,
         unsigned int * g_offsetGreater,
-        float * g_idata,
+        float * g_particlesX,
+        float * g_particlesY,
+        float * g_particlesZ,
         float * g_odata,
-        unsigned int * g_permutations,
-        float pivot,
-        unsigned int nLeft,
-        unsigned int n) {
+        unsigned int * g_permutations) {
 
     __shared__ unsigned int s_lessEquals[blockSize * 2];
     __shared__ unsigned int s_greater[blockSize * 2];
@@ -198,14 +60,30 @@ __global__ void partition(
     __shared__ unsigned int s_offsetGreater;
 
     unsigned int tid = threadIdx.x;
+    const unsigned int begin = g_begins[blockIdx.x];
+    const unsigned int end = g_ends[blockIdx.x];
+    const float cut = g_cuts[blockIdx.x];
+    const unsigned int cellIndex = g_cellIndices[blockIdx.x];
+    const unsigned int nLeft = g_nLeft[blockIdx.x];
+    const unsigned int axis = g_axis[blockIdx.x];
 
-    unsigned int i = blockIdx.x * blockSize * 2 + 2 * tid;
-    unsigned int j = blockIdx.x * blockSize * 2 + 2 * tid + 1;
+    unsigned int i = begin + 2 * tid;
+    unsigned int j = begin + 2 * tid + 1;
 
     bool f1, f2;
-    if (i < n) {
-        f1 = g_idata[i] <= pivot;
-        f2 = not f1;
+    if (i < end) {
+        if (axis == 0) {
+            f1 = g_particlesX[i] <= cut;
+            f2 = not f1;
+        }
+        else if (axis == 1) {
+            f1 = g_particlesY[i] <= cut;
+            f2 = not f1;
+        }
+        else {
+            f1 = g_particlesZ[i] <= cut;
+            f2 = not f1;
+        }
         // potential to avoid bank conflicts here
         s_lessEquals[2*tid] = f1;
         s_greater[2*tid] = f2;
@@ -218,9 +96,19 @@ __global__ void partition(
     }
 
     bool f3, f4;
-    if (j < n) {
-        f3 = g_idata[j] <= pivot;
-        f4 = not f3;
+    if (j < end) {
+        if (axis == 0) {
+            f3 = g_particlesX[j] <= cut;
+            f4 = not f3;
+        }
+        else if (axis == 1) {
+            f3 = g_particlesY[j] <= cut;
+            f4 = not f3;
+        }
+        else {
+            f3 = g_particlesZ[j] <= cut;
+            f4 = not f3;
+        }
         // potential to avoid bank conflicts here
         s_lessEquals[2*tid+1] = f3;
         s_greater[2*tid+1] = f4;
@@ -244,8 +132,8 @@ __global__ void partition(
         // result shared among kernel
         // atomicAdd returns old
         // exclusive scan does not include the last element
-        s_offsetLessEquals = atomicAdd(g_offsetLessEquals, s_lessEquals[blockSize * 2 - 1] + f3);
-        s_offsetGreater = atomicAdd(g_offsetGreater, s_greater[blockSize * 2 - 1] + f4);
+        s_offsetLessEquals = atomicAdd(&g_offsetLessEquals[cellIndex], s_lessEquals[blockSize * 2 - 1] + f3);
+        s_offsetGreater = atomicAdd(&g_offsetGreater[cellIndex], s_greater[blockSize * 2 - 1] + f4);
     }
 
     __syncthreads();
@@ -257,35 +145,78 @@ __global__ void partition(
     unsigned int indexB = (s_lessEquals[2*tid+1] + s_offsetLessEquals) * f3 +
                           (s_greater[2*tid+1] + s_offsetGreater + nLeft) * f4;
 
-    if (i < n) {
-        g_odata[indexA] = g_idata[i];
+    if (i < end) {
+        if (axis == 0) {
+            g_odata[i] = g_particlesX[i];
+        }
+        else if (axis == 1) {
+            g_odata[i] = g_particlesY[i];
+        }
+        else {
+            g_odata[i] = g_particlesZ[i];
+        }
         g_permutations[i] = indexA;
     }
 
-    if (j < n) {
-        g_odata[indexB] = g_idata[j];
+    if (j < end) {
+        if (axis == 0) {
+            g_odata[j] = g_particlesX[j];
+        }
+        else if (axis == 1) {
+            g_odata[j] = g_particlesY[j];
+        }
+        else {
+            g_odata[j] = g_particlesZ[j];
+        }
         g_permutations[j] = indexB;
     }
 }
 
 template <unsigned int blockSize>
 __global__ void permute(
-        float * g_idata,
+        unsigned int * g_begins,
+        unsigned int * g_ends,
+        unsigned int * g_axis,
+        float * g_particlesX,
+        float * g_particlesY,
+        float * g_particlesZ,
         float * g_odata,
         unsigned int * g_permutations,
-        int n) {
+        unsigned int rollAxis) {
     unsigned int tid = threadIdx.x;
 
-    unsigned int i = blockIdx.x * blockSize * 2 + 2 * tid;
-    unsigned int j = blockIdx.x * blockSize * 2 + 2 * tid + 1;
+    const unsigned int begin = g_begins[blockIdx.x];
+    const unsigned int end = g_ends[blockIdx.x];
+    const unsigned int axis = g_axis[blockIdx.x];
+
+    unsigned int i = begin + 2 * tid;
+    unsigned int j = begin + 2 * tid + 1;
     //unsigned int gridSize = blockSize*2*gridDim.x;
 
-    if (i < n) {
-        g_odata[g_permutations[i]] = g_idata[i];
+    if (i < end) {
+        if (axis == rollAxis) {
+            g_odata[i] = g_particlesX[g_permutations[i]];
+        }
+        else if (axis == rollAxis + 1) {
+            g_odata[i] = g_particlesY[g_permutations[i]];
+        }
+        else {
+            g_odata[i] = g_particlesZ[g_permutations[i]];
+        }
+        //g_odata[g_permutations[i]] = g_idata[i];
     }
 
-    if (j < n) {
-        g_odata[g_permutations[j]] = g_idata[j];
+    if (j < end) {
+        if (axis == rollAxis) {
+            g_odata[j] = g_particlesX[g_permutations[j]];
+        }
+        else if (axis == rollAxis + 1) {
+            g_odata[j] = g_particlesY[g_permutations[j]];
+        }
+        else {
+            g_odata[j] = g_particlesZ[g_permutations[j]];
+        }
+        //g_odata[g_permutations[j]] = g_idata[j];
     }
 }
 
@@ -305,8 +236,6 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     int countLeq[nCells];
     int countG[nCells];
 
-    std::vector<unsigned  int> cellIndices;
-
     CUDA_CHECK(cudaMemset, (lcl->d_offsetLeq, 0, sizeof(unsigned int) * nCells));
     CUDA_CHECK(cudaMemset, (lcl->d_offsetG, 0, sizeof(unsigned int) * nCells));
 
@@ -323,7 +252,12 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
         int begin = beginInd;
         for (int i = 0; i < nBlocksPerCell; ++i) {
             lcl->h_nLefts[blockPtr] = lcl->h_countsLeft(cellPtrOffset);
-            cellIndices.push_back(cellPtrOffset);
+            lcl->h_cellIndices[blockPtr] = cellPtrOffset;
+            lcl->h_axis[blockPtr] = cell.cutAxis;
+            lcl->h_begins[blockPtr] = begin;
+            begin += N_THREADS * ELEMENTS_PER_THREAD;
+            lcl->h_ends[blockPtr] = min(begin, endInd);
+
             blockPtr++;
         }
         nBlocks += nBlocksPerCell;
@@ -331,51 +265,64 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
         out[cellPtrOffset] = 0;
     }
 
-    /*
-    // Primary axis to temporary
-    for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
-        out[cellPtrOffset] = 0;
+    CUDA_CHECK(cudaMemcpyAsync,(
+            lcl->d_cellIndices,
+            lcl->h_cellIndices,
+            sizeof (unsigned int) * nBlocks,
+            cudaMemcpyHostToDevice,
+            lcl->streams(0)));
 
-        auto cell = static_cast<Cell>(*(in + cellPtrOffset));
+    CUDA_CHECK(cudaMemcpyAsync,(
+            lcl->d_begins,
+            lcl->h_begins,
+            sizeof (unsigned int) * nBlocks,
+            cudaMemcpyHostToDevice,
+            lcl->streams(0)));
 
-        int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
-        int endInd = pst->lcl->cellToRangeMap(cell.id, 1);
-        int n = endInd - beginInd;
-        float cut = cell.getCut();
+    CUDA_CHECK(cudaMemcpyAsync,(
+            lcl->d_ends,
+            lcl->h_ends,
+            sizeof (unsigned int) * nBlocks,
+            cudaMemcpyHostToDevice,
+            lcl->streams(0)));
 
-        const int nBlocks = (int) ceil((float) n / (N_THREADS * 2.0));
+    CUDA_CHECK(cudaMemcpyAsync,(
+            lcl->d_axis,
+            lcl->h_axis,
+            sizeof (unsigned int) * nBlocks,
+            cudaMemcpyHostToDevice,
+            lcl->streams(0)));
 
-        //CUDA_CHECK(cudaMalloc, (&d_offsetLessEquals, sizeof(unsigned int)));
-        //CUDA_CHECK(cudaMalloc, (&d_offsetGreater, sizeof(unsigned int)));
-        float * d_from;
-        float * d_to = lcl->d_particlesT + beginInd;
+    CUDA_CHECK(cudaMemcpyAsync,(
+            lcl->d_cuts,
+            lcl->h_cuts,
+            sizeof (float) * nBlocks,
+            cudaMemcpyHostToDevice,
+            lcl->streams(0)));
 
-        if (cell.cutAxis == 0) {
-            d_from = lcl->d_particlesX + beginInd;
-        }
-        else if (cell.cutAxis == 1) {
-            d_from = lcl->d_particlesY + beginInd;
-        }
-        else {
-            d_from = lcl->d_particlesZ + beginInd;
-        }
+    CUDA_CHECK(cudaMalloc, (&lcl->d_offsetG, sizeof(unsigned int) * nCells));
+    CUDA_CHECK(cudaMalloc, (&lcl->d_offsetLeq, sizeof(unsigned int) * nCells));
 
-        partition<N_THREADS><<<
-            nBlocks,
-            N_THREADS,
-            N_THREADS * sizeof(unsigned int) * 4 + sizeof(unsigned int) * 2,
-            lcl->streams(0)
-        >>>(
-                lcl->d_offsetLeq + cellPtrOffset,
-                lcl->d_offsetG + cellPtrOffset,
-                d_from,
-                d_to,
-                lcl->d_permutations + beginInd,
-                cell.getCut(),
-                lcl->h_countsLeft(cellPtrOffset),
-                n
-        );
-    };
+    partition<N_THREADS><<<
+        nBlocks,
+        N_THREADS,
+        N_THREADS * sizeof(unsigned int) * 4 + sizeof(unsigned int) * 2,
+        lcl->streams(0)
+    >>>(
+            lcl->d_begins,
+            lcl->d_ends,
+            lcl->d_nLefts,
+            lcl->d_axis,
+            lcl->d_cellIndices,
+            lcl->d_cuts,
+            lcl->d_offsetLeq,
+            lcl->d_offsetG,
+            lcl->d_particlesX,
+            lcl->d_particlesY,
+            lcl->d_particlesZ,
+            lcl->d_particlesT,
+            lcl->d_permutations
+    );
 
     // Temporary back to primary
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
@@ -402,42 +349,22 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
 
     }
 
-    // Secondary to temporary
-    for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
-        auto cell = static_cast<Cell>(*(in + cellPtrOffset));
-
-        int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
-        int endInd = pst->lcl->cellToRangeMap(cell.id, 1);
-        int n = endInd - beginInd;
-
-        const int nBlocks = (int) ceil((float) n / (N_THREADS * 2.0));
-
-        float * d_from;
-        float * d_to = lcl->d_particlesT + beginInd;
-
-        if (cell.cutAxis == 0) {
-            d_from = lcl->d_particlesY + beginInd;
-        }
-        else if (cell.cutAxis == 1) {
-            d_from = lcl->d_particlesX + beginInd;
-        }
-        else {
-            d_from = lcl->d_particlesX + beginInd;
-        }
-
-        permute<N_THREADS><<<
-            nBlocks,
-            N_THREADS,
-            0,
-            lcl->streams(0)
-        >>>(
-            d_from,
-            d_to,
-            lcl->d_permutations + beginInd,
-            n
-        );
-
-    }
+    permute<N_THREADS><<<
+        nBlocks,
+        N_THREADS,
+        0,
+        lcl->streams(0)
+    >>>(
+            lcl->d_begins,
+            lcl->d_ends,
+            lcl->d_axis,
+            lcl->d_particlesX,
+            lcl->d_particlesY,
+            lcl->d_particlesZ,
+            lcl->d_particlesT,
+            lcl->d_permutations,
+            1
+    );
 
     // Temporary back to secondary
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
@@ -463,41 +390,22 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
         cudaMemcpyAsync(d_to, d_from,  sizeof(float) * n, cudaMemcpyDeviceToDevice, lcl->streams(0));
     }
 
-    // Tertiary to temporary
-    for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
-        auto cell = static_cast<Cell>(*(in + cellPtrOffset));
-
-        int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
-        int endInd = pst->lcl->cellToRangeMap(cell.id, 1);
-        int n = endInd - beginInd;
-
-        const int nBlocks = (int) ceil((float) n / (N_THREADS * 2.0));
-
-        float * d_from;
-        float * d_to = lcl->d_particlesT + beginInd;
-
-        if (cell.cutAxis == 0) {
-            d_from = lcl->d_particlesZ + beginInd;
-        }
-        else if (cell.cutAxis == 1) {
-            d_from = lcl->d_particlesZ + beginInd;
-        }
-        else {
-            d_from = lcl->d_particlesY + beginInd;
-        }
-
-        permute<N_THREADS><<<
+    permute<N_THREADS><<<
         nBlocks,
         N_THREADS,
         0,
         lcl->streams(0)
-        >>>(
-                d_from,
-                d_to,
-                lcl->d_permutations + beginInd,
-                n
-        );
-    }
+    >>>(
+            lcl->d_begins,
+            lcl->d_ends,
+            lcl->d_axis,
+            lcl->d_particlesX,
+            lcl->d_particlesY,
+            lcl->d_particlesZ,
+            lcl->d_particlesT,
+            lcl->d_permutations,
+            2
+    );
 
     // Temporary back to tertiary
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {

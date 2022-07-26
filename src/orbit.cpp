@@ -36,7 +36,7 @@ int master(MDL vmdl,void *vpst) {
     META_PARAMS params{
             true,
             true,
-            false,
+            true,
             false
     };
 
