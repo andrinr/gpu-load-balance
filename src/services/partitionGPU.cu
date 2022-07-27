@@ -147,27 +147,29 @@ __global__ void partition(
 
     if (i < end) {
         if (axis == 0) {
-            g_odata[i] = g_particlesX[i];
+            g_odata[indexA] = g_particlesX[i];
         }
         else if (axis == 1) {
-            g_odata[i] = g_particlesY[i];
+            g_odata[indexA] = g_particlesY[i];
         }
         else {
-            g_odata[i] = g_particlesZ[i];
+            g_odata[indexA] = g_particlesZ[i];
         }
+        //g_odata[i] = cellIndex;
         g_permutations[i] = indexA;
     }
 
     if (j < end) {
         if (axis == 0) {
-            g_odata[j] = g_particlesX[j];
+            g_odata[indexB] = g_particlesX[j];
         }
         else if (axis == 1) {
-            g_odata[j] = g_particlesY[j];
+            g_odata[indexB] = g_particlesY[j];
         }
         else {
-            g_odata[j] = g_particlesZ[j];
+            g_odata[indexB] = g_particlesZ[j];
         }
+        //g_odata[j] = nLeft;
         g_permutations[j] = indexB;
     }
 }
@@ -252,8 +254,10 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
         int begin = beginInd;
         for (int i = 0; i < nBlocksPerCell; ++i) {
             lcl->h_nLefts[blockPtr] = lcl->h_countsLeft(cellPtrOffset);
+            printf("%d\n", lcl->h_nLefts[blockPtr]);
             lcl->h_cellIndices[blockPtr] = cellPtrOffset;
             lcl->h_axis[blockPtr] = cell.cutAxis;
+            lcl->h_cuts[blockPtr] = cell.getCut();
             lcl->h_begins[blockPtr] = begin;
             begin += N_THREADS * ELEMENTS_PER_THREAD;
             lcl->h_ends[blockPtr] = min(begin, endInd);
@@ -296,6 +300,13 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     CUDA_CHECK(cudaMemcpyAsync,(
             lcl->d_cuts,
             lcl->h_cuts,
+            sizeof (float) * nBlocks,
+            cudaMemcpyHostToDevice,
+            lcl->streams(0)));
+
+    CUDA_CHECK(cudaMemcpyAsync,(
+            lcl->d_nLefts,
+            lcl->h_nLefts,
             sizeof (float) * nBlocks,
             cudaMemcpyHostToDevice,
             lcl->streams(0)));
@@ -349,6 +360,7 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
 
     }
 
+    
     permute<N_THREADS><<<
         nBlocks,
         N_THREADS,
@@ -440,6 +452,7 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
         lcl->cellToRangeMap(cell.getRightChildId(), 1) =
                 lcl->cellToRangeMap(cell.id, 1);
     }
+
 
 
     blitz::Array<float, 1> x = lcl->particles(blitz::Range::all(), 0);

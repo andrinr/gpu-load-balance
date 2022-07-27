@@ -107,14 +107,14 @@ int master(MDL vmdl,void *vpst) {
             if (params.GPU_PARTITION) {
                 mdl->RunService(
                 PST_COUNTLEFTGPU,
-                nCells * sizeof(ServiceCountLeft::input),
+                nCells * sizeof(ServiceCountLeftGPU::input),
                 iCells,
                 oCountsLeft);
             }
             else if (params.GPU_COUNT) {
                 mdl->RunService(
                 PST_COUNTLEFTAXISGPU,
-                nCells * sizeof(ServiceCountLeft::input),
+                nCells * sizeof(ServiceCountLeftGPUAxis::input),
                 iCells,
                 oCountsLeft);
             }
@@ -222,7 +222,6 @@ void *worker_init(MDL vmdl) {
     pst->lcl = new LocalData();
 
     mdl->AddService(std::make_unique<ServiceSetAdd>(pst));
-    mdl->AddService(std::make_unique<ServiceCountLeft>(pst));
     mdl->AddService(std::make_unique<ServiceInit>(pst));
     mdl->AddService(std::make_unique<ServiceCount>(pst));
     mdl->AddService(std::make_unique<ServiceCopyParticles>(pst));

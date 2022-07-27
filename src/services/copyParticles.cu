@@ -15,7 +15,6 @@ int ServiceCopyParticles::Service(PST pst,void *vin,int nIn,void *vout, int nOut
     int nParticles = lcl->particles.rows();
     // We only need the first nParticles, since axis 0 is axis where cuts need to be found
 
-
     if (in.params.GPU_COUNT and not in.params.GPU_PARTITION) {
         cudaMemcpyAsync(
                 lcl->d_particlesT,

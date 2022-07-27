@@ -96,7 +96,7 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
         unsigned int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
         unsigned int n = endInd - beginInd;
 
-        unsigned int nBlocksPerCell = (int) floor((float) n / (N_THREADS * ELEMENTS_PER_THREAD));
+        unsigned int nBlocksPerCell = max((int) floor((float) n / (N_THREADS * ELEMENTS_PER_THREAD)),1);
 
         int begin = beginInd;
         for (int i = 0; i < nBlocksPerCell; ++i) {
@@ -124,14 +124,12 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
             cudaMemcpyHostToDevice,
             lcl->streams(0)));
 
-    //CUDA_CHECK(cudaMemset, (lcl->d_index, 0, sizeof(unsigned int)));
-
     // Execute the kernel
     reduce<N_THREADS><<<
-    nBlocks,
-    N_THREADS,
-    N_THREADS * sizeof (unsigned int),
-    lcl->streams(0)
+        nBlocks,
+        N_THREADS,
+        N_THREADS * sizeof (unsigned int),
+        lcl->streams(0)
     >>>(
             lcl->d_particlesX,
             lcl->d_particlesY,
@@ -143,7 +141,6 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
             lcl->d_results
     );
 
-    //
     CUDA_CHECK(cudaMemcpyAsync,(
             lcl->h_results,
                     lcl->d_results,
@@ -156,6 +153,10 @@ int ServiceCountLeftGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
 
     for (int i = 0; i < nBlocks; ++i) {
         out[cellIndices[i]] += lcl->h_results[i];
+    }
+
+    for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
+        lcl->h_countsLeft(cellPtrOffset) = out[cellPtrOffset];
     }
 
     return nCells * sizeof(output);
