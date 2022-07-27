@@ -2191,15 +2191,6 @@ The ORB algorithm is only executed form the operative node, all other nodes are 
 
 
 
-\subsection{Sch}
-
-
-The operative is essentially a C++ implementation of the code shown in figure \ref{proc:orbmain}. Since recursive algorithms are harder to optimize for the compiler, we use a for loop instead.
-
-The main task of the operative is to coordinate all services and interpret their results. 
-
-
-
 \newpage
 \section{GPU Implementation}\label{sec:gpuimpl}
 
@@ -2660,20 +2651,19 @@ We describe measurements which were done using the reduction in CUDA, we mention
 	\begin{center}
 		\begin{tikzpicture}
 			
-			\timeline{6}{15}{3}
+			\timeline{6}{14}{3}
 			
 			
-			\parallelloop{-2}{13.5}{8}{1.5}{loop till tree built};
+			\parallelloop{-2}{11.5}{8}{1.5}{loop till tree built};
 			
 			\parallelloop{-1}{9.5}{7}{5.5}{loop till cut found};
 			
-			\communication{Init}{0}{7}{14};
+			\communication{Init}{0}{7}{13};
 			
-			\communication{Count}{0}{7}{13};
+			\communication{Copy Particles To GPU}{0}{7}{12};
 			
-			\communication{Make Axis}{0}{7}{12};
-			
-			\communication{Copy Particles To GPU}{0}{7}{11};
+			\communication{Count}{0}{7}{11};
+		
 			
 			\communication{Copy Cells To GPU}{0}{7}{10};
 			
@@ -2690,8 +2680,8 @@ We describe measurements which were done using the reduction in CUDA, we mention
 			
 		\end{tikzpicture}
 	\end{center}
-	\caption{Parallelized ORB GPU version 2}
-	\label{fig:orbgpup2}
+	\caption{Parallelized ORB with GPU counting and GPU partitioning}
+	\label{fig:orbgpup3}
 \end{figure}
 
 We add a timeline which is based on measurements with a CUDA enhanced binary cut algorithm. 

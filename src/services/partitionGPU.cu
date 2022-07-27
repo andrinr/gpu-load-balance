@@ -8,7 +8,17 @@
 static_assert(std::is_void<ServicePartitionGPU::input>()  || std::is_trivial<ServicePartitionGPU::input>());
 static_assert(std::is_void<ServicePartitionGPU::output>() || std::is_trivial<ServicePartitionGPU::output>());
 
-__device__ void scan(volatile unsigned int * s_idata, unsigned int thid, unsigned int n) {
+
+#define NUM_BANKS 16
+#define LOG_NUM_BANKS 4
+#ifdef ZERO_BANK_CONFLICTS
+#define CONFLICT_FREE_OFFSET(n) \
+((n) >> NUM_BANKS + (n) >> (2 * LOG_NUM_BANKS))
+#else
+#define CONFLICT_FREE_OFFSET(n) ((n) >> LOG_NUM_BANKS)
+#endif
+
+__device__ void scan(volatile unsigned int * s_idata, unsigned int thid, unsigned int n, bool slow) {
     unsigned int offset = 1;
     for (unsigned int d = n>>1; d > 0; d >>= 1) // build sum in place up the tree
     {
@@ -17,11 +27,16 @@ __device__ void scan(volatile unsigned int * s_idata, unsigned int thid, unsigne
         {
             unsigned int ai = offset*(2*thid+1)-1;
             unsigned int bi = offset*(2*thid+2)-1;
+            if (not slow) {
+                ai += CONFLICT_FREE_OFFSET(ai);
+                bi += CONFLICT_FREE_OFFSET(bi);
+            }
             s_idata[bi] += s_idata[ai];
         }
         offset *= 2;
     }
-    if (thid == 0) { s_idata[n - 1] = 0; } // clear the last element
+    if (not slow and thid==0) { s_idata[n - 1 + CONFLICT_FREE_OFFSET(n - 1)] = 0; } // clear the last element
+    if (slow and thid==0) { s_idata[n - 1] = 0; } // clear the last element
     for (unsigned int d = 1; d < n; d *= 2) // traverse down tree & build scan
     {
         offset >>= 1;
@@ -30,6 +45,10 @@ __device__ void scan(volatile unsigned int * s_idata, unsigned int thid, unsigne
         {
             unsigned int ai = offset*(2*thid+1)-1;
             unsigned int bi = offset*(2*thid+2)-1;
+            if (not slow) {
+                ai += CONFLICT_FREE_OFFSET(ai);
+                bi += CONFLICT_FREE_OFFSET(bi);
+            }
             unsigned int t = s_idata[ai];
             s_idata[ai] = s_idata[bi];
             s_idata[bi] += t;
@@ -69,63 +88,85 @@ __global__ void partition(
     const unsigned int cellBegin = g_cellBegin[blockIdx.x];
     const unsigned int axis = g_axis[blockIdx.x];
 
-    unsigned int i = begin + 2 * tid;
-    unsigned int j = begin + 2 * tid + 1;
+    unsigned int n = blockSize * 2;
+    //unsigned int i = begin + 2 * tid;
+    //unsigned int j = begin + 2 * tid + 1;
+
+    // slow version but works with all input sizes
+    unsigned int l_i = tid;
+    unsigned int l_j = tid + n / 2;
+
+    int bankOffsetI = CONFLICT_FREE_OFFSET(l_i);
+    int bankOffsetJ = CONFLICT_FREE_OFFSET(l_j);
+
+    unsigned int g_i = begin + l_i;
+    unsigned int g_j = begin + l_j;
+
+    l_i += bankOffsetI;
+    l_j += bankOffsetJ;
+
+    bool slow = true;
+    if (slow) {
+        l_i = 2 * tid;
+        l_j = 2 * tid + 1;
+        g_i = begin + l_i;
+        g_j = begin + l_j;
+    }
 
     bool f1, f2;
-    if (i < end) {
+    if (not slow or l_i < end) {
         if (axis == 0) {
-            f1 = g_particlesX[i] <= cut;
+            f1 = g_particlesX[g_i] <= cut;
             f2 = not f1;
         }
         else if (axis == 1) {
-            f1 = g_particlesY[i] <= cut;
+            f1 = g_particlesY[g_i] <= cut;
             f2 = not f1;
         }
         else {
-            f1 = g_particlesZ[i] <= cut;
+            f1 = g_particlesZ[g_i] <= cut;
             f2 = not f1;
         }
         // potential to avoid bank conflicts here
-        s_lessEquals[2*tid] = f1;
-        s_greater[2*tid] = f2;
+        s_lessEquals[l_i] = f1;
+        s_greater[l_i] = f2;
     }
     else {
         f1 = false;
         f2 = false;
-        s_lessEquals[2*tid] = 0;
-        s_greater[2*tid] = 0;
+        s_lessEquals[l_i] = 0;
+        s_greater[l_i] = 0;
     }
 
     bool f3, f4;
-    if (j < end) {
+    if (not slow or l_j < end) {
         if (axis == 0) {
-            f3 = g_particlesX[j] <= cut;
+            f3 = g_particlesX[g_j] <= cut;
             f4 = not f3;
         }
         else if (axis == 1) {
-            f3 = g_particlesY[j] <= cut;
+            f3 = g_particlesY[g_j] <= cut;
             f4 = not f3;
         }
         else {
-            f3 = g_particlesZ[j] <= cut;
+            f3 = g_particlesZ[g_j] <= cut;
             f4 = not f3;
         }
         // potential to avoid bank conflicts here
-        s_lessEquals[2*tid+1] = f3;
-        s_greater[2*tid+1] = f4;
+        s_lessEquals[l_j] = f3;
+        s_greater[l_j] = f4;
     }
     else {
         f3 = false;
         f4 = false;
-        s_lessEquals[2*tid+1] = 0;
-        s_greater[2*tid+1] = 0;
+        s_lessEquals[l_j] = 0;
+        s_greater[l_j] = 0;
     }
 
     __syncthreads();
 
-    scan(s_lessEquals, tid, blockSize * 2 );
-    scan(s_greater, tid, blockSize * 2);
+    scan(s_lessEquals, tid, n, slow);
+    scan(s_greater, tid, n, slow);
 
     __syncthreads();
 
@@ -141,38 +182,38 @@ __global__ void partition(
     __syncthreads();
 
     // avoiding warp divergence
-    unsigned int indexA = cellBegin + (s_lessEquals[2*tid] + s_offsetLessEquals) * f1 +
-                          (s_greater[2*tid] + s_offsetGreater + nLeft) * f2;
+    unsigned int indexA = cellBegin + (s_lessEquals[l_i] + s_offsetLessEquals) * f1 +
+                          (s_greater[l_i] + s_offsetGreater + nLeft) * f2;
 
-    unsigned int indexB = cellBegin + (s_lessEquals[2*tid+1] + s_offsetLessEquals) * f3 +
-                          (s_greater[2*tid+1] + s_offsetGreater + nLeft) * f4;
+    unsigned int indexB = cellBegin + (s_lessEquals[l_j] + s_offsetLessEquals) * f3 +
+                          (s_greater[l_j] + s_offsetGreater + nLeft) * f4;
 
-    if (i < end) {
+    if (not slow or l_i < end) {
         if (axis == 0) {
-            g_odata[indexA] = g_particlesX[i];
+            g_odata[indexA] = g_particlesX[g_i];
         }
         else if (axis == 1) {
-            g_odata[indexA] = g_particlesY[i];
+            g_odata[indexA] = g_particlesY[g_i];
         }
         else {
-            g_odata[indexA] = g_particlesZ[i];
+            g_odata[indexA] = g_particlesZ[g_i];
         }
         //g_odata[i] = indexA;
-        g_permutations[i] = indexA;
+        g_permutations[g_i] = indexA;
     }
 
-    if (j < end) {
+    if (not slow or l_j < end) {
         if (axis == 0) {
-            g_odata[indexB] = g_particlesX[j];
+            g_odata[indexB] = g_particlesX[g_j];
         }
         else if (axis == 1) {
-            g_odata[indexB] = g_particlesY[j];
+            g_odata[indexB] = g_particlesY[g_j];
         }
         else {
-            g_odata[indexB] = g_particlesZ[j];
+            g_odata[indexB] = g_particlesZ[g_j];
         }
         //g_odata[j] = indexB;
-        g_permutations[j] = indexB;
+        g_permutations[g_j] = indexB;
     }
 }
 
@@ -469,7 +510,6 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
                 lcl->cellToRangeMap(cell.id, 1);
     }
 
-    /*
     blitz::Array<float, 1> x = lcl->particles(blitz::Range::all(), 0);
     blitz::Array<float, 1> y = lcl->particles(blitz::Range::all(), 1);
     blitz::Array<float, 1> z = lcl->particles(blitz::Range::all(), 2);
@@ -532,7 +572,7 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
         }
         printf("\n---------------\n\n");
 
-    }*/
+    }
 
     return 0;
 }

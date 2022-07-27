@@ -39,7 +39,15 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     storage.ascendingFlag() = true, true;
     // x, y, z, cellId, tmp
     int k = 3;
-    auto particles = blitz::Array<float, 2>(in.nParticles, k, storage);
+    float * particlesXYZData = (float *)malloc(in.nParticles * sizeof(float ) * k);
+    CUDA_CHECK(cudaMallocHost, ((void**)&particlesXYZData, in.nParticles * sizeof (float ) * k));
+
+    auto particles = blitz::Array<float, 2>(
+            particlesXYZData,
+            blitz::shape(in.nParticles, k),
+            blitz::deleteDataWhenDone,
+            storage);
+
     srand(pst->idSelf);
     int c = 0;
     for (int i = 0; i < in.nParticles; i++) {
