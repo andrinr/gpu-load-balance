@@ -72,15 +72,37 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
         lcl->particlesT.reference(particlesT);
     }
 
-    const int nBlocks = (int) ceil((float) in.nParticles / (N_THREADS * ELEMENTS_PER_THREAD)) + MAX_CELLS;
 
-    if (in.params.GPU_COUNT) {
-        // Results from counting on the GPU
-        CUDA_CHECK(cudaMalloc, (&lcl->d_results, sizeof (unsigned int) * nBlocks));
+    if (in.params.GPU_COUNT) {;
 
-        //printf("ServiceInit: GPU_COUNT: %d blocks\n", nBlocks);
+        int nBlocks;
 
-        //printf("ServiceInit: GPU_COUNT_ATOMIC\n");
+        if (not in.params.GPU_PARTITION) {
+            nBlocks = (int) ceil((float) in.nParticles / (N_THREADS * ELEMENTS_PER_THREAD)) + MAX_CELLS;
+        } else {
+            nBlocks = (int) ceil((float) in.nParticles / (N_THREADS * 2)) + MAX_CELLS;
+
+            CUDA_CHECK(cudaMalloc,(&lcl->d_permutations, sizeof (unsigned int) * in.nParticles));
+            CUDA_CHECK(cudaMalloc,(&lcl->d_particlesX, sizeof (float ) * in.nParticles));
+            CUDA_CHECK(cudaMalloc,(&lcl->d_particlesY, sizeof (float ) * in.nParticles));
+            CUDA_CHECK(cudaMalloc,(&lcl->d_particlesZ, sizeof (float ) * in.nParticles));
+
+            lcl->h_cellBegin = (unsigned int*)malloc(nBlocks * sizeof(unsigned int));
+            CUDA_CHECK(cudaMalloc,(&lcl->d_cellBegin, sizeof (unsigned int) * nBlocks));
+            lcl->h_nLefts = (unsigned int*)malloc(nBlocks * sizeof(unsigned int));
+            CUDA_CHECK(cudaMalloc,(&lcl->d_nLefts, sizeof (unsigned int) * nBlocks));
+            lcl->h_cellIndices = (unsigned int*)malloc(nBlocks * sizeof(unsigned int));
+            CUDA_CHECK(cudaMalloc,(&lcl->d_cellIndices, sizeof (unsigned int) * nBlocks));
+            lcl->h_axis = (unsigned int*)malloc(nBlocks * sizeof(unsigned int));
+            CUDA_CHECK(cudaMalloc,(&lcl->d_axis, sizeof (unsigned int ) * nBlocks));
+
+            auto h_countsLeft = blitz::Array<unsigned int, 1>(MAX_CELLS);
+            lcl->h_countsLeft.reference(h_countsLeft);
+
+            CUDA_CHECK(cudaMalloc,(&lcl->d_offsetLeq, sizeof (unsigned int) * MAX_CELLS));
+            CUDA_CHECK(cudaMalloc,(&lcl->d_offsetG, sizeof (unsigned int) * MAX_CELLS));
+        }
+
         CUDA_CHECK(cudaMalloc, (&lcl->d_begins, sizeof (unsigned int) * nBlocks));
         CUDA_CHECK(cudaMalloc, (&lcl->d_ends, sizeof (unsigned int) * nBlocks));
         CUDA_CHECK(cudaMalloc, (&lcl->d_cuts, sizeof (float) * nBlocks));
@@ -92,12 +114,9 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
         lcl->h_cuts = (float*)malloc(nBlocks * sizeof(float));
         CUDA_CHECK(cudaMallocHost, ((void**)&lcl->h_cuts, nBlocks * sizeof (float)));
 
-            //CUDA_CHECK(cudaMalloc,(&lcl->d_index, sizeof (unsigned int)));
-
-
-        unsigned int* h_results = (unsigned int*)malloc(nBlocks * sizeof(unsigned int));
-        CUDA_CHECK(cudaMallocHost, ((void**)&h_results, nBlocks * sizeof (unsigned int)));
-        lcl->h_results = h_results;
+        CUDA_CHECK(cudaMalloc, (&lcl->d_results, sizeof (unsigned int) * nBlocks));
+        lcl->h_results = (unsigned int*)malloc(nBlocks * sizeof(unsigned int));
+        CUDA_CHECK(cudaMallocHost, ((void**)&lcl->h_results, nBlocks * sizeof (unsigned int)));
 
         // Temporary particle array on the GPU
         CUDA_CHECK(cudaMalloc,(&lcl->d_particlesT, sizeof (float) * in.nParticles));
@@ -110,29 +129,6 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
             streams(i) = stream;
         }
         lcl->streams.reference(streams);
-    }
-
-
-
-    if (in.params.GPU_PARTITION) {
-        // Temporary particle array on the GPU
-        CUDA_CHECK(cudaMalloc,(&lcl->d_permutations, sizeof (unsigned int) * in.nParticles));
-        CUDA_CHECK(cudaMalloc,(&lcl->d_particlesX, sizeof (float ) * in.nParticles));
-        CUDA_CHECK(cudaMalloc,(&lcl->d_particlesY, sizeof (float ) * in.nParticles));
-        CUDA_CHECK(cudaMalloc,(&lcl->d_particlesZ, sizeof (float ) * in.nParticles));
-
-        lcl->h_nLefts = (unsigned int*)malloc(nBlocks * sizeof(unsigned int));
-        CUDA_CHECK(cudaMalloc,(&lcl->d_nLefts, sizeof (unsigned int) * nBlocks));
-        lcl->h_cellIndices = (unsigned int*)malloc(nBlocks * sizeof(unsigned int));
-        CUDA_CHECK(cudaMalloc,(&lcl->d_cellIndices, sizeof (unsigned int) * nBlocks));
-        lcl->h_axis = (unsigned int*)malloc(nBlocks * sizeof(unsigned int));
-        CUDA_CHECK(cudaMalloc,(&lcl->d_axis, sizeof (unsigned int ) * nBlocks));
-
-        auto h_countsLeft = blitz::Array<unsigned int, 1>(MAX_CELLS);
-        lcl->h_countsLeft.reference(h_countsLeft);
-
-        CUDA_CHECK(cudaMalloc,(&lcl->d_offsetLeq, sizeof (unsigned int) * MAX_CELLS));
-        CUDA_CHECK(cudaMalloc,(&lcl->d_offsetG, sizeof (unsigned int) * MAX_CELLS));
     }
 
     printf("ServiceInit finished on thread %d\n",pst->idSelf);

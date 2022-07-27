@@ -19,6 +19,8 @@ public:
     unsigned int * h_results;
     unsigned int * d_offsetLeq;
     unsigned int * d_offsetG;
+    unsigned int * d_cellBegin;
+    unsigned int * h_cellBegin;
     unsigned int * d_begins;
     unsigned int * h_begins;
     unsigned int * d_ends;

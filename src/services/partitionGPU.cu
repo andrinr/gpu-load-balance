@@ -42,6 +42,7 @@ __global__ void partition(
         unsigned int * g_begins,
         unsigned int * g_ends,
         unsigned int * g_nLeft,
+        unsigned int * g_cellBegin,
         unsigned int * g_axis,
         unsigned int * g_cellIndices,
         float * g_cuts,
@@ -65,6 +66,7 @@ __global__ void partition(
     const float cut = g_cuts[blockIdx.x];
     const unsigned int cellIndex = g_cellIndices[blockIdx.x];
     const unsigned int nLeft = g_nLeft[blockIdx.x];
+    const unsigned int cellBegin = g_cellBegin[blockIdx.x];
     const unsigned int axis = g_axis[blockIdx.x];
 
     unsigned int i = begin + 2 * tid;
@@ -139,10 +141,10 @@ __global__ void partition(
     __syncthreads();
 
     // avoiding warp divergence
-    unsigned int indexA = (s_lessEquals[2*tid] + s_offsetLessEquals) * f1 +
+    unsigned int indexA = cellBegin + (s_lessEquals[2*tid] + s_offsetLessEquals) * f1 +
                           (s_greater[2*tid] + s_offsetGreater + nLeft) * f2;
 
-    unsigned int indexB = (s_lessEquals[2*tid+1] + s_offsetLessEquals) * f3 +
+    unsigned int indexB = cellBegin + (s_lessEquals[2*tid+1] + s_offsetLessEquals) * f3 +
                           (s_greater[2*tid+1] + s_offsetGreater + nLeft) * f4;
 
     if (i < end) {
@@ -155,7 +157,7 @@ __global__ void partition(
         else {
             g_odata[indexA] = g_particlesZ[i];
         }
-        //g_odata[i] = cellIndex;
+        //g_odata[i] = indexA;
         g_permutations[i] = indexA;
     }
 
@@ -169,7 +171,7 @@ __global__ void partition(
         else {
             g_odata[indexB] = g_particlesZ[j];
         }
-        //g_odata[j] = nLeft;
+        //g_odata[j] = indexB;
         g_permutations[j] = indexB;
     }
 }
@@ -189,36 +191,37 @@ __global__ void permute(
 
     const unsigned int begin = g_begins[blockIdx.x];
     const unsigned int end = g_ends[blockIdx.x];
-    const unsigned int axis = g_axis[blockIdx.x];
+    const unsigned int axis = (g_axis[blockIdx.x] + rollAxis) % 3;
 
     unsigned int i = begin + 2 * tid;
     unsigned int j = begin + 2 * tid + 1;
     //unsigned int gridSize = blockSize*2*gridDim.x;
 
     if (i < end) {
-        if (axis == rollAxis) {
+        if (axis == 0) {
             g_odata[g_permutations[i]] = g_particlesX[i];
         }
-        else if (axis == rollAxis + 1) {
+        else if (axis == 1) {
             g_odata[g_permutations[i]] = g_particlesY[i];
         }
         else {
             g_odata[g_permutations[i]] = g_particlesZ[i];
         }
-        //g_odata[g_permutations[i]] = g_idata[i];
+
+        //g_odata[i] = g_permutations[i];
     }
 
     if (j < end) {
-        if (axis == rollAxis) {
+        if (axis == 0) {
             g_odata[g_permutations[j]] = g_particlesX[j];
         }
-        else if (axis == rollAxis + 1) {
+        else if (axis == 1) {
             g_odata[g_permutations[j]] = g_particlesY[j];
         }
         else {
             g_odata[g_permutations[j]] = g_particlesZ[j];
         }
-        //g_odata[g_permutations[j]] = g_idata[j];
+        //g_odata[j] = g_permutations[j];
     }
 }
 
@@ -231,12 +234,6 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
 
     //int bytes = nCounts * sizeof (uint);
     // https://developer.nvidia.com/blog/how-overlap-data-transfers-cuda-cc/
-    int blockOffset = 0;
-    std::array<int, MAX_CELLS> offsets;
-    offsets[0] = 0;
-
-    int countLeq[nCells];
-    int countG[nCells];
 
     CUDA_CHECK(cudaMemset, (lcl->d_offsetLeq, 0, sizeof(unsigned int) * nCells));
     CUDA_CHECK(cudaMemset, (lcl->d_offsetG, 0, sizeof(unsigned int) * nCells));
@@ -249,18 +246,29 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
         unsigned int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
         unsigned int n = endInd - beginInd;
 
-        unsigned int nBlocksPerCell = (int) ceil((float) n / (N_THREADS * ELEMENTS_PER_THREAD));
+        unsigned int nBlocksPerCell = (int) ceil((float) n / (N_THREADS * 2));
 
         int begin = beginInd;
         for (int i = 0; i < nBlocksPerCell; ++i) {
             lcl->h_nLefts[blockPtr] = lcl->h_countsLeft(cellPtrOffset);
-            printf("%d\n", lcl->h_nLefts[blockPtr]);
+            //printf("%d\n", lcl->h_nLefts[blockPtr]);
             lcl->h_cellIndices[blockPtr] = cellPtrOffset;
             lcl->h_axis[blockPtr] = cell.cutAxis;
             lcl->h_cuts[blockPtr] = cell.getCut();
             lcl->h_begins[blockPtr] = begin;
-            begin += N_THREADS * ELEMENTS_PER_THREAD;
+            begin += N_THREADS * 2;
             lcl->h_ends[blockPtr] = min(begin, endInd);
+            lcl->h_cellBegin[blockPtr] = beginInd;
+
+            /*if (pst->idSelf == 0) {
+                printf("ind %i axis %i cut %f b %i e %i nl %i\n",
+                       lcl->h_cellIndices[blockPtr],
+                       lcl->h_axis[blockPtr],
+                       lcl->h_cuts[blockPtr],
+                       lcl->h_begins[blockPtr],
+                       lcl->h_ends[blockPtr],
+                       lcl->h_nLefts[blockPtr]);
+            }*/
 
             blockPtr++;
         }
@@ -268,6 +276,8 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
 
         out[cellPtrOffset] = 0;
     }
+
+    //printf("nBlocks %i blockptr %i\n", nBlocks, blockPtr);
 
     CUDA_CHECK(cudaMemcpyAsync,(
             lcl->d_cellIndices,
@@ -311,6 +321,13 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
             cudaMemcpyHostToDevice,
             lcl->streams(0)));
 
+    CUDA_CHECK(cudaMemcpyAsync,(
+            lcl->d_cellBegin,
+            lcl->h_cellBegin,
+            sizeof (float) * nBlocks,
+            cudaMemcpyHostToDevice,
+            lcl->streams(0)));
+
     CUDA_CHECK(cudaMemset, (lcl->d_offsetLeq, 0, sizeof(unsigned int) * nCells));
     CUDA_CHECK(cudaMemset, (lcl->d_offsetG, 0, sizeof(unsigned int) * nCells));
 
@@ -323,6 +340,7 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
             lcl->d_begins,
             lcl->d_ends,
             lcl->d_nLefts,
+            lcl->d_cellBegin,
             lcl->d_axis,
             lcl->d_cellIndices,
             lcl->d_cuts,
@@ -357,10 +375,8 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
         }
 
         cudaMemcpyAsync(d_to, d_from, sizeof(float) * n, cudaMemcpyDeviceToDevice, lcl->streams(0));
-
     }
 
-    
     permute<N_THREADS><<<
         nBlocks,
         N_THREADS,
@@ -393,7 +409,7 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
             d_to = lcl->d_particlesY + beginInd;
         }
         else if (cell.cutAxis == 1) {
-            d_to = lcl->d_particlesX + beginInd;
+            d_to = lcl->d_particlesZ + beginInd;
         }
         else {
             d_to = lcl->d_particlesX + beginInd;
@@ -434,7 +450,7 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
             d_to = lcl->d_particlesZ + beginInd;
         }
         else if (cell.cutAxis == 1) {
-            d_to = lcl->d_particlesZ + beginInd;
+            d_to = lcl->d_particlesX + beginInd;
         }
         else {
             d_to = lcl->d_particlesY + beginInd;
@@ -453,11 +469,28 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
                 lcl->cellToRangeMap(cell.id, 1);
     }
 
-
-
+    /*
     blitz::Array<float, 1> x = lcl->particles(blitz::Range::all(), 0);
     blitz::Array<float, 1> y = lcl->particles(blitz::Range::all(), 1);
     blitz::Array<float, 1> z = lcl->particles(blitz::Range::all(), 2);
+
+    int offsetLeq[nCells];
+    int offsetG[nCells];
+
+    cudaMemcpyAsync(
+            offsetLeq,
+            lcl->d_offsetLeq,
+            sizeof (unsigned int) * nCells,
+            cudaMemcpyDeviceToHost,
+            pst->lcl->streams(0)
+    );
+    cudaMemcpyAsync(
+            offsetG,
+            lcl->d_offsetG,
+            sizeof (unsigned int) * nCells,
+            cudaMemcpyDeviceToHost,
+            pst->lcl->streams(0)
+    );
 
     cudaMemcpyAsync(
             x.data(),
@@ -485,13 +518,21 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
 
     CUDA_CHECK(cudaStreamSynchronize,(lcl->streams(0)));
 
+
+    if (pst->idSelf == 0) {
+        for (int i = 0; i < nCells; ++i) {
+            printf("%i: %i %i\n", i, offsetLeq[i], offsetG[i]);
+        };
+        printf("\n---------------\n\n");
+    }
+
     if (pst->idSelf == 0) {
         for (int i = 0; i < x.rows(); i++) {
-            printf("x %f y %f z %f  \n", x(i), y(i), z(i));
+            printf("%i: x %f y %f z %f  \n", i, x(i), y(i), z(i));
         }
         printf("\n---------------\n\n");
 
-    }
+    }*/
 
     return 0;
 }

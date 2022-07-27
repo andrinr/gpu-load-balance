@@ -34,6 +34,7 @@ int ServiceFinalize::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
         cudaFree(lcl->d_offsetLeq);
         cudaFree(lcl->d_offsetG);
         cudaFree(lcl->d_nLefts);
+        cudaFree(lcl->d_cellBegin);
         cudaFree(lcl->d_cellIndices);
         cudaFree(lcl->d_axis);
 

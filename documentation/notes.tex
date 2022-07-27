@@ -115,7 +115,7 @@ We propose to implement tree building on the GPU using CUDA to accelerate load b
 Our main objective in this work is to improve the runtime of astrophysical simulations, or more specifically PKDGrav. At the same time we want to minimize penalties with regards to $N$, the total number of particles, such that we can leverage a high $N$ to increase the precision of the simulation. Furthermore we want to adapt and optimize the algorithms with regards to the target data as introduced in \ref{section:target-data} and target computing systems.
 
 
-\subsection{Fast Multipole Expansion}
+\subsection{Fast Multipole Expansion} \label{sec:multipole}
 
 A multipole expansion can be used to approximate a function. In our case, we aim to approximate the gravity field of the particles contained within a cell. This simplification of gravitational fields is used to group particles together such that the group can be treated as a single object. 
 
@@ -1862,6 +1862,8 @@ The particles array is essentially a 2D array where each row represents a single
 
 We have observed cases, where iterating over a blitz array does not enable AVX, even though in theory the storage order would allow so. However iterating over the underlying C-style array did enable AVX.
 
+We choose a column major storage order, this means we can access each axis as a single array of consecutive positional data.
+
 \subsection{Mapping cells to particles}
 
 Since only the operative needs to keep track of the cells, we need a separate data-structure which defines the range of particles which are encompassed inside the volume of a cell, for each thread. We solve this problem with a 2D array, where we map from a cell ID to its start index in the particles array, as well as its end index. Of course, this array needs to be updated each time we perform a partition.
@@ -2081,7 +2083,7 @@ On line 31 till 37 we also update the cellToRangeMap in order to reflect the cha
 
 \subsubsection{Make Axis}
 
-\subsubsection{Init and Finalize}
+As mentioned in section \ref{sec:multipole} the relevant axis to search for the cut position differs for each cell. Therefore we cannot simply iterate over a single array, we need to iterate over the relevant axis instead. In order to simplify the process we introduce a service which copies iterates over all cells and copies the slice of coordinates which are encompassed in its volume and lie on its cut axis to a temporary array.
 
 
 
@@ -2299,7 +2301,11 @@ For shared memory each bank consists of 32 bits, which translates to a 32 bit pr
 	\end{center}
 \end{figure}
 
-\subsubsection{Asynchronous Operations}
+\subsubsection{Asynchronous Operations} \label{sec:async}
+
+There are two types of engines that can be used to execute kernels in CUDA streams: copy engines and kernel engines. Copy engines are used to copy data between host and device memory, and between different types of memory on the device. Kernel engines are used to execute CUDA kernels. The number of individual engines depends on the actual hardware, lower end GPUs usually have a single kernel and a copy engine, more advanced architectures can have more than one copy or kernel engine.
+
+A CUDA stream is a sequence of commands that are executed in order on a CUDA device. Streams can be used to improve the runtime of a CUDA program by overlapping the execution of different kernels. For example, a copy kernel can be executed in one stream while a compute kernel is executed in another stream. This overlap can lead to a significant performance improvement.
 
 
 \subsubsection{Synchronization}
@@ -2329,6 +2335,19 @@ There exists however a way to communicate between blocks in a safe way. Atomic o
 	\label{u}
 \end{figure}
 
+\subsection{Streams}
+
+As described in section \ref{sec:async}, we can leverage streams to improve the runtime a CUDA accelerated application. The way we make use of streams is simple, each thread performs all its computations using on a unique stream. Since leveraging streams only improves the runtime in low numbers because the actual copy and kernel engines are not very numerous, this variant is very simple and effective. We have observed that using more streams on the individual threads does not improve the runtime, quiet contrary it can have a negative impact. 
+
+
+\subsection{Memory Management}
+
+We can use several strategies in order to improve the performance of memory allocation: 
+
+\begin{enumerate}
+	\item \textbf{Pinned Memory} As the GPU cannot access the default paged memory directly, when copying memory from the host to the device, the memory must first be copied to pinned memory. This means if we use pinned memory directly with $cudaMallocHost()$, data transfers can be around twice as fast. In our implementation we use pinned memory for all data, which need to be either sent from the host to device or vice versa.
+	\item \textbf{Reuse Memory} We can avoid allocation and freeing commands altogether and instead reuse previously allocated memory whenever possible. In our implementation we allocate the memory in the very beginning, whereas we have a fixed number of particles and a fixed upper limit for the number of cells. This is true for both the CPU and GPU memory.
+\end{enumerate}
 
 \subsection{GPU Accelerated Count Left}
 
@@ -2342,8 +2361,9 @@ We split the array of particles which are contained within one cell into smaller
 
 \subsubsection{Schedule}
 
-The entire schedule of the ORB is depicted in figure \ref{fig:orbgpup}. In a first step we call the initialize service, where the necessary data is allocated on the CPU and the GPU, and the particles are loaded. Next we already enter the main loop from the ORB, which iterates as until we have built a SPTDS with the desired size. In this loop the count service is called, this lets us know which cell has how many particles summed over all the threads in the system. To prepare the data for the GPU transfer we make the temporary array, which is then sent to the GPU. 
-Everything is now set to start counting the particles left of the initial cut and improve the cut until we found a nearly perfect cut. Finally split all particles which have currently been processed and partition the particle arrays on each thread. The tree building loop is then repeated or we exit the loop and call the finalize service to free the memory which was allocated in the init service.
+The entire schedule of the ORB is depicted in figure \ref{fig:orbgpup}. In a first step we call the initialize service, where the necessary data is allocated on all devices and the particles are loaded. Furthermore the initial SPTDS is constructed, which essentially only consists of the root node, encompassing the entire domain and all the particles. Next we enter the main loop of ORB, it iterates until it has constructed a SPTDS with the desired size. Within the loop the count service is called, computing the number of cells for each cell summed over all the threads in the system. To prepare the data for the GPU transfer we make the temporary array using the make axis service, which is then sent to the GPU. 
+We can now start with the root finding process, where we count the particles left of the initial cut position using the Count Left Service. Depending on the outcome, we then improve the cut position and repeat until a nearly perfect cut is found for all the leaf cells of the current SPTDS. We now generate two new child cells using the computed cut positions for all leaf cells of the current SPTDS and enrich the current SPTDS with the newly generated cells. Finally the particles array is partitioned accordingly. 
+The tree building loop is then repeated or if the desired size of the SPTDS is reached, we exit the loop and call the finalize service to free the allocated memory.
 
 
 \begin{figure}[H]
@@ -2383,9 +2403,16 @@ Everything is now set to start counting the particles left of the initial cut an
 	\label{fig:orbgpup}
 \end{figure}
 
-\subsubsection{Code}
-The actual kernel code is depicted in figure \ref{cuda:reduction}, the most important performance crucial details of the code are:
+\subsubsection{Service}
 
+The Count Left Service invokes the Count Left kernel exactly once for every leaf cell of the current SPTDS. Meaning on level 0 of the tree there is only one kernel per thread being executed, when proceeding to further levels, the number of kernels is equivalent to $2^{level}$. 
+The number of blocks can be determined by the number of particles in this cell $n_{cell}$ divided by the number of threads per block which is set to 256 and finally we divide this further by the number of elements per thread $r$. 
+
+Since we can pass all the relevant information regarding a cell as input parameters to the cell, there is no need to copy any additional data from the CPU to the GPU. We only need to copy back the results from the GPU to the GPU.
+
+\subsubsection{Kernel Code}
+The actual kernel code is depicted in figure \ref{cuda:reduction}. The input parameters of the reduction kernel (line 13-16), the input data, which is in sequential order the particles, the output array, which is the results of the kernel, the cut position and finally the total number of elements contained within the cell. 
+We will 
 \begin{itemize}
 	\item \textbf{Leverage Shared Memory} 
 	In the code on line 17 we invocate the shared memory, where is equivalent to the block size, which corresponds to a single float per thread. In a next step (lines 24-27) we apply our condition and copy the results to shared memory. This allows us to work exclusively with shared memory, reducing the amount of costly accesses performed on global memory.
@@ -2506,12 +2533,14 @@ extern __global__ void reduce(
 
 \subsubsection{Conclusion}
 
-We execute the reduction kernel once for each cell, where we distribute the particles within the cell among a set of blocks. The number of blocks can be determined by the number of particles in this cell $n_{cell}$ divided by the number of threads per block which is set to 256 and finally we divide this further by the number of elements per thread $r$. This makes the implementation straight forward but as we increase the number of cells, we make make more calls to the reduction kernel. This is problematic because each initialization of a kernel comes with some overhead, degrading the performance gradually with the tree traversal, as the overhead to computation ratio becomes more and more unfavorable.  
+We execute the reduction kernel once for each cell, where we distribute the particles within the cell among a set of blocks. This makes the implementation straight forward but as we increase the number of cells, we make make more calls to the reduction kernel. This is problematic because each initialization of a kernel comes with some overhead, degrading the performance gradually with the tree traversal, as the overhead to computation ratio becomes more and more unfavorable.  
+
+
 
 \subsection{Improved GPU Accelerated Count Left}
 
 To solve the degrading performance problem we make some changes to the kernel and the overall schedule. The main idea is to prepare all the necessary data for each of the blocks, meaning each block knows which slice of the particles data is has to iterate over and the cut position which was chosen for the cell owning the range of particles. 
-We will explain the improved version using an example: Let us consider $cell_2$ with a volume that encompasses particles in the range 0 - 6144. $cell_3$ encompasses particles in the range 6144 - 12288. Considering a blocksize of 256 threads and a number of elements per thread of 16, each block processes $256 * 16 = 4096$ elements. In this case we reserve two blocks for each cell, where the first block processes elements 0 - 4096, the second one 4096 - 6144, the third 6144 - 10240 and finally the last block processes 10240 - 12288. This ensures that each block only iterates over the particles owned by a single cell, and no further control statements are necessary inside the kernel. There might be some kernels with a very low workload, in the worst case a kernel only processes a single element, but in the average case the performance penalty is minor. We observe a slight reduction in performance and 
+We will explain the improved version using an example: Let us consider $cell_2$ with a volume that encompasses particles in the range 0 - 6144. $cell_3$ encompasses particles in the range 6144 - 12288. Considering a blocksize of 256 threads and a number of elements per thread of 16, each block processes $256 * 16 = 4096$ elements. In this case we reserve two blocks for each cell, where the first block processes elements 0 - 4096, the second one 4096 - 6144, the third 6144 - 10240 and finally the last block processes 10240 - 12288. This ensures that each block only iterates over the particles owned by a single cell, and no further control statements are necessary inside the kernel. There might be some kernels with a very low workload, in the worst case a kernel only processes a single element, but in the average case the performance penalty is minor. We observe a slight reduction in performance and cl	
 
 \subsubsection{Schedule}
 
@@ -2853,36 +2882,6 @@ int n) {
 \end{figure}
 
 
-
-\subsubsection{Memory allocation}
-
-We can use several strategies in order to improve the performance of memory allocation: 
-
-\begin{enumerate}
-	\item \textbf{Pinned Memory} As the GPU cannot access the default paged memory directly, when copying memory from the host to the device, the memory must first be copied to pinned memory. This means if we use pinned memory directly with $cudaMallocHost()$, data transfers can be around twice as fast. In our implementation we use pinned memory for all data, which need to be either sent from the host to device or vice versa.
-	\item \textbf{Reuse Memory} We can avoid allocation and freeing commands altogether and instead reuse previously allocated memory whenever possible. In our implementation we allocate the memory in the very beginning, whereas we have a fixed number of particles and a fixed upper limit for the number of cells. This is true for both the CPU and GPU memory.
-\end{enumerate}
-
-We limit memory allocation and freeing to the very beginning and end of the orb algorithm. This reduces the runtime of the algorithm by a substantial factor. Furthermore we use pinned memory
-
-\subsubsection{Data Transfer}
-
-We can use several strategies in order to improve the performance of data transfers: 
-
-\begin{enumerate}
-	\item \textbf{Reuse Data} We can avoid data transfers, by writing kernels out of code which was done on the CPU before. In our case we send the particle data from the host to device once
-	\item \textbf{Reduce Data} We can reduce the total number of data, which needs to be sent to the GPU. We do this 
-	\item \textbf{CUDA Streams} 
-	\item \textbf{Data Batches}
-	
-\end{enumerate}
-
-Most importantly we try to reduce the overhead generated 
-
-\subsubsection{CUDA streams}
-
-Cuda streams can be leveraged to improve the performance of data-intensive applications by allowing different tasks to be executed in parallel on the GPU. This can be used to overlap data transfers with computation, or to execute multiple kernels concurrently. Some GPU's have several Kernel engines, this means that the execution of kernel code can be overlapped when 
-\newpage
 
 \subsection{Integration into PKDGRAV}
 
