@@ -8,11 +8,9 @@ Head to [/documentation](https://github.com/andrinr/gpu-load-balance/tree/main/d
 
 ## Get started
 
-1. OpenMPI ``sudo apt-get install openmpi-bin libopenmpi-dev``
-2. Blitz++ https://github.com/blitzpp/blitz
-3. Clone PKDGRAV3 from https://bitbucket.org/dpotter/pkdgrav3/ and make sure its prerequisites are met.
-4. Clone this repo and ``cd`` into its root directory
-5. Link mdl2 and blitz from the PKDGRAV repo using ``ln -s /path/to/lib``
+1. Clone PKDGRAV3 from https://bitbucket.org/dpotter/pkdgrav3/ and make sure its prerequisites are met.
+2. Clone this repo and ``cd`` into its root directory
+3. Link mdl2 and blitz from the PKDGRAV repo using ``ln -s /path/to/mdl2`` ``ln -s /path/to/blitz``
 
 ### Compile for execution
 1. ``mkdir release && cd release``
@@ -34,9 +32,6 @@ or
 ``cuda-gdb ./orbit``
 
 ### CUDA Profile
-
-Using Nvidia Nsight: 
-```run ./nsys-ui```
 
 
 ## Automized performance analysis
