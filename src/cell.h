@@ -10,7 +10,7 @@ struct Cell {
     int id;
     int nLeafCells;
     int prevCutAxis;
-        int cutAxis;
+    int cutAxis;
     bool foundCut;
     float cutMarginLeft;
     float cutMarginRight;

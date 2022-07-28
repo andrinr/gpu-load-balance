@@ -119,20 +119,22 @@ Our main objective in this work is to improve the runtime of astrophysical simul
 
 \subsection{Fast Multipole Expansion} \label{sec:multipole}
 
-A multipole expansion can be used to approximate a function. In our case, we aim to approximate the gravity field of the particles contained within a cell. This simplification of gravitational fields is used to group particles together such that the group can be treated as a single object. 
+In mathematics, a multipole is a concept used to approximate the shape of a physical body. In our case the physical body are the particles contained within the volume of a cell. The multipole expansion is the mathematical series that results from this approximation. Since the precision of the expansion can be chosen, the resulting series can simplify the original body. 
+To keep force integration within a reasonable error margin, it is not always necessary to compute all $n$ to $n$ interactions. Particles far away can instead be grouped, in this case using the concept of cells, and summarized with a multipole expansion.
 
-For an intuitive understanding, one can imagine a large cluster of particles that is very far away from planet Earth. If we wish to compute the interactions between every single object of the cluster and Earth, we will need to perform $O(n^2)$ computations. However, since the object is reasonably far away, it does not make sense to compute every interaction. Instead, we summarize the cluster into a single object, which is represented as a function. We can then simply compute the interacting gravity between planet Earth and the function. Since we are bound by numerical accuracy anyways, the error term introduced by simplifying calculations with the fast multipole method can also be kept so small that it does not exceed the numerical error. Consequently, objects within our own solar system would be too close to planet Earth to approximate its effects using a multipole. In such cases, it is necessary to perform all $O(n^2)$ computations.
+For an intuitive understanding, one can imagine a large cluster of objects far away from planet Earth. If we wish to compute the interactions between every single object of the cluster and Earth, we will need to perform $O(n^2)$ computations. However, since the object is reasonably far away, it does not make sense to compute every interaction. Instead, we summarize the cluster into a single object. We can then simply compute the interacting gravity between planet Earth and the group. Consequently, objects within our own solar system would be too close to planet Earth to approximate its effects using a multipole. In such cases, it is necessary to perform all $O(n^2)$ computations.
+Note that this example does not directly translate to the simulations, as a particle is not necessarily equivalent to a planet or a star. More on that in section \ref{sec:target-data}.
 
-After we have built the space partitioning tree, we compute the multipole for all cells in the tree. This allows us to dynamically select more or less detailed functions to represent a group of particles. Depending on the distance between the particle we want to determine the forces for and the particles which exert the forces, we might choose a higher or lower multipole expansion.
+%After the SPTDS is built, we compute the multipole for all cells in the tree. This allows us to dynamically select more or less detailed functions to represent a group of particles. Depending on the distance between the particle we want to determine the forces for and the particles which exert the forces, we might choose a higher or lower multipole expansion.
 
-As we have mentioned, when using ORB to create the space partitioning tree data structure, we always search for a median in the axis where the cell size is largest. This is the best method to avoid skewed shapes and approximate squarish shapes. 
+\subsubsection{Advantage of Square Shapes}
 
-As described in \cite{Stadel2001}, "the opening radius of a cell is given by some constant factor times $r_{max}$". $r_{max}$ is the distance between the center of mass of a cell and its most distant corner. The opening radius correlates with the error ratio, which in turn influences how fine grained the timesteps many calculations have to be performed. Trivially, a square is the rectangle where the distance between any point and its most distant corner point is the smallest. Thus, we will want to approach more square-like shapes.
+As mentioned, when building the SPTDS with ORB, we search for a median in the axis where the cell volume is largest. It is assumed that this is the best method to have squarish shapes on all levels of the tree, as also intermediate cell volumes are leveraged by FMM. 
 
-The most straight forward way to avoid high ratios between the length and height of such a rectangle is to always split it along its longest axis.
+From \cite{Stadel2001}: "the opening radius of a cell is given by some constant factor times $r_{max}$". $r_{max}$ is the distance between the center of mass of a cell and its most distant corner. The opening radius correlates with the error ratio, which in turn influences how fine many timesteps have to be performed. Trivially, a square is the box where the distance between any point and its most distant corner point is the smallest. 
 
 
-\subsection{Target Data and Notation}\label{section:target-data}
+\subsection{Target Data and Notation}\label{sec:target-data}
 
 \begin{comment}
 The target data consists of $N$ particles where we use the following notations:
@@ -153,6 +155,8 @@ want to be able to resolve galaxies, milky way 10^12 solar masses,
 want to be able to resolve smaller galaxies, 10^8 for a single particle
 Imp 
 \end{comment}
+A modified random Gaussian distributed is used to generate the target dataset, where its set to fit measured constraints of the actual universe. Thus the number of particles can set dynamically. In the simulation, a single particle has a mass of $10^8$ solar masses. 
+
 
 \begin{itemize}
 	\item We define a particle as $par_i$  where $i \in \{0,...,N\}$. 
@@ -163,7 +167,7 @@ Imp
 	
 \end{itemize}
 
-The distribution of the entire dataset cannot easily be characterized. There may be areas with very dense distribution, separated by vastly unpopulated areas. Thus it is best to make no assumptions about the dataset and expect anything.
+It lies in the nature of the universe, that large clusters of particles are found in some places, whereas other areas may be vastly empty of any objects. This is a very crucial characterization and differentiates this dataset from many other application of FMM, where the distribution are more uniform.
 
 \begin{figure}[H]
 	\begin{center}
@@ -180,17 +184,17 @@ The distribution of the entire dataset cannot easily be characterized. There may
 	\caption{Uniform random distribution of 3D coordinates in cube domain projected onto a 2d plane}
 \end{figure}
 
-\subsection{Load Balancing Procedure Overview}
+\subsection{Procedure Overview}
 
-Load balancing is crucial to simulations, because supercomputers with node counts going in the thousands are used for accelerating the runtime. Therefore in an initial step the particles need to be distributed among the computing nodes in the super computer. An SPTDS ensuring the necessary conditions for FMM needs to be build, where the SPTDS is built such that the number of leaf cells is equivalent to the number of nodes. After the SPTDS is completed, the particles, which are distributed randomly across all nodes initially, can be redistributed accordingly. 
+When a simulation is initialized, all data is distributed randomly among the nodes. With regards to particle positions, the target data is initially unstructured, therefore we have no way distribute the particles in a better way. As we want to leverage FMM we need to compute a SPTDS across all nodes. 
 
-The SPTDS has to be recomputed each time a force integration is computed as some particles may have crossed their cell boundaries when a new position is computed. There are smarter ways to update the tree, we will however simply recompute the entire tree after each time step.
+The SPTDS has to be recomputed each time after force integration is computed.  Some particles may have crossed their cell boundaries during the process, violating the very constraint that all particles "owned" by a cell are contained within its volume. There are smarter ways to update the tree, which include more relaxed constraints, we will not focus on updating strategies and simply recompute the entire tree after each time step.
 
 Depicted below is an illustration giving a high level overview over the necessary steps required to perform the load balancing. 
 
 \begin{enumerate}
 	\item 
-	The simulation data is stored on a storage device. It contains information about the particles position and further properties.
+	The simulation data is generated and located on a central storage device.
 	
 	\pgfmathsetseed{10}
 	\begin{figure}[H]
@@ -205,7 +209,7 @@ Depicted below is an illustration giving a high level overview over the necessar
 		\caption{Initial data with particles}
 	\end{figure}
 	\item
-	Since the data is initially unstructured, we distribute it randomly among the nodes in the super computer.
+	Since the data is initially unstructured, is is distributed randomly among the nodes in the super computer.
 	\pgfmathsetseed{10}
 	\begin{figure}[H]
 		\begin{center}
@@ -223,7 +227,7 @@ Depicted below is an illustration giving a high level overview over the necessar
 		\caption{Particles are randomly distributed among 4 nodes}
 	\end{figure}
 	\item
-	We then compute the space partitioning tree data structure with ORB. The datastructure is computed globally across all nodes, meaning that the actual cut positions are the same for all nodes.
+	 The SPTDS is constructed with ORB. The tree is computed globally across all nodes, meaning the volumes of the individual cell are identical for all nodes.
 	\pgfmathsetseed{10}
 	\begin{figure}[H]
 		\begin{center}
@@ -249,7 +253,7 @@ Depicted below is an illustration giving a high level overview over the necessar
 	\end{figure}
 	
 	\item
-	In a final step we distribute the particles among the nodes in way such that each node only owns particles within a leaf node of the space partitioning tree data structure.
+	In a final step the particles are redistributed among the nodes, such that each node stores all particles contained in the volume of a unique cell.
 	\begin{figure}[H]
 		\begin{center}
 			\pgfmathsetseed{10}
