@@ -8,7 +8,6 @@
 static_assert(std::is_void<ServicePartitionGPU::input>()  || std::is_trivial<ServicePartitionGPU::input>());
 static_assert(std::is_void<ServicePartitionGPU::output>() || std::is_trivial<ServicePartitionGPU::output>());
 
-
 #define NUM_BANKS 16
 #define LOG_NUM_BANKS 4
 #ifdef ZERO_BANK_CONFLICTS
@@ -320,6 +319,7 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
 
     //printf("nBlocks %i blockptr %i\n", nBlocks, blockPtr);
 
+    // use structs instead
     CUDA_CHECK(cudaMemcpyAsync,(
             lcl->d_cellIndices,
             lcl->h_cellIndices,
