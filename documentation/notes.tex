@@ -311,22 +311,6 @@ Depicted below is an illustration giving a high level overview over the necessar
 	\end{figure}
 \end{enumerate}
 
-\begin{comment}
-\subsection{Force Integration}
-
-
-\begin{figure}[H]
-\begin{center}
-\begin{tikzpicture}
-\filldraw  (0,0) circle (3pt) node [anchor=west]{};
-\filldraw[red]  (1,1) circle (3pt) node [anchor=west]{};
-\draw[->, thick] (0,0) -- (1,1);
-\draw[->, red, thick] (1,1) -- (2,2);
-\end{tikzpicture}
-\end{center}
-\end{figure}
-\end{comment}
-
 
 \subsection{PKDGrav}
 
@@ -334,7 +318,10 @@ Depicted below is an illustration giving a high level overview over the necessar
 \newpage
 \section{Related Work}
 
+A number of GPU accelerated k-d tree construction algorithms exists, in most cases the methods cannot be translated due to different axis choosing method. Fore example in the master thesis of Voglsam \cite{rrt} a k-d tree is computed on the GPU and used to improve ray tracing for 3D graphics. However it makes use of a binning algorithm to 
+
 ORB can be subdivided into the following steps:
+\TODO{LOD??}
 
 \begin{outline}[enumerate]
 	\1 Cut cells on last level in tree
@@ -345,7 +332,9 @@ ORB can be subdivided into the following steps:
 	\1 Repeat till desired depth was reached
 \end{outline}
 
-Thrust has an implementation of a reduction, which can be used to perform step 1.b), a binary search is equivalent to the entire step 1. and finally it exposes a partition interface. Thrust is very high level and does not allow us to control memory operations, which are very crucial to a performant implementation of ORB. 
+Thrust by NVIDIA \cite{thrust} has an implementation of a reduction, which can be used to perform step 1.b), a binary search is equivalent to the entire step 1. and finally it exposes a partition interface. The library is very high level and does not allow us to control memory operations, which are very crucial to a performant implementation of ORB. 
+Furthermore CUB \cite{cub}, also developed by NVIDIA, exposes a more low level API of such elements but the implementation is not general enough to deal with some performance issues. As the SPTDS grows, so do the number of leaf cells and the number of cells for which a cut plane has to be found. If we initialize a kernel for each cell, the number of kernels initialized grow exponentially, resulting in kernel invocation overhead, which dominates the actual computations.
+
 
 So far there exists no...
 
@@ -368,10 +357,7 @@ mass assignment
 
 %https://de.overleaf.com/learn/latex/TikZ_package
 %https://texample.net/tikz/examples/
-The ORB algorithm partitions a multi-dimensional domain into subdomains based on spatial proximity, by splitting a $k$-dimensional domain containing $N$ particles into $d$ subdomains each of $k$ dimensions. This can be done using a recusive process where all intermediate domains are stored in a binary tree. A node of this tree is referred to as a $cell$. A $cell$ is a datastructure which keeps track of the domain information and also keeps pointers to its two child cells. The final binary tree should have exactly $d$ leaf cells. 
-
-\subsection{By example} 
-For the purpose of explaining the algorithm both visually and by a numeric example, we consider the following minimal dataset:
+This section explains the ORB used to construct the SPTDS in more detail. A sample dataset is proposed to help with visual and numerical explanations of the algorithm. 
 
 \begin{filecontents*}{particles10.csv}
 x,y,id,o1,o2,x2,y2
@@ -445,24 +431,22 @@ x,y,id,o1,o2,x2,y2
 
 
 \subsection{Memory and Workload Balancing}\label{balancing}
-We have now formulated our main objectives for improving ORB, which are (1) to improve the runtime, which is done with workload balancing, whilst (2) at the same time keeping $N$ as large as possible. In this section we will explain the averse effects when disregarding interactions between minimizing runtime and maximizing N.
+As mentioned we want to (1) improve the runtime of ORB whilst (2) at the same time keeping the number of particles $N$ as large as possible. There exists some averse effects when disregarding interactions between minimizing runtime and maximizing $N$.
 
-\Q{Is N fixed? simulated?}
+To reduce the force integration error across all particles, some particles require more timesteps than others. This is caused by the vastly variant forces which are exerted on the particles. Whilst some follow a straight path with an almost constant velocity requiring little computational effort for great precision, others are influenced by strong gravitational poles resulting in highly curved movement paths and correlating with higher numbers of timesteps required.
 
+We denote the workload for a particle $p_i$ as the weighting function $w(p_i)$. The workload correlates with the number of simulations steps, that need to be computed for a single particle. In an optimally parallelized system balanced in terms of computational effort, the workload should be very similar among computing units. Where ideally the sum over all the particles considered by a thread is equal to the sum of all others. With strongly varying weights among particles, perfectly balancing the computational effort, results in a unbalanced distribution in terms of memory. 
 
-If we want to reduce the error of the force integration across all particles, we need to introduce more discrete time steps for certain particles than for others. The need for non-constant simulations steps across the simulation is caused by the vastly variant forces which are exercised on different particles. It is possible that certain particles follow a straight path with an almost constant velocity, whereas others are influenced by strong gravitational poles. 
+Let us consider a simple example to illustrate the point. Given the set of particles $A = \{p_1, p_2, .., p_{2m/3}\}$ and respectively $B = \{p_{2m/3 + 1}, p_2, .., p_{m}\}$. This yields a total number of particles equivalent to $N = m$. We assuming that $\forall p \in A : w(p) = 1$ and $\forall p \in B : w(p) = 2$. 
+We assign all particles from set $A$ to process with rank 0 and the particles from B to rank 1. It follows $\sum_{p\in A} w(p) = \sum_{p\in B} w(p)$. Thus the two processors are balanced in terms of computing costs, but not in terms of memory size. In fact, process with rank 0 has $2m/3$ elements and rank 1 has $m/3$ elements. Assuming each process has a memory size of $2m/3$, then clearly this configuration is not optimal. If we were to favor memory balancing, we could assign $2m/3$ to each processor and we would be able process $(4/3) \times m$ particles in total, which is larger than the original $N$ and therefore favorable since a dataset with a larger $N$ could be used.
 
-We denote the workload for a particle $p_i$ as the weighting function $w(p_i)$. The workload correlates with the number of simulations steps, that need to be computed for a single particle. In an optimally parallelized system, the workload should be very similar among computing units, thus it would make sense to distribute the particles regarding the weighting function. This in turn implies an unequal distribution of the particles with regards to memory.
-
-Let us consider a simple example to illustrate the point. Given the set of particles $A = \{p_1, p_2, .., p_{2m/3}\}$ and respectively $B = \{p_{2m/3 + 1}, p_2, .., p_{m}\}$. This gives us a total number of particles equivalent to $N = m$. Let us now consider that $\forall p \in A : w(p) = 1$ and $\forall p \in B : w(p) = 2$. If we assign all particles from set $A$ to process with rank 0 and the particles from B to rank 1. It is clear that $\sum_{p\in A} w(p) = \sum_{p\in B} w(p)$. Thus the two processors are balanced in terms of computing costs, but clearly they are not balanced in terms of memory size. In fact, process with rank 0 has $2m/3$ elements and rank 1 has $m/3$ elements. Assuming each process has a memory size of $2m/3$, then clearly this configuration is not optimal. If we were to favor memory balancing, we could assign $2m/3$ to each processor and we would be able process $(4/3) \times m$ particles in total, which is larger than the original $N$ and therefore favorable.
-
-To which degree we decide to favor memory over workload balancing is difficult to answer. But as for now we will parametrize the workload using the weighting function, which allows us to optimize and decide at a later stage. If we decide to completely ignore the workload balancing and solely focus on memory balancing, we can simply set the $w(p_i) = 1$ for all particles.
+To which degree its ideal favor memory over workload balancing is difficult to answer. For now parametrize the workload using the weighting function. If we decide to completely ignore the workload balancing and solely focus on memory balancing, we can simply set $w(p_i) = 1$ for all particles.
 
 
 \subsection{ORB}
 
 
-In each recursive call of the ORB algorithm, we are given a $cell$ along with a number of desired leaf cells $d_{cell}$, which corresponds to $d$ for the root cell. Furthermore each cell has information about the volume it encompasses (also refereed to its domain) stored as $V_{cell}$. We then split this $cell$, into two child cells $leftCell$ and $rightCell$. For the domains of $leftCell$ and $rightCell$ we have the following properties: 
+We consider a recursive implementation of ORB, where in each recursive call of the ORB method, a $cell$ along with a number of desired leaf cells $d_{cell}$ is given. , which corresponds to $d$ for the root cell. Furthermore each cell has information about the volume it encompasses (also refereed to its domain) stored as $V_{cell}$. We then split this $cell$, into two child cells $leftCell$ and $rightCell$. For the domains of $leftCell$ and $rightCell$ we have the following properties: 
 
 \begin{center}
 	\begin{equation}
@@ -2405,7 +2389,7 @@ The number of blocks can be determined by the number of particles in this cell $
 
 Since we can pass all the relevant information regarding a cell as input parameters to the cell, there is no need to copy any additional data from the CPU to the GPU. We only need to copy back the results from the GPU to the GPU.
 
-\subsubsection{Kernel Code}
+\subsubsection{Kernel Code}\label{sec:countleftcode}
 The actual kernel code is depicted in figure \ref{cuda:reduction}. The input parameters of the reduction kernel (line 13-16), the input data, which is in sequential order the particles, the output array, which is the results of the kernel, the cut position and finally the total number of elements contained within the cell. 
 We will 
 \begin{itemize}
@@ -2526,7 +2510,6 @@ extern __global__ void reduce(
 	\label{cuda:reduction}
 \end{figure}
 
-\subsubsection{Conclusion}
 
 We execute the reduction kernel once for each cell, where we distribute the particles within the cell among a set of blocks. This makes the implementation straight forward but as we increase the number of cells, we make make more calls to the reduction kernel. This is problematic because each initialization of a kernel comes with some overhead, degrading the performance gradually with the tree traversal, as the overhead to computation ratio becomes more and more unfavorable.  
 
