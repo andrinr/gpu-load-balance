@@ -669,17 +669,16 @@ Since $d_{cellLeft} - d_{cellRight}$ must always be $\leq 1$, it must hold that 
 \label{proc:orb}
 \end{figure}
 
-\TODO{Insert step by step algorithm here}
-
 \subsection{Root finding}
 
 
 %Finding the median of a large particle array is an essential step for ORB. We will thus explore different algorithms alongside their advantages and disadvantages for our specific use case.
 %Note that there exists approximation algorithms for example the median of medians algorithms. But the correctness guarantee of the median lying between 30\% and 70\% is not good enough in our case. If we were to implement such an approximation algorithms we would run into similar issues as described in \ref{sec:balancing}. But in this case the unequal memory balancing do not have the advantage of equal workload balancing, which in turn will worsen the performance and the maximum number of workable particles. Thus we will only consider approximation algorithms, if their approximation to the ideal values are very exact and can be determined.
 
- The $cut$ algorithm takes an array of particles, an axis, a left and right boundary as well as a percentage $r$ of particles which should be on the left side to the determined cut. Its goal is to return a position, such that the particles on the left side of the cut are equal to the percentage input parameter multiplied by all particles. We can define a function $f(c)$ where the function evaluates the number of elements smaller than the cut value c minus half the number of total particles. Reformulated in this way, the problem is equivalent to a root finding problem. Because when the function evaluates to zero, we have found a cut plane positions where exactly half the particles are located to left side. There exists a lot of different solver for the root finding problem, the most stable and easiest to implement is however the bisection method. \TODO{explain a bit more in detail}
- 
- Since we are operating on binary numbers with a limited precision, the bisection method is guaranteed to terminate after a certain number of steps. Other approximate algorithms can converge quicker, meaning they find the root in less time steps, than the bisection method, however they are not guaranteed to converge.
+
+The $cut$ algorithm takes an array of particles, an axis, left and right boundaries, and a percentage $r$ of particles which should be on the left side of the determined cut. Its goal is to return a position such that the particles on the left side of the cut equal the percentage input parameter multiplied by all particles. We can define a function $f(c)$ where the function evaluates the number of elements smaller than the cut value c minus half the number of total particles. Reformulated in this way, the problem is equivalent to a root-finding problem. When the function evaluates to zero, we have found an axis aligned cut plane, where exactly half the particles are located on the left side. There are a lot of different solvers for the root-finding problem, but the most stable and easiest to implement is the bisection method. 
+
+Since we are operating on binary numbers with a limited precision, the bisection method is guaranteed to terminate after a certain number of steps. Other approximate algorithms can converge quicker, meaning they find the root in fewer time steps, but they are not guaranteed to converge. 	
 
 \subsubsection{Bisection Method}
 
@@ -739,9 +738,9 @@ The $\alpha$ value defines by how many particles the final cut value can be off 
 
 \subsubsection{Runtime Analysis}
 
-We analyse the runtime of the cut algorithm as follows: On line 5 we count the number of particles on the left side of the cut position. Since the array is unordered, we need to sweep over all the elements once which results in a runtime of $O(N)$. All other operartions inside the for loop can be computed in a negligible constant time. The loop itself is repeated $p$ number of times, where $p$ corresponds to the precision of the array data. With each iteration we half the span in which the optimal solution lies. Thus we reach the precision limit after $p$ iterations. Note that due to the Break condition on line 7, the average runtime is not the same as the maximum runtime and depends a lot on the underlying data.
+We analyze the runtime of the cut algorithm as follows: On line 5, we count the number of particles on the left side of the cut position. Since the array is unordered, we need to sweep over all the elements once, which results in a runtime of $O(N)$. All other operations inside the for loop can be computed in a negligible constant time. The loop itself is repeated $p$ number of times, where $p$ corresponds to the precision of the array data. With each iteration we half the span in which the optimal solution lies. Thus we reach the precision limit after $p$ iterations. Note that due to the Break condition on line 7, the average runtime is not the same as the maximum runtime and depends a lot on the underlying data.
 
-The bisection method converges rather slowly, \TODO{Explain} assuming its first guess for the cut position was almost correct, it will correct its next guess by $25\%$ of the entire domain size, thus the number of iterations need to approach the actual optimum again is rather high.  
+The bisection method converges rather slowly, meaning the actual results is approximated in smaller steps. Assuming its first guess for the cut position was almost correct, it will correct its next guess by $25\%$ of the entire domain size, thus the number of iterations need to approach the actual optimum again is rather high.
 
 \begin{comment}
 
@@ -777,15 +776,21 @@ We have already introduced all basic building blocks of the ORB algorithm. The o
 
 When thinking about this in terms of the recursive algorithm, maintaining this data structure is pretty straight forward. Each time we split a cell into two children, we make sure that particles contained in the left child cell are found in a designated range of the particles array, and the exact same concept is applied to the right cell. The partition algorithm is equivalent to the common hoare partition algorithm\cite{algorithms}. 
 
+As seen in the pseudo code in figure \ref{proc:part}, the algorithm looks for a pair of particles, where for both the coordinate along the relevant axis are  on the wrong side of the cut plane. In this case the particles can be swapped (line 8) resulting in the correct position of both particles. We refer to \cite{algorithms} for a correctness proof and a more detailed explanation of the algorithm. 
+
+\algnewcommand\And{\textbf{and} }
+
 \TODO{Add explanation}
 \begin{algorithm}[H]
 	\begin{algorithmic}[1]
-		\Procedure{partition}{$x, N_j, cut, axis$}
+		\Procedure{partition}{$cut, axis$}
 		\State $i = 0$
 		
-		\For{$k \in {0,..N_j - 1}$}
-		\If{$\vec{x}_{k, axis} < cut$}
-		\State $i = i + 1$
+		\For{$k \in {0,..N - 1}$}
+		\If{$\vec{x}_{k, axis} \leq cut$}
+		\While{$\vec{x}_{i,axis} \leq cut$ \And $i < N$}
+			\State $i = i + 1$
+		\EndWhile
 		\State $x_{i}, x_{k} = x_{k}, x_{i}$
 		\EndIf
 		\EndFor
@@ -794,9 +799,10 @@ When thinking about this in terms of the recursive algorithm, maintaining this d
 		\EndProcedure
 	\end{algorithmic}
 \caption{Partition Method}
+\label{proc:part}
 \end{algorithm}
 
-The partition algorithm has a clearly observable runtime of $O(N)$ since we iterate over all particles once. Since we need to touch each element at least once to partition the entire array there is no better algorithm than this.
+The partition algorithm has a clearly observable runtime of $O(N)$ since we iterate over all particles once. Since we need to touch each element at least once to partition the entire array there exists no better method.
 
 Lets apply the algorithm to our running example. We start with our initial array of particles as follows:
 
@@ -993,15 +999,9 @@ We can observe how the ownership of particle 2 and particle 1 has to be changed,
 \newpage
 \section{Theoretical Analysis of ORB runtime}
 
-The nature of the ORB algorithm and its application with very large data-sizes, requires that we consider hardware specific performance metrics for concrete implementation details. Since the decision tree for the implementation details of the algorithm is vast and each implementation involves a significant amount of development time, we will further guide our path using a theoretical model. Furthermore the model should be seen as a theoretical maximum in terms of optimization. Of course this assumes a perfect CPU and perfect GPU implementation, which are both not achievable due to a lack of knowledge and a lock of time to optimize each an every single part of the code. The lack of knowledge, is at this stage mostly present in terms of GPU implementations. Still to this day, there are new papers published which discuss new implementation details of fairly fundamental algorithms. 
+The nature of the ORB algorithm and its application with very large data-sizes, requires that we consider hardware specific performance metrics for concrete implementation details. Since the decision tree for the implementation details of the algorithm is vast and each implementation involves a significant amount of development time, we will further guide our path using a theoretical model. Furthermore the model should be seen as a theoretical maximum in terms of optimization. Of course this assumes a perfect CPU and perfect GPU implementation, which are both not achievable due to a lack of knowledge and a lock of time to optimize each an every single part of the code. The lack of knowledge, is at this stage mostly present in terms of GPU implementations: Still to this day, there are new papers published which discuss new CUDA implementation details of fairly fundamental algorithms. 
 
-When creating such a model, the performance is either bound by the number of floating point operations per minute, or in some cases its bound by the memory access speed. In our case, we have the hypothesis that binary cut, as well as the partition method in ORB are bound by memory access times and not the actual processor performance.
-
-Now how can we verify, that the most performance intensive parts of ORB are are in fact memory bound? A very straight forward method is to compare the hardware memory bandwidth limits with the number of operations we perform on each loaded elements and correspondingly the maximum number of flops which can be performed on the respective hardware. 
-
-In section \ref{sec:parellize-orb} we have introduced a strategy for parallelizing ORB across multiple nodes. In this section we will limit ourselves to parts of the ORB algorithm, which are executed by the worker nodes. 
-
-\Q{Parallelization in the context of nodes / threads?} 
+When creating such a model, the performance is either bound by the number of floating point operations per minute, or in some cases its bound by the memory access speed. In our case, we have the hypothesis that at least the bisection method is memory bound.
 
 \subsection{General Memory Model}\label{sec:gmm}
 
@@ -1286,7 +1286,6 @@ Lets us compute the maximally achievable gflops for Piz Daint. To do so, we plug
 The results are depicted as horizontal lines in \ref{fig:roofdaint}. The memory bandwidth is plotted as a line with an equivalent slope. Finally we add a dotted line representing the arithmetic intensity of the Count Left procedure. 
 To interpret the roofline mode, one has to follow the dotted line starting from the bottom. Weather it intersect with line representing the maximal performance or the memory bandwidth first, gives an indication weather the program is performance or memory bound. 
 
-\TODO{Explain connection from formula in the context of graphs}
 \begin{figure}[H]
 	\begin{center}
 		\begin{tikzpicture}
@@ -1563,7 +1562,7 @@ processor. We perform the conditional reduction on  $2^{27}$ particles. The redu
 
 But regardless if the app is actually memory bound or not, fact is that the GPU outperforms the CPU by a factor of 10-20 $\times$, thus even if it were bound by the chip architecture, there is still an improvement to be expected when porting the code to the GPU. 
 
-\subsection{Models for different approaches}
+\subsection{Models for Different Approaches}
 
 When building the models, we assume that ORB is memory bound. Meaning that the limiting factor is not the flops of the chip, but rather the memory bandwidth. We will construct and explore models for three different approaches. In the first naive implementation, we simply send an array of particles to the GPU, where the counting is then performed. In a more advanced variant, we consider sending the particles from the CPU to GPU only once and perform the partitioning on the GPU as well.  
  
@@ -1838,11 +1837,13 @@ We conclude that the GPU version with GPU Tree building enabled yields the best 
 \newpage
 \section{CPU Implementation}
 
-In this section describe the stand-alone implementation of the accelerated ORB algorithm. We will develop this somewhat separately from the PKDGrav codebase in order to have smaller and easily understandable codebase. We will however use mdl2 from PKDGrav, which is used to distribute the workload among the processors in the system. In section \ref{sec:gpuimpl} we describe the GPU implementations. The CPU and GPU versions are merged in a single program, where different acceleration strategies can be selected and evaluated.
+In this section describe the stand-alone implementation of the accelerated ORB algorithm using CPU acceleration only. Building on the CPU version, we introduce possible improvements to selected parts of the code in the next section \ref{sec:gpuimpl}. 
 
-We will refrain from describing each part of the code in detail, however any performance critical details and all the important data-structures are described. Furthermore, we will pay special attention to the CUDA kernels and also memory management strategies, first of all since only minor differences in coding style can have a great impact, because the kernel are the most crucial parts of the optimization and finally because it increases replicability of the code.
+We develop somewhat separately from the PKDGrav codebase in order to keep the project smaller and more easily understandable. However we make use of mdl from PKDGrav, which can be used to distribute the workload among nodes and processors on a single chip. This reduces the complexity and we do not have to worry about communication methods and CPU parallelism too much. Since the parallelization are abstracted using mdl, we only use the term threads when referring to computation units. Individual threads might be computed on a different node, or on a different processor on the same node, but this does not change things from an implementation side.
 
-A brief overview of the core elements:
+We refrain from describing each part of the code in detail, however any performance critical details and all the important data-structures are described. Furthermore, we will pay special attention to the CUDA kernels and also memory management strategies for several reasons: minor implementation details can have a big impact upon the performance and increased replicability of the results.
+
+A brief overview of the core elements are:
 
 \begin{itemize}
 	\item \textbf{particles}: The particles array has ownership over all particle objects. It has the shape of a multidimensional array, where the first three axes are occupied by positional data and the rest can be filled with meta data.
@@ -1853,6 +1854,10 @@ A brief overview of the core elements:
 
 For this project we will use C++ 17 along with CUDA 11.3, OpenMPI 4.1.0 and Blitz++ 1.0.2 \cite{blitzcpp}. 
 
+\subsection{MDL}
+
+MDL is essentially an abstraction layer around a multiprocessor communication as well as a multiprocessor scheduler. It decomposes threads into worker and a master threads and builds a tree hierarchy around the threads. The coordination works with a object called services, where the master can start services, the service objects then traverse the tree of threads until every thread has received the input data of the service. A service can be run via a method called $RunService$ where the input data is given via simple pointers. With the help of void pointers, we can use any object or array of objects as an input or output of the service. 
+
 \subsection{Particles}
 
 To implement the particles array, we use C-style arrays interchangeably with blitz++ arrays. The blitz++ array is a wrapper class around C-style arrays, which helps with pointer management and can speed up the debugging process by keeping track of the array size and checking access indexes. Furthermore, we can easily create slices and make borrowed copies. 
@@ -1862,11 +1867,7 @@ The particles array is essentially a 2D array where each row represents a single
 
 We have observed cases, where iterating over a blitz array does not enable AVX, even though in theory the storage order would allow so. However iterating over the underlying C-style array did enable AVX.
 
-We choose a column major storage order, this means we can access each axis as a single array of consecutive positional data.
-
-\subsection{Mapping cells to particles}
-
-Since only the operative needs to keep track of the cells, we need a separate data-structure which defines the range of particles which are encompassed inside the volume of a cell, for each thread. We solve this problem with a 2D array, where we map from a cell ID to its start index in the particles array, as well as its end index. Of course, this array needs to be updated each time we perform a partition.
+We choose a column major storage order, over a row major storage order, enabling accessing each axis i.e. $x_{axis,:}$ as a single array. This increases performance due to coalesced memory access. 
 
 
 \subsection{Cell}
@@ -1953,11 +1954,13 @@ The cell class consists of the following variables:
 	\item $tmp$: The cell has room for additional data, which may be stored during executions of algorithms. 
 \end{itemize}
 
-The cell class has some helpful helper functions. \TODO{extend}
+\subsection{Mapping cells to particles}
 
-\subsection{MDL}
+The SPTDS consisting of cells is consistent across all nodes, therefore it is stored on a single thread, also named master thread in mdl. Very often we need to know which particles are encompassed in the volume of which cell and since the particles are distributed among the threads, we introduce a data structure to keep track of the relation between cells and its particles. 
+Thanks to the partitioning algorithm all particles belonging to a single cell can be found in a consecutive section of the particles array. Thus we can use a 2D array, where for each cell we store the corresponding range as a tuple, making the size of the array equivalent to the total number of cells $2 \times d -1$ multiplied by two. We name the data structure $cellToRangeMap$ and it is stored in the local data of each pst, meaning each thread has a different version the $cellToRangeMap$ array. Furthermore this implies that the data strucutre needs to be updated across all threads whenever we perform a partition.
 
-MDL is essentially an abstraction layer around a multiprocessor communication as well as a multiprocessor scheduler. It decomposes threads into worker and a master threads and builds a tree hierarchy around the threads. The coordination works with a object called services, where the master can start services, the service objects then traverse the tree of threads until every thread has received the input data of the service. A service can be run via a method called $RunService$ where the input data is given via simple pointers. With the help of void pointers, we can use any object or array of objects as an input or output of the service. 
+
+
 
 \subsection{Services}
 
@@ -2408,7 +2411,7 @@ We will
 	\item \textbf{Leverage Shared Memory} 
 	In the code on line 17 we invocate the shared memory, where is equivalent to the block size, which corresponds to a single float per thread. In a next step (lines 24-27) we apply our condition and copy the results to shared memory. This allows us to work exclusively with shared memory, reducing the amount of costly accesses performed on global memory.
 	
-	\item \textbf{Increase Thread Occupancy} There exists an optimum when considering the number of operation performed by a single thread. In order to adapt the number of ops dynamically, we iterate over a certain number of elements in the global memory, as seen in lines 24-27. The input parameter n defines the total number of particles. Therefore if we reduce the total number of blocks by a factor of $r$, the while loop will iterate over $r$ elements. In our case we set $r$ to 32. \tODO{Say why optimal value}
+	\item \textbf{Increase Thread Occupancy} There exists an optimum when considering the number of operation performed by a single thread. In order to adapt the number of ops dynamically, we iterate over a certain number of elements in the global memory, as seen in lines 24-27. The input parameter n defines the total number of particles. Therefore if we reduce the total number of blocks by a factor of $r$, the while loop will iterate over $r$ elements. In our case we set $r$ to 32. \TODO{Say why optimal value}
 	
 	\item \textbf{Meta Programming} The reduction is optimized by using a template, which indicates the total number of thread per block, which is equivalent to the blockSize. Since the template is evaluated at compile time, all the if statements taking blockSize as a parameter in figure do not cause any performance loss. In fact, because we are able to unroll loops, which would be evaluated at runtime, we increase the performance of the code. 
 	
