@@ -180,9 +180,11 @@ The distribution of the entire dataset cannot easily be characterized. There may
 
 \subsection{Load Balancing Procedure Overview}
 
-Load balancing is crucial to simulations, because supercomputers with node counts going in the thousands are used for accelerating the runtime. Therefore in an initial step we need to distribute all the particles among the computing nodes in the super computer. To do this randomly, would be very ineffective because we could not make use of FFM anymore. Therefore we apply ORB until we end up with a number of subspaces equivalent to the number of nodes in the system. As we have already mentioned the steps have to repeated after the positions are recomputed, parts of the tree may be preserved as some error is allowed. There may be particles which have moved over the original cell boundaries, but this is acceptable to some level. However we will not focus on updating the data structure and rather assume a complete rebuild after each time step.
+Load balancing is crucial to simulations, because supercomputers with node counts going in the thousands are used for accelerating the runtime. Therefore in an initial step the particles need to be distributed among the computing nodes in the super computer. An SPTDS ensuring the necessary conditions for FMM needs to be build, where the SPTDS is built such that the number of leaf cells is equivalent to the number of nodes. After the SPTDS is completed, the particles, which are distributed randomly across all nodes initially, can be redistributed accordingly. 
 
-The individual steps used for load balancing are as follows:
+The SPTDS has to be recomputed each time a force integration is computed as some particles may have crossed their cell boundaries when a new position is computed. There are smarter ways to update the tree, we will however simply recompute the entire tree after each time step.
+
+Depicted below is an illustration giving a high level overview over the necessary steps required to perform the load balancing. 
 
 \begin{enumerate}
 	\item 
@@ -1219,7 +1221,7 @@ If we investigate the operations which are needed for the binary cut algorithm, 
 In order to estimate the runtime of the algorithms we denote the number of particles as $N$. Furthermore we assume a precision $p$ of 32, which is general standard for both integers and floats, furthermore its a sensible assumption for astrophysical simulations. We only look at at the positional data of the particles for the runtime analysis since its the only relevant data to be considered to find a cut. The total storage of all particles is $32 \times 3 \times N bits = 4 \times 3 \times N Bytes = 12 \times N Bytes$. Furthermore we assume $d = 1024$ and $N=10^9$.
 
 
-\subsection{Roofline Performance Model}
+\subsection{Roofline Performance Model} \label{sec:roof}
 
 We test the our hypothesis, that ORB is, for the most part, memory bandwidth bound using the roofline model. In the roofline model, we compare the arithmetic intensity, which is measured in FLOPS / per byte against the number of flops per minute. 
 
@@ -1860,20 +1862,14 @@ MDL is essentially an abstraction layer around a multiprocessor communication as
 
 \subsection{Particles}
 
-To implement the particles array, we use C-style arrays interchangeably with blitz++ arrays. The blitz++ array is a wrapper class around C-style arrays, which helps with pointer management and can speed up the debugging process by keeping track of the array size and checking access indexes. Furthermore, we can easily create slices and make borrowed copies. 
-Blitz++ allows us to easily access the C-style array with the command $array.data()$, enabling us to switch to C-style arrays, whenever its deemed necessarily. 
+We use C-style arrays interchangeably with blitz++ arrays to store all particles. blitz++ is a wrapper class around C-style arrays, which helps with pointer management and can speed up the debugging process by keeping track of the array boundaries. Furthermore it features array slicing and does its own memory management. In certain cases we need to access the actual C-style array, which can be accessed with $array.data()$, for example iterating over the Blitz++ array is observed to compile to optimized assembly instructions which do not leverage the latest SIMD instructions as explained in section \ref{sec:roof}.
 
-The particles array is essentially a 2D array where each row represents a single particle. Since the performance critical part, the binary cut algorithm, of ORB only iterates over a single axis, we can further enhance the performance by choosing a column major storage format. This ensures that memory accesses are happening over consecutive data, and cache misses are limited.
-
-We have observed cases, where iterating over a blitz array does not enable AVX, even though in theory the storage order would allow so. However iterating over the underlying C-style array did enable AVX.
-
-We choose a column major storage order, over a row major storage order, enabling accessing each axis i.e. $x_{axis,:}$ as a single array. This increases performance due to coalesced memory access. 
+The array has a (N,3) shape where each row represents a single particle. To enable coalesced memory access when iterating over a single axis i.e. $x_{:, axis}$, we choose a row major storage order, over a column major storage order. Even though column accesses patterns i.e. $x_{i,:}$ are used as well, they happen less frequently. Most importantly there are cases where entire section of a row have to copied, which is by magnitude faster with row major storage.
 
 
 \subsection{Cell}
 
-The tree which is constructed by ORB consists of multiple cells and ultimately we need to find a suitable data-structure. The most obvious choice is a tree, which keeps track of its children using pointers. But as we have seen in section \ref{section:orb-example} the conditions for a nearly complete binary tree hold, allowing for a heap to be used as storage method for the tree. The heap A heap of course has constant $O(1)$ access times over $O(log(d))$ for the tree.
-
+Quickly building and accessing elements of the SPTDS generated by ORB requires a suitable data structure. Instead of a tree with pointers, we can use a heap since the necessary conditions for a nearly complete binary tree are met as seen in section \ref{section:orb-example}. Elements within a heap can be accessed and added in constant runtime. Depicted in figure \ref{fig:treeheap} is the finished SPTDS of the sample dataset stored as a heap.
 
 \begin{figure}[H]
 	\begin{center}
@@ -1903,12 +1899,13 @@ The tree which is constructed by ORB consists of multiple cells and ultimately w
 		\end{figure}
 	\end{center}
 	\caption{Tree as heap}
+	\label{fig:treeheap}
 \end{figure}
 
-When a heap array exceeds its allocated memory space, we need to reallocate memory, which can be very time intensive, especially for very large arrays. In our case however, its possible to set an upper boundary for the maximum number of cells. Another positive aspect of the heap is that the interface of mdl2 requires data to be sent in an array structure anyways, further decreasing performance loss and algorithmic complexity.
+An array can be used as an efficient storage medium for the heap, since in our case $d$ can be set at compile time and the maximum number of cells in the SPTDS can be derived from that. Meaning the array can be allocated statically.
+Because mdl communicates data as arrays between the threads, another advantage of the array storage is the absence of any costly data structure conversion. 
 
-
-Since the last level of the tree, in cases when $d$ s not a power of two, is only partially filled with leaf nodes, we need to be careful when applying the algorithm. However we can derive all crucial metrics for a given tree, based on the basic heap conditions.
+Since the STPDS is only a nearly complete binary tree and not a complete binary tree, we have to be careful when iterating over the levels of three, as the very last level is not filled entirely with cells. But because $d$ is known, many attributes of the SPTDS can determined deterministically.
 
 \subsubsection{Heap Conditions}
 As with all heap data-structures we have the following conditions:
@@ -1931,8 +1928,7 @@ As with all heap data-structures we have the following conditions:
 \end{figure}
 
 \vspace{0.5cm}
-We can derive the following constraints given the number of leaf cells $d$. The constraints are helpful for many parts of the code.
-
+We can derive the following constraints given the number of leaf cells $d$. 
 
 \begin{itemize}
 	\item We can compute the depth of the tree with: $\lceil log_2(d) \rceil$
@@ -1947,19 +1943,18 @@ In the example tree depicted in figure \ref{fig:extree} we indeed observe that t
 The cell class consists of the following variables:
 
 \begin{itemize}
-	\item $id$: The id is a unique identification of the cell instance and corresponds to the position in the heap data structure plus one. It useful to directly compute the indices of both child cells using the above shown formulas.
-	\item $nLeafCells$: this variable is equal to $d_{cell}$ and depicts the number of leaf cells which can be found when walking all possible child cells of this cell. This variable is important when building the tree as we need to keep track how often the cell has to be split. 
-	\item $lower$: The lower is 3D point coordinate which represents the lower boundary corner of the 3D volume $V_{cell}$ which is encompassed by this cells domain.
-	\item $upper$: The represents the upper boundary corner of the volume.	
-	\item $tmp$: The cell has room for additional data, which may be stored during executions of algorithms. 
+	\item $id$: Unique identification of the cell instance and corresponds to its index in the heap array plus one. The plus one comes from the different indexing for heap constraints, where we start with 1, and the classic array indexing starting with 0. It can be used to compute  indices of both child cells and parent cells using the above shown formulas.
+	\item $nLeafCells$: Equivalent to  $d_{cell}$ and depicts the number of leaf cells to be found in all of its successors. Its used when building the tree, to track weather a cell needs to be split or not. 
+	\item $lower$: 3D point coordinate representing the lower boundary corner of the 3D volume $V_{cell}$ which is encompassed by this cells.
+	\item $upper$: Represents the upper boundary corner of the volume.	
+	\item $cutAxis$: Stores the axis where the cut plane is to be searched for. 
+	\TODO{LOD??}
 \end{itemize}
 
 \subsection{Mapping cells to particles}
 
 The SPTDS consisting of cells is consistent across all nodes, therefore it is stored on a single thread, also named master thread in mdl. Very often we need to know which particles are encompassed in the volume of which cell and since the particles are distributed among the threads, we introduce a data structure to keep track of the relation between cells and its particles. 
-Thanks to the partitioning algorithm all particles belonging to a single cell can be found in a consecutive section of the particles array. Thus we can use a 2D array, where for each cell we store the corresponding range as a tuple, making the size of the array equivalent to the total number of cells $2 \times d -1$ multiplied by two. We name the data structure $cellToRangeMap$ and it is stored in the local data of each pst, meaning each thread has a different version the $cellToRangeMap$ array. Furthermore this implies that the data strucutre needs to be updated across all threads whenever we perform a partition.
-
-
+Thanks to the partitioning algorithm all particles belonging to a single cell can be found in a consecutive section of the particles array. Thus we can use a 2D array, where for each cell we store the corresponding range as a tuple, making the size of the array equivalent to the total number of cells $2 \times d -1$ multiplied by two. We name the data structure $cellToRangeMap$ and it is stored in the local data of each pst, meaning each thread has a different version the $cellToRangeMap$ array. Furthermore this implies that the data structure needs to be updated across all threads whenever we perform a partition.
 
 
 \subsection{Services}
