@@ -88,31 +88,33 @@
 
 The N-Body technique has been used for decades to simulate the Universe so we can compare theory with observations. This technique uses ``particles'' representing object such as planets and stars. As gravity operates over infinite distance it is necessary to consider all pair-wise interactions which makes a naive implementation $\mathcal{O}(n^2)$. Clearly this does not scale particularly well with large particle counts.
 
-One common approach is to partition the space, in which the particles are contained, into a set of subspaces, also called cells, which are then stored in a space partitioning tree data structure (SPTDS). Building such a data structure takes a significant chunk of time of the overall simulation time, however its usually done on the CPU, even though most supercomputers have powerful GPUs installed. Tree walking and building algorithms heavily rely on control statements such as if / else. GPU programming in contrast, benefits from large packable data arrays without any branch divergence. In this thesis we explore upper limits for the chosen tree building algorithms in terms of speed up over its CPU counterpart. We propose, implement and analyze an efficient way of building the SPTDS on the CPU and on the GPU. 
+A common approach is to partition the space, in which the particles are contained, into a set of subspaces, also called cells, which are then stored in a space partitioning tree data structure (SPTDS). Building such a data structure takes a significant chunk of time of the overall simulation time, however its usually done on the CPU, even though most supercomputers have powerful GPUs installed. Tree walking and building algorithms heavily rely on control statements such as if / else. GPU programming in contrast, benefits from large packable data arrays without any branch divergence. In this thesis we explore upper limits for the chosen tree building algorithms in terms of speed up over its CPU counterpart. We propose, implement and analyze an efficient way of building the SPTDS on the CPU and on the GPU. 
 
 \TODO{Describe measurement results here}
 
 \newpage
 \section{Background}
 
-We use the Orthogonal Recursive Bisection method in order to construct the SPTDS. The procedure is very similar to a k-d tree construction. However in our case, we do not periodically switch between the individual axes when searching for a median. Instead we pick the axis in which the cell volume is largest, and search for a median in the particle positions of this axis. The resulting tree, a SPTDS, can then be leveraged to perform a multipole expansions of each cell or subspace to approximate the forces acting between the particles. A mutlipole expansion is essentially a mathematical representation of a group of objects as a single function.
-This reduces the complexity of the gravity calculations from $O(n^2)$ to $\mathcal{O}(n\log{}n)$. More recently the Fast Multipole Method (FMM), also relying on the space partitioning data structure, has gained wider adoption. This technique further reduces the complexity to $\mathcal{O}(n)$. 
+The Orthogonal Recursive Bisection method constructs a SPTDS where all resulting cells encompass subspaces similar to cubes. K-d construction methods generate SPTDS as well, but shapes of the resulting subspaces can be strongly skewed and are ill suited for FMM as explained in more detail in section \ref{sec:multipole}. Both algorithms start with a single cell and iteratively construct the SPTDS by searching for axis aligned planes cutting the volume of each leaf cell into two. From the resulting two volumes, two new cells are constructed and appended to the SPTDS. 
 
-Knowing this we can split the computational effort required in modern N-Body simulations into three categories:
+In k-d tree construction, the axis lying orthogonal to the cut plane is chosen periodically, meaning all cells to be found on the same level of the SPTDS are cut with a plane orthogonal to the same axis. In the case of OBR, the axis where a cells volume is largest is picked to compute an optimal plane. Meaning cells on the same level of a tree can have cut planes of variable orientations. 
+
+The resulting tree, a SPTDS, is used to perform a multipole expansions of each cell or subspace to approximate the forces acting between the particles. A mutlipole expansion is essentially a mathematical representation of a group of objects as a single function and is explained in more detail in section \ref{sec:multipole}.
+Multipole expansions reduces the complexity of gravity calculations from $O(n^2)$ to $\mathcal{O}(n\log{}n)$. More recently the Fast Multipole Method (FMM), also relying on the SPTDS, gained wider adoption. This technique further reduces the complexity to $\mathcal{O}(n)$. 
+
+The computational effort required in modern astrophysical N-Body simulations can be divided into three categories:
 
 \begin{enumerate}
-	\item \textbf{Load Balancing:} In supercomputers we need to distribute the particles equally among computing nodes to make use of the full processing capacity. This needs to be done using ORB in order for us to be able to leverage FFM.
-	\item \textbf{Tree Building:} ORB is used again on each node individually to build the fast multipole expansion.
-	\item \textbf{Force Calculation and Integration:} We can then leverage the tree on a local and global level combined with FFM to integrate the forces between the particles.
+	\item \textbf{Global Tree Building / Load Balancing:} In supercomputers, particles are distributed equally among computing nodes to leverage node level parallelization. ORB is used to generate a well suited SPTDS for FMM on a node level.
+	\item \textbf{Local Tree Building:} The same approach is repeated on a local level, where instead of distributing the workload among nodes, its distributed among threads. The tree from step 1. is expanded by the locally computed tree.
+	\item \textbf{Force Calculation and Integration:} The STPDS constructed in step 1. and 2. combined with FMM is used to compute force integration. 
 \end{enumerate}
 
-Note that after each time step, the particles have new positions and therefore the space partitioning tree needs to be recomputed as well.
+Before the implementation of FMM into codes, and particularly before the era of modern accelerated computing (e.g., SIMD vectorization and GPU computing) the forces calculations (3.) dominated the computational cost. In more recent simulations, each category is about one third of the total calculation time\cite{Stadel2001}. Making Global Tree Building (2.) and Local Tree Building (1.) subjects to possible performance improvements, as GPU acceleration is not exploited. 
 
-Before the implementation of FMM into codes, and particularly before the era of modern accelerated computing (e.g., SIMD vectorization and GPU computing) the forces calculations (3.) dominated the computational cost. In more recent simulations, each category is about one third of the total calculation time\cite{2017ComAC...4....2P}. This makes the tree building (2.) and load balancing (1.) subjects to great performance gains, since GPU acceleration is usually not exploited. 
+We propose to implement Global Tree Building using CUDA to accelerate load balancing. As the same problem is very closely related to local tree building, the results may also be used to accelerate part (3.) of the simulation. 
 
-We propose to implement tree building on the GPU using CUDA to accelerate load balancing. We will consider implementing the same method for tree building in the future, but set the main target for load balancing.
-
-Our main objective in this work is to improve the runtime of astrophysical simulations, or more specifically PKDGrav. At the same time we want to minimize penalties with regards to $N$, the total number of particles, such that we can leverage a high $N$ to increase the precision of the simulation. Furthermore we want to adapt and optimize the algorithms with regards to the target data as introduced in \ref{section:target-data} and target computing systems.
+Our main objective in this work is to improve the runtime of astrophysical simulations, or more specifically PKDGrav. Simultaneously penalties with regards to $N$, the total number of particles, are kept as low as possible. Simulation accuracy benefits from large $N$ and from reduced runtime as a reduced runtime can result in an increased number of time steps on the same computing resources. As GPU acceleration are low level and hardware specific information is relevant, we want to adapt and optimize the algorithms with regards to the target computing Piz Daint.
 
 
 \subsection{Fast Multipole Expansion} \label{sec:multipole}
@@ -1953,7 +1955,7 @@ The cell class consists of the following variables:
 
 \subsection{Mapping cells to particles}
 
-The SPTDS consisting of cells is consistent across all nodes, therefore it is stored on a single thread, also named master thread in mdl. Very often we need to know which particles are encompassed in the volume of which cell and since the particles are distributed among the threads, we introduce a data structure to keep track of the relation between cells and its particles. 
+The SPTDS is consistent across all nodes, therefore it is stored on a single thread, also named master thread in mdl. Very often we need to know which particles are encompassed in the volume of which cell and since the particles are distributed among the threads. Thus we introduce a data structure to keep track of the relation between cells and its particles. 
 Thanks to the partitioning algorithm all particles belonging to a single cell can be found in a consecutive section of the particles array. Thus we can use a 2D array, where for each cell we store the corresponding range as a tuple, making the size of the array equivalent to the total number of cells $2 \times d -1$ multiplied by two. We name the data structure $cellToRangeMap$ and it is stored in the local data of each pst, meaning each thread has a different version the $cellToRangeMap$ array. Furthermore this implies that the data structure needs to be updated across all threads whenever we perform a partition.
 
 
