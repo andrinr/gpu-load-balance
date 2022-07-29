@@ -440,14 +440,15 @@ After a plane is found, we can divide or cut the $V_{cell}$ in two volumes, wher
   
 \subsubsection{Algorithm}
 
-Depicted in figure \ref{proc:orbmain} is the main routine of the orb algorithm. All the volumes are described using a lower and an upper boundary point, sufficiently describing a box. A $d$ equal to 1, means the reduction must not be continued, as the target of a single subsequent leaf cell is already reached, as the cell itself can be treated as a leaf cell. The stopping condition is formulated on lines 2-4. 
+Depicted in figure \ref{proc:orbmain} is the main routine of the orb algorithm. All the volumes are described using a lower and an upper boundary point, sufficiently describing a box, thus the only input parameters required are is $x$ storing the particles positions, $lower$, $upper$ and finally $d$.
+If $d$ is equal to 1, this means the reduction must not be continued, as the target of a single subsequent leaf cell is already reached, since the cell itself is treated as a leaf cell. The stopping condition is formulated on lines 2-4. 
 Line 6 describes a call to a method called $maxIndex()$, which essentially compares all provided values and returns the index of the maximum values. The result $i$ provides us with the axis where the cell volume is largest. 
-$d_{leftCell}$ is computed as described in equation \ref{eq:d1} and its results is stored in a variable named $d^\prime$. All prerequisites are met to compute the actual cut with the $cut$ method which we will explain in more detail in section \ref{sec:root}. The return value stored in $cut$ is equivalent to the position of the cut plane along the cut axis. Using the $cut$ value, the array of particles is partitioned as described in \ref{sec:part}.
-Finally we can divide the original volume into two volumes as described on lines 10-13 and recursively call $ORB$ method as all necessary information is known.
+$d_{leftCell}$ is computed as described in equation \ref{eq:d1} and its results is stored in a variable named $d^\prime$. All prerequisites are met to compute the actual cut with the $cut$ method which we will explain in more detail in section \ref{sec:root}. The return value stored in $cut$ is equivalent to the position of the cut plane along the cut axis. Using the $cut$ value, the array of particles is partitioned as described in \ref{sec:part} returning the $mid$ value which is the pivot index of the partitioning.
+Finally we can divide the original volume into two volumes as described on lines 10-13 and recursively call $ORB$ method where we provide it with two slices of the $x$ array.
 
 \begin{figure}[H]
  	\begin{algorithmic}[1]
- 		\Procedure{orb}{$\vec{lower}, \vec{upper}, d$}
+ 		\Procedure{orb}{$x$, $\vec{lower}, \vec{upper}, d$}
  		\If{d = 1}
  		\State \Return	\Comment{Stopping condition}	
  		\EndIf
@@ -456,8 +457,8 @@ Finally we can divide the original volume into two volumes as described on lines
  		\newline
  		\State $d^\prime = \left \lceil\frac{d}{2} \right \rceil$
  		
- 		\State $cut = cut(\vec{lower}_{i}, \vec{upper}_{i}, i, \frac{d^\prime}{d} )$\Comment{Find cut plane}
- 		\State $mid = partition(split, axis)$ \Comment{Partition particles}
+ 		\State $cut = cut(x, \vec{lower}_{i}, \vec{upper}_{i}, i, \frac{d^\prime}{d} )$\Comment{Find cut plane}
+ 		\State $mid = partition(x, split, axis)$ \Comment{Partition particles}
  		\newline
  		
  		\State $\vec{upper^\prime} = \vec{upper}$
@@ -466,8 +467,8 @@ Finally we can divide the original volume into two volumes as described on lines
  		\State $lowerChild_{i} = cut$
  		\newline
  		
- 		\State \Call{orb}{$\vec{lower}, \vec{upper^\prime}, d^\prime $} 
- 		\State \Call{orb}{$\vec{lower^\prime}, \vec{upper}, d - d^\prime $}
+ 		\State \Call{orb}{$x_{0:mid,:}$,$\vec{lower}, \vec{upper^\prime}, d^\prime $} 
+ 		\State \Call{orb}{$x_{mid:len(x),:}$$\vec{lower^\prime}, \vec{upper}, d - d^\prime $}
  		\EndProcedure
  	\end{algorithmic}
  	\caption{The ORB main routine}\label{proc:orbmain}
@@ -699,34 +700,37 @@ Again the procedure is repeated for $cell_2$ but not for $cell_3$ as there recur
 %Note that there exists approximation algorithms for example the median of medians algorithms. But the correctness guarantee of the median lying between 30\% and 70\% is not good enough in our case. If we were to implement such an approximation algorithms we would run into similar issues as described in \ref{sec:balancing}. But in this case the unequal memory balancing do not have the advantage of equal workload balancing, which in turn will worsen the performance and the maximum number of workable particles. Thus we will only consider approximation algorithms, if their approximation to the ideal values are very exact and can be determined.
 
 
-The $cut$ algorithm takes an array of particles, an axis, left and right boundaries, and a percentage $r$ of particles which should be on the left side of the determined cut. Its goal is to return a position such that the particles on the left side of the cut equal the percentage input parameter multiplied by all particles. We can define a function $f(c)$ where the function evaluates the number of elements smaller than the cut value c minus half the number of total particles. Reformulated in this way, the problem is equivalent to a root-finding problem. When the function evaluates to zero, we have found an axis aligned cut plane, where exactly half the particles are located on the left side. There are a lot of different solvers for the root-finding problem, but the most stable and easiest to implement is the bisection method. 
+The $cut$ algorithm takes an array of particle positions $x$, an $axis$, $left$ and $right$ boundaries and a $percentage$. Its goal is to return a position along the cut axis such that the particles less or equal to the a $cut$ value are equivalent to the percentage multiplied by the length of the $x$ array.
 
-Since we are operating on binary numbers with a limited precision, the bisection method is guaranteed to terminate after a certain number of steps. Other approximate algorithms can converge quicker, meaning they find the root in fewer time steps, but they are not guaranteed to converge. 	
+The problem is related to a selection algorithm and a quick select\cite{algorithms} could be used. However quick select has a worst case runtime of $O(n^2)$. Furthermore median algorithms could be explored as well, but they are mostly approximation algorithms with bad worst case runtimes. We can reformulate the problem as a root finding problem. To do so we define a function $f(c)$ which evaluates the number of elements smaller than the cut value minus half the number of total particles. When the function evaluates to zero, we have found an axis aligned cut plane, where exactly half the particles are located on the left side. There exist many different solvers for the root-finding problem, but the most stable and easiest to implement is the bisection method. Some solver combine approximate solver with the stable bisection method to generate fast but stable root finding methods. Such algorithms could be explored in later work.
+
+Since we are operating on binary numbers with a limited precision, the bisection method is guaranteed to terminate after $p$ steps.
 
 \subsubsection{Bisection Method}
 
-The first step is to make an estimation for a cut. In our case we simply assume it to be the exact middle of the domain boundaries. In principle the binary cut counts the number of particles on the left side of the of an initial cut. In case the particles are less than half of all particles, its clear that the cut was too far to the left, and the new right boundary of the domain is the cut. In case the particles are more than half, we set the the left boundary as the cut. This is repeated until we find a precise cut position.
+Initially an estimation for a cut is made, in this case the exact middle of the domain boundaries. Some median finding algorithms use improved guessing to speed up the process, again a method which could be leveraged in later work. 
 
+Because the maximal number of iterations is known, a loop can be used as seen in figure \ref{algo:cut} on line 4. A cut is then computed (line 5), which in the first iteration is the center position between left and right. We then check weather the stopping condition has already been reached (line 7-9), meaning the cut lies within $\alpha$ points of the ideal result. If it was not reached the boundaries can be improved as follows: In case there are too many elements left of the cut, we know that the cut position was chosen too far to the right and we can be sure that the ideal cut must be left of the current guess. Therefore we adjust the boundaries, in this case we set $righ$ equal to $cut$ as seen on line 13. The analog concept can be applied in the other case (line 11). 
 
 \begin{figure}
 	
 	\begin{algorithm}[H]
 		\caption{Bisection Method}\label{algo:cut}
 		\begin{algorithmic}[1]
-			\Procedure{cut}{$left, right, axis, percentage$}
+			\Procedure{cut}{$x, left, right, axis, percentage$}
 			\State $nLeft = 0$
 			\State $cut = 0$
 			\newline
 			\For{$k \in {0,..,p}$}
 			\State $cut = (right + left ) / 2 $
-			\State $nLeft\gets sum(x_{:,axis} < cut)$
+			\State $nLeft\gets sum(x_{:,axis} < cut)$ \Comment{Counting particles left of cut}
 			\newline
-			\If{$abs(nLeft - N_j) * percentage< \alpha $}
-			\State Break
+			\If{$abs(nLeft - len(x)) * percentage< \alpha $}
+			\State Break \Comment{Stopping condition}
 			\EndIf
 			\newline
 			
-			\If{$nLeft <= N_j * percentage$}
+			\If{$nLeft \leq len(x) * percentage$}
 			\State $left = cut$
 			\Else 
 			\State $right = cut$
@@ -806,7 +810,7 @@ As seen in the pseudo code in figure \ref{proc:part}, the algorithm looks for a 
 \TODO{Add explanation}
 \begin{algorithm}[H]
 	\begin{algorithmic}[1]
-		\Procedure{partition}{$cut, axis$}
+		\Procedure{partition}{$x, cut, axis$}
 		\State $i = 0$
 		
 		\For{$k \in {0,..N - 1}$}
