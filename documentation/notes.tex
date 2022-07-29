@@ -86,9 +86,11 @@
 \section{Introduction}
 
 
-The N-Body technique has been used for decades to simulate the Universe so we can compare theory with observations. This technique uses ``particles'' representing object such as planets and stars. As gravity operates over infinite distance it is necessary to consider all pair-wise interactions which makes a naive implementation $\mathcal{O}(n^2)$. Clearly this does not scale particularly well with large particle counts.
+The N-Body technique has been used for decades to simulate the Universe to compare theory with observations. It uses "particles" to represent objects of a certain mass. As gravity operates over infinite distance it is necessary to consider all pair-wise interactions which makes a naive implementation $\mathcal{O}(n^2)$. Clearly this does not scale particularly well with large particle counts.
 
-A common approach is to partition the space, in which the particles are contained, into a set of subspaces, also called cells, which are then stored in a space partitioning tree data structure (SPTDS). Building such a data structure takes a significant chunk of time of the overall simulation time, however its usually done on the CPU, even though most supercomputers have powerful GPUs installed. Tree walking and building algorithms heavily rely on control statements such as if / else. GPU programming in contrast, benefits from large packable data arrays without any branch divergence. In this thesis we explore upper limits for the chosen tree building algorithms in terms of speed up over its CPU counterpart. We propose, implement and analyze an efficient way of building the SPTDS on the CPU and on the GPU. 
+A common approach is to partition the space, in which the particles are contained, into a set of subspaces, also called cells, which are then stored in a space partitioning tree data structure (SPTDS). Building this data structure uses a significant percentage of the overall simulation time. As of now this was usually done on the CPU, not leveraging GPU acceleration. Tree walking and building algorithms heavily rely on control statements such as if / else. GPU programming in contrast, benefits from large packable data arrays without any branch divergence and thus special attention has to be paid to the exact implementation details. In this thesis we explore upper limits for the speedup of GPU accelerated SPTDS building algorithms over its CPU only counterpart. We propose, implement and analyze an efficient way of building the SPTDS on the CPU and on the GPU and compare 
+
+\TODO{Use past tense here?}
 
 \TODO{Describe measurement results here}
 
@@ -357,7 +359,31 @@ mass assignment
 
 %https://de.overleaf.com/learn/latex/TikZ_package
 %https://texample.net/tikz/examples/
-This section explains the ORB used to construct the SPTDS in more detail. A sample dataset is proposed to help with visual and numerical explanations of the algorithm. 
+This section explains ORB, which is used to build a SPTDS with non cycling axis choices. Each cell in the tree is enriched with the following properties:
+
+\begin{itemize}
+	\item \textbf{$V_{cell}$} 3D volume where all corresponding particles are contained within.
+	\item \textbf{$d_{cell}$} Number of leaf cells to be found among all subsequent cells.
+	\item \textbf{$N_{cell}$} Number of particles encompasses in the volume of the cell. 
+\end{itemize}
+
+Naturally each cell has two pointers pointing to its two children, which are used to traverse the tree, parent cell pointers are not of importance but could be added as well.
+
+\subsection{Memory and Workload Balancing}\label{balancing}
+As mentioned we want to (1) improve the runtime of ORB whilst (2) at the same time keeping the number of particles $N$ as large as possible. There exists some averse effects when disregarding interactions between minimizing runtime and maximizing $N$.
+
+To reduce the force integration error across all particles, some particles require more timesteps than others. This is caused by the vastly variant forces which are exerted on the particles. Whilst some follow a straight path with an almost constant velocity requiring little computational effort for great precision, others are influenced by strong gravitational poles resulting in highly curved movement paths and correlating with higher numbers of timesteps required.
+
+We denote the workload for a particle $p_i$ as the weighting function $w(p_i)$. The workload correlates with the number of simulations steps, that need to be computed for a single particle. In an optimally parallelized system balanced in terms of computational effort, the workload should be very similar among computing units. Where ideally the sum over all the particles considered by a thread is equal to the sum of all others. With strongly varying weights among particles, perfectly balancing the computational effort, results in a unbalanced distribution in terms of memory. 
+
+Let us consider a simple example to illustrate the point. Given the set of particles $A = \{p_1, p_2, .., p_{2m/3}\}$ and respectively $B = \{p_{2m/3 + 1}, p_2, .., p_{m}\}$. This yields a total number of particles equivalent to $N = m$. We assuming that $\forall p \in A : w(p) = 1$ and $\forall p \in B : w(p) = 2$. 
+We assign all particles from set $A$ to process with rank 0 and the particles from B to rank 1. It follows $\sum_{p\in A} w(p) = \sum_{p\in B} w(p)$. Thus the two processors are balanced in terms of computing costs, but not in terms of memory size. In fact, process with rank 0 has $2m/3$ elements and rank 1 has $m/3$ elements. Assuming each process has a memory size of $2m/3$, then clearly this configuration is not optimal. If we were to favor memory balancing, we could assign $2m/3$ to each processor and we would be able process $(4/3) \times m$ particles in total, which is larger than the original $N$ and therefore favorable since a dataset with a larger $N$ could be used.
+
+To which degree its ideal favor memory over workload balancing is difficult to answer. For now parametrize the workload using the weighting function. If we decide to completely ignore the workload balancing and solely focus on memory balancing, we can simply set $w(p_i) = 1$ for all particles.
+
+\subsection{By Example}
+
+A sample dataset is proposed to help with visual and numerical explanations of the algorithm. All particles in the sample dataset are assumed to have a weight of 1.
 
 \begin{filecontents*}{particles10.csv}
 x,y,id,o1,o2,x2,y2
@@ -393,90 +419,43 @@ x,y,id,o1,o2,x2,y2
 	0.9,0.3,6
 \end{filecontents*}
 
-\begin{figure}[H]
-    \begin{center}
-        \begin{minipage}[c]{0.2\linewidth}
-        \csvreader[
-            tabular=ccc,
-            table head=\hline \bfseries{x} & \bfseries{y} & \bfseries{id} \\\hline,
-            late after last line=\\\hline % horizontal line at the end of the table
-            ]{particles10.csv}{}{\csvcoli & \csvcolii & \csvcoliii}
-        \end{minipage}
-        \begin{minipage}[c]{0.7\linewidth}
-            \begin{tikzpicture}
-                \begin{axis}
-                 [
-                    nodes near coords,
-                    xmin=0,
-                    xmax=1,
-                    ymin=0,
-                    ymax=1
-                ]
-                \addplot+[
-                    only marks,
-                    point meta=explicit symbolic
-                ] table [
-                    x=x, 
-                    y=y, 
-                    meta=id, 
-                    col sep=comma] 
-                {particles10.csv};
-                \end{axis}
-
-            \end{tikzpicture}
-        \end{minipage}
-    \end{center}
-\caption{Example distribution with $N$ = 7}
-\end{figure}
-
-
-\subsection{Memory and Workload Balancing}\label{balancing}
-As mentioned we want to (1) improve the runtime of ORB whilst (2) at the same time keeping the number of particles $N$ as large as possible. There exists some averse effects when disregarding interactions between minimizing runtime and maximizing $N$.
-
-To reduce the force integration error across all particles, some particles require more timesteps than others. This is caused by the vastly variant forces which are exerted on the particles. Whilst some follow a straight path with an almost constant velocity requiring little computational effort for great precision, others are influenced by strong gravitational poles resulting in highly curved movement paths and correlating with higher numbers of timesteps required.
-
-We denote the workload for a particle $p_i$ as the weighting function $w(p_i)$. The workload correlates with the number of simulations steps, that need to be computed for a single particle. In an optimally parallelized system balanced in terms of computational effort, the workload should be very similar among computing units. Where ideally the sum over all the particles considered by a thread is equal to the sum of all others. With strongly varying weights among particles, perfectly balancing the computational effort, results in a unbalanced distribution in terms of memory. 
-
-Let us consider a simple example to illustrate the point. Given the set of particles $A = \{p_1, p_2, .., p_{2m/3}\}$ and respectively $B = \{p_{2m/3 + 1}, p_2, .., p_{m}\}$. This yields a total number of particles equivalent to $N = m$. We assuming that $\forall p \in A : w(p) = 1$ and $\forall p \in B : w(p) = 2$. 
-We assign all particles from set $A$ to process with rank 0 and the particles from B to rank 1. It follows $\sum_{p\in A} w(p) = \sum_{p\in B} w(p)$. Thus the two processors are balanced in terms of computing costs, but not in terms of memory size. In fact, process with rank 0 has $2m/3$ elements and rank 1 has $m/3$ elements. Assuming each process has a memory size of $2m/3$, then clearly this configuration is not optimal. If we were to favor memory balancing, we could assign $2m/3$ to each processor and we would be able process $(4/3) \times m$ particles in total, which is larger than the original $N$ and therefore favorable since a dataset with a larger $N$ could be used.
-
-To which degree its ideal favor memory over workload balancing is difficult to answer. For now parametrize the workload using the weighting function. If we decide to completely ignore the workload balancing and solely focus on memory balancing, we can simply set $w(p_i) = 1$ for all particles.
-
-
 \subsection{ORB}
 
 
-We consider a recursive implementation of ORB, where in each recursive call of the ORB method, a $cell$ along with a number of desired leaf cells $d_{cell}$ is given. , which corresponds to $d$ for the root cell. Furthermore each cell has information about the volume it encompasses (also refereed to its domain) stored as $V_{cell}$. We then split this $cell$, into two child cells $leftCell$ and $rightCell$. For the domains of $leftCell$ and $rightCell$ we have the following properties: 
+To introduce the ORB algorithm, we consider a recursive implementation of ORB as it is easier to understand than the iterative version. We define all cell properties recursively, allowing us to describe the algorithm in detail and derive the necessary constraints.
+
+As we initialize our recursion with the root cell alone, it follows that $V_{root}$ is equivalent to entire volume of the input data. $d_{cell} = d$ and $N_{root} = N$ are true per definition of $N$ and $d$. 
+When a cell is cut into two child cells, we refer to the children as $leftCell$ and $rightCell$. For any cell the following equations hold:
 
 \begin{center}
-	\begin{equation}
+	\begin{equation}\label{eq:v}
 		V_{cell} = V_{leftCell} \cup V_{rightChild}
 	\end{equation}
 \end{center}
 
 \begin{center}
-	\begin{equation}
+	\begin{equation}\label{eq:v2}
 		V_{leftCell} \cap V_{rightChild} = \emptyset
 	\end{equation}
 \end{center}
 
-How the volumes of the child cells are exactly defined, will be explained in later stages of this section. Primarily we need to define the variable $d$ for the child cells.
-
-Given a cell, we recursively define $nLeafCells$ for its children as follows:
+Defining $d_{cell}$ for each cell is especially important, since in some cases $d$ is a non power of two number, meaning some recursion paths terminate earlier. The larger portion of leaf cells are always allocated to the left cell, as this ensures that the final constructed tree is a nearly complete binary tree. 
 
 \begin{center}
-	\begin{equation}
+	\begin{equation} \label{eq:d1}
 		d_{leftCell} = \left \lceil\frac{d_{cell}}{2} \right \rceil 
 	\end{equation}
 \end{center}
 
 \begin{center}
-	\begin{equation}
+	\begin{equation}  \label{eq:d2}
 		d_{rightCell} = d_{cell} - d_{leftCell}
 	\end{equation}
 \end{center}
 
-Finally we need to determine the number of particles, which should be encompassed in $V_{leftCell}$ and $V_{rigtCell}$. We define the number of particles in the current cell as $N_{cell}$, respectively the left and right child cells are defined as follows:
+Trivially $d_{leftCell} - d_{rightCell} \leq 1$ holds. \TODO{Missing argumentation why its a nearly complete binary tree!!}
+
+Finally the number of particles encompassed in $V_{leftCell}$ and $V_{rigtCell}$ are defined as follows:
 
 \begin{center}
 	\begin{equation}
@@ -490,133 +469,208 @@ Finally we need to determine the number of particles, which should be encompasse
 	\end{equation}
 \end{center}
 
-With this formula we make sure, that for any given $d$, we can subdivide the domain accordingly and end up with leaf cells, who encompass an almost equal amount of particles.
-
-
 To simplify the visual and numeric explanation of the ORB algorithm, we assume $\forall i \in \{0,..,N\} : w(p_i) = 1$.
 
-The ORB algorithm is initiated by considering the volume $V_{cell}$ which encompasses all particle coordinates. In each iteration we use a binary search algorithm, which we will introduce in later stages, to determine a cut $c$ position. This cut position is defined along a specified axis, which is determined by the dimension where the domain is largest. In three dimensional space we can then represent this cut as a plane and make simple checks weather a particle is right or left of this plane. 
+As the cut plane, which divides $V_{leftCell}$ and $V_{rightCell}$ is axis aligned, searching for a single value $c$ is sufficient to find an ideal construction. Its is considered ideal if the number of particles where $x_{i,a} \leq c$ are equivalent to $N_{leftCell}$. 
 
-The ideal cut plane is defined such that exactly $N_{leftChild}$ particles are located to its left side. This cut plane allows us to split the volume $V_{cell}$ in two subdomain, where the $V_{leftCell}$ is constrained by our original domain boundaries and the cut plane on its right side. The same can be done for the right cell, where the cut plane determines the left side boundaries of the volume $V_{rightCell}$. We repeat this process until we have segmented our initial domain into $d$ leaf cells.
-
-
+After a plane is found, we can divide or cut the $V_{cell}$ in two volumes, where $V_{leftCell}$ and $V_{leftCell}$ are constrained by the original $V_{cell}$ and the cut plane. As defined in equation \ref{eq:v2} the volumes do not intersect, thus $V_{leftCell}$ along axis $a$ ends at $c$, where $V_{leftCell}$ start at $c$.
     
-\begin{figure}[H]
+  
+\subsubsection{Algorithm}
 
-        \centering
-            \begin{tikzpicture}
-                \begin{axis}
-                [
-                    nodes near coords,
-                    xmin=-0.,
-                    xmax=1.,
-                    ymin=-0.,
-                    ymax=1.,
-                ]
-                \addplot    +[
-                    only marks,
-                    point meta=explicit symbolic
-                ] table [
-                    x=x, 
-                    y=y, 
-                    meta=id, 
-                    col sep=comma] 
-                {particles10.csv};
-                \draw [fill=red!20](0.0,0.0) rectangle (1, 1);
-                \node[below] at (0.5, 1){$cell_1$};
-                \end{axis}
-            \end{tikzpicture}
-\caption{Example particles with ORB at recursion depth 0}
-\label{fig:orb1}
+Depicted in figure \ref{proc:orbmain} is the main routine of the orb algorithm. All the volumes are described using a lower and an upper boundary point, sufficiently describing a box. A $d$ equal to 1, means the reduction must not be continued, as the target of a single subsequent leaf cell is already reached, as the cell itself can be treated as a leaf cell. The stopping condition is formulated on lines 2-4. 
+Line 6 describes a call to a method called $maxIndex()$, which essentially compares all provided values and returns the index of the maximum values. The result $i$ provides us with the axis where the cell volume is largest. 
+We compute $d_{leftCell}$ as described in equation \ref{eq:d1} and store its results in a variable named $d^\prime$. 
+
+\begin{figure}[H]
+ 	\begin{algorithmic}[1]
+ 		\Procedure{orb}{$\vec{lower}, \vec{upper}, d$}
+ 		\If{d = 1}
+ 		\State \Return	\Comment{Stopping condition}	
+ 		\EndIf
+ 		\State $\vec{size} = \vec{upper} - \vec{lower}$
+ 		\State $i = maxIndex(\vec{size}_0, \vec{size}_1, \vec{size}_2)$ \Comment{Get index of max value}
+ 		\newline
+ 		\State $d^\prime = \left \lceil\frac{d}{2} \right \rceil$
+ 		
+ 		\State $cut = cut(\vec{lower}_{i}, \vec{upper}_{i}, i, \frac{d^\prime}{d} )$\Comment{Find cut plane}
+ 		\State $mid = partition(split, axis)$ \Comment{Partition particles}
+ 		\newline
+ 		
+ 		\State $\vec{upper^\prime} = \vec{upper}$
+ 		\State $upperChild_{i} = cut$
+ 		\State $\vec{lower^\prime} = \vec{lower}$
+ 		\State $lowerChild_{i} = cut$
+ 		\newline
+ 		
+ 		\State \Call{orb}{$\vec{lower}, \vec{upper^\prime}, d^\prime $} 
+ 		\State \Call{orb}{$\vec{lower^\prime}, \vec{upper}, d - d^\prime $}
+ 		\EndProcedure
+ 	\end{algorithmic}
+ 	\caption{The ORB main routine}\label{proc:orbmain}
+\end{figure}
+We explore the algorithm visually using the provided example dataset:
+
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{minipage}[c]{0.2\linewidth}
+			\csvreader[
+			tabular=ccc,
+			table head=\hline \bfseries{x} & \bfseries{y} & \bfseries{id} \\\hline,
+			late after last line=\\\hline % horizontal line at the end of the table
+			]{particles10.csv}{}{\csvcoli & \csvcolii & \csvcoliii}
+		\end{minipage}
+		\begin{minipage}[c]{0.7\linewidth}
+			\begin{tikzpicture}
+				\begin{axis}
+					[
+					nodes near coords,
+					xmin=0,
+					xmax=1,
+					ymin=0,
+					ymax=1
+					]
+					\addplot+[
+					only marks,
+					point meta=explicit symbolic
+					] table [
+					x=x, 
+					y=y, 
+					meta=id, 
+					col sep=comma] 
+					{particles10.csv};
+				\end{axis}
+				
+			\end{tikzpicture}
+		\end{minipage}
+	\end{center}
+	\caption{Example distribution with $N$ = 7}
 \end{figure}
 
 \begin{figure}[H]
-    \centering
-    \begin{forest}
-        [$cell_1$
-        []  
-        ]
-    \end{forest}    
-\caption{Tree with ORB at recursion depth 0}
+	
+	\centering
+	\begin{tikzpicture}
+		\begin{axis}
+			[
+			nodes near coords,
+			xmin=-0.,
+			xmax=1.,
+			ymin=-0.,
+			ymax=1.,
+			]
+			\addplot    +[
+			only marks,
+			point meta=explicit symbolic
+			] table [
+			x=x, 
+			y=y, 
+			meta=id, 
+			col sep=comma] 
+			{particles10.csv};
+			\draw [fill=red!20](0.0,0.0) rectangle (1, 1);
+			\node[below] at (0.5, 1){$cell_1$};
+		\end{axis}
+	\end{tikzpicture}
+	\caption{Example particles with ORB at recursion depth 0}
+	\label{fig:orb1}
 \end{figure}
+
+\begin{figure}[H]
+	\centering
+	\begin{forest}
+		[$cell_1$
+		[]  
+		]
+	\end{forest}    
+	\caption{Tree with ORB at recursion depth 0}
+	\label{fig:orb11}
+\end{figure}
+
+Depicted in figure \ref{fig:orb1} \&  \ref{fig:orb11} is the SPTDS after initialization: there is only one $cell_1$ which is root and $V_{cell_1}$ encompasses the entire domain which in this case is the rectangle ranging from 0 to 1 in both the x and y axis. $d_{cell_1}$ is equivalent to 3 and $N_{cell_1}$ is 7. 
 
 \begin{figure}[H]
 	\begin{center}
 		\begin{tikzpicture}
 			\pgfmathsetseed{2};
-                \begin{axis}
-                [
-                    nodes near coords,
-                    xmin=-0.,
-                    xmax=1.,
-                    ymin=-0.,
-                    ymax=1.,
-                ]
-                \addplot+[
-                    only marks,
-                    point meta=explicit symbolic
-                ] table [
-                    x=x, 
-                    y=y, 
-                    meta=id, 
-                    col sep=comma] 
-                {particles10.csv};
-                \draw [fill=green!20](0.0,0.0) rectangle (0.65, 1);
-                \draw [fill=blue!20](0.65,0.0) rectangle (1, 1);
-                \node[below] at (0.2, 1){$cell_2$};
-                 \node[below] at (0.7, 1){$cell_3$};
-                \end{axis}
-            
+			\begin{axis}
+				[
+				nodes near coords,
+				xmin=-0.,
+				xmax=1.,
+				ymin=-0.,
+				ymax=1.,
+				]
+				\addplot+[
+				only marks,
+				point meta=explicit symbolic
+				] table [
+				x=x, 
+				y=y, 
+				meta=id, 
+				col sep=comma] 
+				{particles10.csv};
+				\draw [fill=green!20](0.0,0.0) rectangle (0.65, 1);
+				\draw [fill=blue!20](0.65,0.0) rectangle (1, 1);
+				\node[below] at (0.2, 1){$cell_2$};
+				\node[below] at (0.7, 1){$cell_3$};
+			\end{axis}
+			
 		\end{tikzpicture}
-    \end{center}
-\caption{Example particles with ORB at recursion depth 1}
-\label{fig:orb2}
+	\end{center}
+	\caption{Example particles with ORB at recursion depth 1}
+	\label{fig:orb2}
 \end{figure}
 
 \begin{figure}[H]
-\centering
+	\centering
 	\begin{forest}
 		[$cell_1$
 		[$cell_2$][$cell_3$]  
 		]
 	\end{forest}    
-\caption{Tree with ORB at recursion depth 1}
+	\caption{Tree with ORB at recursion depth 1}
+	\label{fig:orb22}
 \end{figure}
+A cut plane, which translates to a cut line in simplified 2D example is constructed and $cell_2$ and $cell_3$ are generated accordingly.
+
+\ref{fig:orb2} \&  \ref{fig:orb22} is the SPTDS after initialization: there is only one $cell_1$ which is root and $V_{cell_1}$ encompasses the entire domain which in this case is the rectangle ranging from 0 to 1 in both the x and y axis. $d_{cell_1}$ is equivalent to 3 and $N_{cell_1}$ is 7. 
 
 \begin{figure}[H]
 	\begin{center}
 		\begin{tikzpicture}
 			\pgfmathsetseed{2};
-                \begin{axis}
-                [
-                    nodes near coords,
-                    xmin=-0.,
-                    xmax=1.,
-                    ymin=-0.,
-                    ymax=1.,
-                    title=Recursion depth 2
-                ]
-                \addplot+[
-                    only marks,
-                    point meta=explicit symbolic
-                ] table [
-                    x=x, 
-                    y=y, 
-                    meta=id, 
-                    col sep=comma] 
-                {particles10.csv};
-                \draw [fill=pink!20](0.0,0.0) rectangle (0.65, 0.55);
-                \draw [fill=yellow!20](0.0,0.55) rectangle (0.65, 1);
-                \draw [fill=blue!20](0.65,0.0) rectangle (1, 1);
-                \node[below] at (0.2, 1){$cell_4$};
-                \node[above] at (0.2, 0){$cell_5$};
-                \node[below] at (0.7, 1){$cell_3$};
-                \end{axis}
-            
+			\begin{axis}
+				[
+				nodes near coords,
+				xmin=-0.,
+				xmax=1.,
+				ymin=-0.,
+				ymax=1.,
+				title=Recursion depth 2
+				]
+				\addplot+[
+				only marks,
+				point meta=explicit symbolic
+				] table [
+				x=x, 
+				y=y, 
+				meta=id, 
+				col sep=comma] 
+				{particles10.csv};
+				\draw [fill=pink!20](0.0,0.0) rectangle (0.65, 0.55);
+				\draw [fill=yellow!20](0.0,0.55) rectangle (0.65, 1);
+				\draw [fill=blue!20](0.65,0.0) rectangle (1, 1);
+				\node[below] at (0.2, 1){$cell_4$};
+				\node[above] at (0.2, 0){$cell_5$};
+				\node[below] at (0.7, 1){$cell_3$};
+			\end{axis}
+			
 		\end{tikzpicture}
-    \end{center}
-\caption{Example particles with ORB at recursion depth 2}
-\label{fig:orb3}
+	\end{center}
+	\caption{Example particles with ORB at recursion depth 2}
+	\label{fig:orb3}
 \end{figure}
 
 \begin{figure}[H]
@@ -626,40 +680,13 @@ The ideal cut plane is defined such that exactly $N_{leftChild}$ particles are l
 		[$cell_2$ [$cell_4$] [$cell_5$]][$cell_3$]  
 		]
 	\end{forest}
- \caption{Tree with ORB at recursion depth 2}
+	\caption{Tree with ORB at recursion depth 2}
 \end{figure}
 
 
-Since $d_{cellLeft} - d_{cellRight}$ must always be $\leq 1$, it must hold that the tree is a nearly complete binary tree. Therefore we can conclude that the height of the tree is equal to $\lceil log(d) \rceil$ and the total number of nodes (not only leaf nodes) is $log(d) \times d$. Since we have a nearly complete binary tree, we also have the possibility of storing it as a heap\cite{algorithms} data-structure in an array.  This increase the performance of many tree operations, since we will not have to perform a tree walk to access individual cells in the tree. Furthermore child an parent cells can be accessed without pointers but directly by computing their index in the array.
 
-\begin{figure}
-	
-	\begin{algorithm}[H]
-		\caption{The ORB main routine}\label{proc:orbmain}
-		\begin{algorithmic}[1]
-			\Procedure{orb}{$\vec{lower}, \vec{upper}, d$}
-			\State $\vec{size} = \vec{upper} - \vec{lower}$
-			\State $i = maxIndex(\vec{size}_0, \vec{size}_1, \vec{size}_2)$ \Comment{Get index of max value}
-			\newline
-			\State $d^\prime_{i \times 2 } = \left \lceil\frac{d}{2} \right \rceil$
-			
-			\State $cut = cut(\vec{lower}_{i}, \vec{upper}_{i}, i, \frac{d^\prime}{d} )$
-			\State $mid = partition(split, axis)$
-			\newline
-			
-			\State $\vec{upper^\prime} = \vec{upper}$
-			\State $upperChild_{i} = cut$
-			\State $\vec{lower^\prime} = \vec{lower}$
-			\State $lowerChild_{i} = cut$
-			\newline
-			
-			\State \Call{orb}{$\vec{lower}, \vec{upper^\prime}, d^\prime $}
-			\State \Call{orb}{$\vec{lower^\prime}, \vec{upper}, d - d^\prime $}
-			\EndProcedure
-		\end{algorithmic}
-	\end{algorithm}
-\label{proc:orb}
-\end{figure}
+%Since $d_{cellLeft} - d_{cellRight}$ must always be $\leq 1$, it must hold that the tree is a nearly complete binary tree. Therefore we can conclude that the height of the tree is equal to $\lceil log(d) \rceil$ and the total number of nodes (not only leaf nodes) is $log(d) \times d$. Since we have a nearly complete binary tree, we also have the possibility of storing it as a heap\cite{algorithms} data-structure in an array.  This increase the performance of many tree operations, since we will not have to perform a tree walk to access individual cells in the tree. Furthermore child an parent cells can be accessed without pointers but directly by computing their index in the array.
+
 
 \subsection{Root finding}
 
