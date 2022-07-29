@@ -381,44 +381,6 @@ We assign all particles from set $A$ to process with rank 0 and the particles fr
 
 To which degree its ideal favor memory over workload balancing is difficult to answer. For now parametrize the workload using the weighting function. If we decide to completely ignore the workload balancing and solely focus on memory balancing, we can simply set $w(p_i) = 1$ for all particles.
 
-\subsection{By Example}
-
-A sample dataset is proposed to help with visual and numerical explanations of the algorithm. All particles in the sample dataset are assumed to have a weight of 1.
-
-\begin{filecontents*}{particles10.csv}
-x,y,id,o1,o2,x2,y2
-0.4,0.3,0,0,0,0.4,0.3
-0.2,0.6,1,2,1,0.2,0.6
-0.8,0.9,2,1,2,0.9,0.8
-0.6,0.5,3,0,0,0.6,0.5
-0.3,0.8,4,1,1,0.3,0.8
-0.7,0.1,5,2,2,0.7,0.1
-0.9,0.3,6,2,2,0.9,0.3
-\end{filecontents*}
-
-\begin{filecontents*}{particles11.csv}
-	x,y,id
-	0.4,0.3,0
-	0.2,0.6,1
-	0.3,0.8,4
-	0.6,0.5,3
-	0.8,0.9,2
-	0.7,0.1,5
-	0.9,0.3,6
-\end{filecontents*}
-
-
-\begin{filecontents*}{particles12.csv}
-	x,y,id
-	0.4,0.3,0
-	0.6,0.5,3
-	0.3,0.8,4
-	0.2,0.6,1
-	0.8,0.9,2
-	0.7,0.1,5
-	0.9,0.3,6
-\end{filecontents*}
-
 \subsection{ORB}
 
 
@@ -458,13 +420,13 @@ Trivially $d_{leftCell} - d_{rightCell} \leq 1$ holds. \TODO{Missing argumentati
 Finally the number of particles encompassed in $V_{leftCell}$ and $V_{rigtCell}$ are defined as follows:
 
 \begin{center}
-	\begin{equation}
-		N_{leftCell} = min \left \{ x \in \{0,...,N_{cell} \} : \sum_{i=0}^{x} w(p_i) \geq \frac{d_{leftCell}}{d_{cell}} \times \sum_{i=0}^{N_{cell}} w(p_i) \right \} 
+	\begin{equation}\label{eq:N1}
+		N_{leftCell} = min \left \{ x \in \{0,...,N_{cell} \} : \sum_{i=0}^{x} w(p_i) \geq \frac{d_{leftCell}}{d_{cell}} \times \sum_{i=0}^{N_{cell}} w(p_i) \right \} - 1
 	\end{equation}
 \end{center}
 
 \begin{center}
-	\begin{equation}
+	\begin{equation}\label{eq:N2}
 		N_{rightCell} = N_{cell} - N_{leftCell}
 	\end{equation}
 \end{center}
@@ -480,7 +442,8 @@ After a plane is found, we can divide or cut the $V_{cell}$ in two volumes, wher
 
 Depicted in figure \ref{proc:orbmain} is the main routine of the orb algorithm. All the volumes are described using a lower and an upper boundary point, sufficiently describing a box. A $d$ equal to 1, means the reduction must not be continued, as the target of a single subsequent leaf cell is already reached, as the cell itself can be treated as a leaf cell. The stopping condition is formulated on lines 2-4. 
 Line 6 describes a call to a method called $maxIndex()$, which essentially compares all provided values and returns the index of the maximum values. The result $i$ provides us with the axis where the cell volume is largest. 
-We compute $d_{leftCell}$ as described in equation \ref{eq:d1} and store its results in a variable named $d^\prime$. 
+$d_{leftCell}$ is computed as described in equation \ref{eq:d1} and its results is stored in a variable named $d^\prime$. All prerequisites are met to compute the actual cut with the $cut$ method which we will explain in more detail in section \ref{sec:root}. The return value stored in $cut$ is equivalent to the position of the cut plane along the cut axis. Using the $cut$ value, the array of particles is partitioned as described in \ref{sec:part}.
+Finally we can divide the original volume into two volumes as described on lines 10-13 and recursively call $ORB$ method as all necessary information is known.
 
 \begin{figure}[H]
  	\begin{algorithmic}[1]
@@ -509,6 +472,47 @@ We compute $d_{leftCell}$ as described in equation \ref{eq:d1} and store its res
  	\end{algorithmic}
  	\caption{The ORB main routine}\label{proc:orbmain}
 \end{figure}
+
+
+
+\subsection{By Example}
+
+A sample dataset is proposed to help with visual and numerical explanations of the algorithm. All particles in the sample dataset are assumed to have a weight of 1.
+
+\begin{filecontents*}{particles10.csv}
+	x,y,id,o1,o2,x2,y2
+	0.4,0.3,0,0,0,0.4,0.3
+	0.2,0.6,1,2,1,0.2,0.6
+	0.8,0.9,2,1,2,0.9,0.8
+	0.6,0.5,3,0,0,0.6,0.5
+	0.3,0.8,4,1,1,0.3,0.8
+	0.7,0.1,5,2,2,0.7,0.1
+	0.9,0.3,6,2,2,0.9,0.3
+\end{filecontents*}
+
+\begin{filecontents*}{particles11.csv}
+	x,y,id
+	0.4,0.3,0
+	0.2,0.6,1
+	0.3,0.8,4
+	0.6,0.5,3
+	0.8,0.9,2
+	0.7,0.1,5
+	0.9,0.3,6
+\end{filecontents*}
+
+
+\begin{filecontents*}{particles12.csv}
+	x,y,id
+	0.4,0.3,0
+	0.6,0.5,3
+	0.3,0.8,4
+	0.2,0.6,1
+	0.8,0.9,2
+	0.7,0.1,5
+	0.9,0.3,6
+\end{filecontents*}
+
 We explore the algorithm visually using the provided example dataset:
 
 
@@ -635,7 +639,7 @@ Depicted in figure \ref{fig:orb1} \&  \ref{fig:orb11} is the SPTDS after initial
 \end{figure}
 A cut plane, which translates to a cut line in simplified 2D example is constructed and $cell_2$ and $cell_3$ are generated accordingly.
 
-\ref{fig:orb2} \&  \ref{fig:orb22} is the SPTDS after initialization: there is only one $cell_1$ which is root and $V_{cell_1}$ encompasses the entire domain which in this case is the rectangle ranging from 0 to 1 in both the x and y axis. $d_{cell_1}$ is equivalent to 3 and $N_{cell_1}$ is 7. 
+\ref{fig:orb2} \&  \ref{fig:orb22} Depict a SPTDS of depth 2, or two levels, where a cut plane was found dividing $V_{cell_1}$ into $V_{cell_2}$ and $V_{cell_3}$, $d_{cell_2} = 2$ and $d_{cell_3} = 1$ subsequently are calculated, meaning $cell_3$ is considered a leaf cell. Thus we can compute $N_{cell_2}$ using a simplified version of equation \ref{eq:N1} since we assume all weights are equal 1: $N_{cell_2} = \lfloor \frac{d_{cell_2}}{d_{cell_3}} * N_{cell_1} \rfloor = \lfloor \frac{2}{3}  * 7 \rfloor = 4$ subsequently $N_{cell_3} = 3$. 
 
 \begin{figure}[H]
 	\begin{center}
@@ -683,12 +687,12 @@ A cut plane, which translates to a cut line in simplified 2D example is construc
 	\caption{Tree with ORB at recursion depth 2}
 \end{figure}
 
-
+Again the procedure is repeated for $cell_2$ but not for $cell_3$ as there recursion is terminated by the stopping condition. Finally we end up with $cell_4$ and $cell_5$ where the stopping condition is met as well. The resulting SPTDS has 3 leaf cells and partitions the space into three subspaces.
 
 %Since $d_{cellLeft} - d_{cellRight}$ must always be $\leq 1$, it must hold that the tree is a nearly complete binary tree. Therefore we can conclude that the height of the tree is equal to $\lceil log(d) \rceil$ and the total number of nodes (not only leaf nodes) is $log(d) \times d$. Since we have a nearly complete binary tree, we also have the possibility of storing it as a heap\cite{algorithms} data-structure in an array.  This increase the performance of many tree operations, since we will not have to perform a tree walk to access individual cells in the tree. Furthermore child an parent cells can be accessed without pointers but directly by computing their index in the array.
 
 
-\subsection{Root finding}
+\subsection{Root finding} \label{sec:root}
 
 
 %Finding the median of a large particle array is an essential step for ORB. We will thus explore different algorithms alongside their advantages and disadvantages for our specific use case.
@@ -789,7 +793,7 @@ The underlying distribution is a normal distribution. \TODO{Add reference to sec
 
 
 
-\subsection{Partition Algorithm}
+\subsection{Partition Algorithm}\label{sec:part}
 
 We have already introduced all basic building blocks of the ORB algorithm. The only and final piece which is missing is the partition algorithm. We want to continuously update the array and in the words used before, have a direct correlation between $x_i$ and $i$. This allows us to group all particles, which are contained in a cell in a fixed range of indexes of the particles array. The advantages of this are two fold: Firstly we can access all particles within a cell in constant time, secondly this allows us to easily manipulate particles within a cell as a slice. The disadvantage is a slight increase in runtime which comes with the partitioning algorithm.
 
