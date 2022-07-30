@@ -760,14 +760,15 @@ Let us consider the following example particle distribution where $particle_1$ a
 	\end{center}
 \end{figure}
 
-In this case there exists no ideal cut value in the x (horizontal) axis. As either there is 1 particle to the left or 3, but no cut can result in 2 particles to the left. If we keep adding particles along the same line, the bisection method performs worse and worse. Since the algorithm uses a deterministic for loop, the algorithm will terminate, but it might get stuck. 
+In this case there exists no ideal cut in the x (horizontal) axis. As either there is 1 particle to the left or 3, but no cut can result in 2 particles to the left. If we keep adding particles along the same line, the method performs even worse. However since the algorithm uses a deterministic for loop, the algorithm will terminate anyways. 
+
 \TODO{Write this? seems to vague}
 
 \subsubsection{Runtime Analysis}
 
-We analyze the runtime of the cut algorithm as follows: On line 5, we count the number of particles on the left side of the cut position. Since the array is unordered, we need to sweep over all the elements once, which results in a runtime of $O(N)$. All other operations inside the for loop can be computed in a negligible constant time. The loop itself is repeated $p$ number of times, where $p$ corresponds to the precision of the array data. With each iteration we half the span in which the optimal solution lies. Thus we reach the precision limit after $p$ iterations as a bit is shed with each iterations. Note that due to the Break condition on line 7, the average runtime is not the same as the maximum runtime and depends a lot on the underlying data.
+On line 5, the number of particles to the left of the cut plane are summed. As the array is unordered, all coordinates of one axis need to be read once, resulting in a runtime of $O(N)$. All other operations inside the for loop can be computed in a negligible constant time. The loop itself is repeated $p$ number of times, where $p$ corresponds to the precision of $x$ coordinates.
 
-The bisection method converges rather slowly, meaning the actual results is approximated in smaller steps. Assuming its first guess for the cut position was almost correct, it will correct its next guess by $25\%$ of the entire domain size, thus the number of iterations need to approach the actual optimum again is rather high.
+To proof that the loop concludes after $p$ iterations we assume integer numbers. With each iteration the range of possible solutions is divided by two. The same goes for integer numbers, each time a bit is removed, the size of the range of numbers which can be represented is reduced by two. Thus after $p$ iterations the precision limit is reached and the cut cannot be improved.
 
 \begin{comment}
 
@@ -799,9 +800,7 @@ The underlying distribution is a normal distribution. \TODO{Add reference to sec
 
 \subsection{Partition Algorithm}\label{sec:part}
 
-We have already introduced all basic building blocks of the ORB algorithm. The only and final piece which is missing is the partition algorithm. We want to continuously update the array and in the words used before, have a direct correlation between $x_i$ and $i$. This allows us to group all particles, which are contained in a cell in a fixed range of indexes of the particles array. The advantages of this are two fold: Firstly we can access all particles within a cell in constant time, secondly this allows us to easily manipulate particles within a cell as a slice. The disadvantage is a slight increase in runtime which comes with the partitioning algorithm.
-
-When thinking about this in terms of the recursive algorithm, maintaining this data structure is pretty straight forward. Each time we split a cell into two children, we make sure that particles contained in the left child cell are found in a designated range of the particles array, and the exact same concept is applied to the right cell. The partition algorithm is equivalent to the common hoare partition algorithm\cite{algorithms}. 
+We want to continuously update the array storing the positions of the particles and in the words used before, have a direct correlation between $x_i$ and $i$. This enables grouping particles within a cell in a fixed range of two indexes of the particles array. The advantages of this are two fold: Access all particles within a cell in constant time, manipulate particles within a cell using a slice of the array. 
 
 As seen in the pseudo code in figure \ref{proc:part}, the algorithm looks for a pair of particles, where for both the coordinate along the relevant axis are  on the wrong side of the cut plane. In this case the particles can be swapped (line 8) resulting in the correct position of both particles. We refer to \cite{algorithms} for a correctness proof and a more detailed explanation of the algorithm. 
 
@@ -829,7 +828,7 @@ As seen in the pseudo code in figure \ref{proc:part}, the algorithm looks for a 
 \label{proc:part}
 \end{algorithm}
 
-The partition algorithm has a clearly observable runtime of $O(N)$ since we iterate over all particles once. Since we need to touch each element at least once to partition the entire array there exists no better method.
+A runtime of $O(N)$ can be derived, as the algorithm iterates over all particles once. Since we need to touch each element at least once to partition the entire array there exists no better method.
 
 Lets apply the algorithm to our running example. We start with our initial array of particles as follows:
 
@@ -869,164 +868,11 @@ Finally we partition $cell_2$ into $cell_4$ and $cell_5$ with the cut position 0
 
 Note how all particles from $cell_4$ are contained in the range of 0-1. The particles of $cell_5$ in 2-3 and finally the particles contained in the volume of $cell_3$ can be found in 4-7.
 
-\begin{comment}
-\subsubsection{Global Partitioning}
-
-In the case of global partitioning, we partition the particle in such a way, that we can decouple the left and right child's computations completely from each other. In order to achieve this, the particles need to be redistributed among threads, s.t. each thread contains only particles contained in a single cell. Which in turn means it only need to consider particles in a designated volume. Finally this allows us to run the thread completely independent from others and remove the overhead introduced by synchronization operations.
-When looking at the numeric example this might look as follows:
-
-
-\begin{figure}[ht]
-	
-	\centering
-	\begin{tikzpicture}
-		\begin{axis}
-			[
-			nodes near coords,
-			xmin=-0.,
-			xmax=1.,
-			ymin=-0.,
-			ymax=1.,
-			title=Recursion depth 0,
-			legend cell align=left
-			]
-			
-			\addplot    +[
-			only marks,
-			point meta=explicit symbolic,
-			restrict expr to domain={\thisrow{o1}}{0:0}, 
-			] table [
-			x=x, 
-			y=y, 
-			meta=id, 
-			col sep=comma] 
-			{particles10.csv};
-			
-			\addplot    +[
-			only marks,
-			point meta=explicit symbolic,
-			restrict expr to domain={\thisrow{o1}}{1:1}, 
-			] table [
-			x=x, 
-			y=y, 
-			meta=id, 
-			col sep=comma] 
-			{particles10.csv};
-			
-			\addplot    +[
-			only marks,
-			point meta=explicit symbolic,
-			restrict expr to domain={\thisrow{o1}}{2:2}, 
-			] table [
-			x=x, 
-			y=y, 
-			meta=id, 
-			col sep=comma] 
-			{particles10.csv};
-			
-			\legend{$p0$,$p1$,$p2$}
-			
-			\draw [fill=red!20](0.0,0.0) rectangle (1, 1);
-			\node[above] at (0.5, 0.0){$cell_1$};
-		\end{axis}
-	\end{tikzpicture}
-	
-\end{figure}
-
-
-\begin{figure}[ht]
-	
-	\centering
-	\begin{tikzpicture}
-		\begin{axis}
-			[
-			nodes near coords,
-			xmin=-0.,
-			xmax=1.,
-			ymin=-0.,
-			ymax=1.,
-			title=Recursion depth 1,
-			legend cell align=left
-			]
-			
-			\addplot    +[
-			only marks,
-			point meta=explicit symbolic,
-			restrict expr to domain={\thisrow{o2}}{0:0}, 
-			] table [
-			x=x, 
-			y=y, 
-			meta=id, 
-			col sep=comma] 
-			{particles10.csv};
-			
-			\addplot    +[
-			only marks,
-			point meta=explicit symbolic,
-			restrict expr to domain={\thisrow{o2}}{1:1}, 
-			] table [
-			x=x, 
-			y=y, 
-			meta=id, 
-			col sep=comma] 
-			{particles10.csv};
-			
-			\addplot    +[
-			only marks,
-			point meta=explicit symbolic,
-			restrict expr to domain={\thisrow{o2}}{2:2}, 
-			] table [
-			x=x, 
-			y=y, 
-			meta=id, 
-			col sep=comma] 
-			{particles10.csv};
-			
-			\legend{$p0$,$p1$,$p2$}
-			
-			\draw [fill=green!20](0.0,0.0) rectangle (0.65, 1);
-			\draw [fill=blue!20](0.65,0.0) rectangle (1, 1);
-			\node[above] at (0.3, 0){$cell_2$};
-			\node[above] at (0.8, 0){$cell_3$};
-		\end{axis}
-	\end{tikzpicture}
-	
-\end{figure}
-
-We can observe how the ownership of particle 2 and particle 1 has to be changed, in order to make sure, that all particles from $cell_3$ are owned by the same thread. This change of ownership can be done using any desired multiprocessor communication strategy, in a multi node system we off course need to rely on internode communication systems. After a succesfull ownership swap, $p_2$ can perform further steps of the orb algorithm completely independent from $p_0$ and $p_1$. This can improve performance, because due to decoupling there needs to be less synchronization overhead. On the other hand, global partitioning comes with some considerable communication costs. 
-
-\begin{figure}[H]
-	\begin{center}
-		\begin{tikzpicture}
-			
-			\timeline{6}{8}{3}
-			
-			\communication{Compute cut}{0}{7}{7};
-			\communication{Generate and Broadcast new cells}{0}{7}{6};
-			
-			\communication{Global reshuffle}{0}{7}{5};
-			
-			\communication{Compute cut}{0}{3}{4};
-			\communication{Generate and \\ Broadcast new cells}{0}{3}{3};
-			\communication{Global reshuffle}{0}{3}{2};
-			
-			\communication{Compute cut}{4}{7}{4};
-			\communication{Generate and \\ Broadcast new cells}{4}{7}{3};
-			\communication{Global reshuffle}{4}{7}{2};
-			
-			
-		\end{tikzpicture}
-	\end{center}
-	\caption{Parallelized ORB for np = 4 and global reshuffling}
-	\label{fig:orb_parallel}
-\end{figure}
-
-\end{comment}
 
 \newpage
 \section{Theoretical Analysis of ORB runtime}
 
-The nature of the ORB algorithm and its application with very large data-sizes, requires that we consider hardware specific performance metrics for concrete implementation details. Since the decision tree for the implementation details of the algorithm is vast and each implementation involves a significant amount of development time, we will further guide our path using a theoretical model. Furthermore the model should be seen as a theoretical maximum in terms of optimization. Of course this assumes a perfect CPU and perfect GPU implementation, which are both not achievable due to a lack of knowledge and a lock of time to optimize each an every single part of the code. The lack of knowledge, is at this stage mostly present in terms of GPU implementations: Still to this day, there are new papers published which discuss new CUDA implementation details of fairly fundamental algorithms. 
+The nature of the ORB algorithm and its application with very large data-sizes, requires considering hardware specific performance metrics for concrete implementation details. Since the decision tree for the implementation details of the algorithm is vast and each implementation involves a significant amount of development time, we will further guide our path using a theoretical model. Furthermore the model should be seen as a theoretical maximum in terms of optimization. Of course this assumes a perfect CPU and perfect GPU implementation, which are both not achievable due to a lack of knowledge and a lock of time to optimize each an every single part of the code. The lack of knowledge, is at this stage mostly present in terms of GPU implementations: Still to this day, there are new papers published which discuss new CUDA implementation details of fairly fundamental algorithms. 
 
 When creating such a model, the performance is either bound by the number of floating point operations per minute, or in some cases its bound by the memory access speed. In our case, we have the hypothesis that at least the bisection method is memory bound.
 
