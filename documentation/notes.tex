@@ -86,9 +86,11 @@
 \section{Introduction}
 
 
-The N-Body technique has been used for decades to simulate the Universe to compare theory with observations. It uses "particles" to represent objects of a certain mass. As gravity operates over infinite distance it is necessary to consider all pair-wise interactions which makes a naive implementation $\mathcal{O}(n^2)$. Clearly this does not scale particularly well with large particle counts.
+The N-Body technique has been used for decades to simulate the Universe to compare theory with observations. It uses "particles" to represent objects of a certain mass and computes the forces by applying the gravity equation. As the forces operate over infinite distance it is necessary to consider all pair-wise interactions, making a naive implementation $\mathcal{O}(n^2)$. Clearly this does not scale with large particle counts.
 
-A common approach is to partition the space, in which the particles are contained, into a set of subspaces, also called cells, which are then stored in a space partitioning tree data structure (SPTDS). Building this data structure uses a significant percentage of the overall simulation time. As of now this was usually done on the CPU, not leveraging GPU acceleration. Tree walking and building algorithms heavily rely on control statements such as if / else. GPU programming in contrast, benefits from large packable data arrays without any branch divergence and thus special attention has to be paid to the exact implementation details. In this thesis we explore upper limits for the speedup of GPU accelerated SPTDS building algorithms over its CPU only counterpart. We propose, implement and analyze an efficient way of building the SPTDS on the CPU and on the GPU and compare 
+A common solution is to partition the space, in which the particles are contained, into a set of subspaces, also called cells. These cells are then stored in a space partitioning tree data structure (SPTDS) in order to speed up the simulation with the Fast Multipole Method (FMM) to $O(n)$. 
+Building the data structure uses a significant percentage of the overall simulation time. As of now this was usually done on the CPU, not leveraging GPU acceleration. Tree walking and building algorithms heavily rely on control statements such as if / else. GPU programming in contrast, benefits from large packable data arrays without any branch divergence and thus special attention has to be paid to the exact implementation details. 
+In this thesis we establish upper limits for the speedup of GPU accelerated SPTDS building algorithms over its CPU only counterpart. We then propose, implement and analyze an efficient way of building the SPTDS on the CPU and on the GPU. 
 
 \TODO{Use past tense here?}
 
@@ -116,24 +118,25 @@ Before the implementation of FMM into codes, and particularly before the era of 
 
 We propose to implement Global Tree Building using CUDA to accelerate load balancing. As the same problem is very closely related to local tree building, the results may also be used to accelerate part (3.) of the simulation. 
 
-Our main objective in this work is to improve the runtime of astrophysical simulations, or more specifically PKDGrav. Simultaneously penalties with regards to $N$, the total number of particles, are kept as low as possible. Simulation accuracy benefits from large $N$ and from reduced runtime as a reduced runtime can result in an increased number of time steps on the same computing resources. As GPU acceleration are low level and hardware specific information is relevant, we want to adapt and optimize the algorithms with regards to the target computing Piz Daint.
+Our main objective is to improve the runtime of astrophysical simulations, or more specifically PKDGrav. Simultaneously penalties with regards to $N$, the total number of particles, should be kept as low as possible. Simulation accuracy benefits from large $N$ and from reduced runtime as a reduced runtime can result in an increased number of time steps on the same computing resources. As GPU acceleration are low level and hardware specific details is relevant, we want to adapt and optimize the algorithms with regards to the target computer Piz Daint.
 
 
 \subsection{Fast Multipole Expansion} \label{sec:multipole}
 
-In mathematics, a multipole is a concept used to approximate the shape of a physical body. In our case the physical body are the particles contained within the volume of a cell. The multipole expansion is the mathematical series that results from this approximation. Since the precision of the expansion can be chosen, the resulting series can simplify the original body. 
-To keep force integration within a reasonable error margin, it is not always necessary to compute all $n$ to $n$ interactions. Particles far away can instead be grouped, in this case using the concept of cells, and summarized with a multipole expansion.
+In mathematics, a multipole is a concept used to approximate the shape of a physical body. In our case the physical body are the particles contained within the volume of a cell. The multipole expansion is the mathematical series that results from this approximation. The resulting series can simplify the original body, by choosing a suitable precision.
 
-For an intuitive understanding, one can imagine a large cluster of objects far away from planet Earth. If we wish to compute the interactions between every single object of the cluster and Earth, we will need to perform $O(n^2)$ computations. However, since the object is reasonably far away, it does not make sense to compute every interaction. Instead, we summarize the cluster into a single object. We can then simply compute the interacting gravity between planet Earth and the group. Consequently, objects within our own solar system would be too close to planet Earth to approximate its effects using a multipole. In such cases, it is necessary to perform all $O(n^2)$ computations.
+To keep force integration within a reasonable error margin, in most cases it is not necessary to compute all $n$ to $n$ interactions. Particles far away are instead grouped and summarized with a multipole expansion. A group in this context corresponds to a cell in a SPTDS.
+
+On a more intuitive level, one can imagine a large cluster of objects far away from planet Earth. If we wish to compute the interactions between every single object of the cluster and Earth, we will need to perform $O(n^2)$ computations. However, since the object is reasonably far away, it does not make sense to compute every interaction. Instead, we summarize the cluster into a single object. We can then simply compute the gravity acting between planet Earth and the group. Consequently, objects within our own solar system would be too close to planet Earth to approximate its effects using a multipole. In such cases, it is necessary to perform all $O(n^2)$ computations.
 Note that this example does not directly translate to the simulations, as a particle is not necessarily equivalent to a planet or a star. More on that in section \ref{sec:target-data}.
 
 %After the SPTDS is built, we compute the multipole for all cells in the tree. This allows us to dynamically select more or less detailed functions to represent a group of particles. Depending on the distance between the particle we want to determine the forces for and the particles which exert the forces, we might choose a higher or lower multipole expansion.
 
 \subsubsection{Advantage of Square Shapes}
 
-As mentioned, when building the SPTDS with ORB, we search for a median in the axis where the cell volume is largest. It is assumed that this is the best method to have squarish shapes on all levels of the tree, as also intermediate cell volumes are leveraged by FMM. 
+As mentioned, when building the SPTDS with ORB, we search for a median in the axis where the cell volume is largest. It is assumed that this is the best method to build cubic shapes on all levels of the tree, as also intermediate cell volumes are leveraged by FMM. 
 
-From \cite{Stadel2001}: "the opening radius of a cell is given by some constant factor times $r_{max}$". $r_{max}$ is the distance between the center of mass of a cell and its most distant corner. The opening radius correlates with the error ratio, which in turn influences how fine many timesteps have to be performed. Trivially, a square is the box where the distance between any point and its most distant corner point is the smallest. 
+From \cite{Stadel2001}: "the opening radius of a cell is given by some constant factor times $r_{max}$". $r_{max}$ is the distance between the center of mass of a cell and its most distant corner. The opening radius correlates with the error ratio, which in turn influences how many timesteps have to be performed. Of the family of rectangular cuboids, the cube is the shape where the average distance between any point and its most distant corner point is the smallest. 
 
 
 \subsection{Target Data and Notation}\label{sec:target-data}
@@ -712,10 +715,7 @@ Initially an estimation for a cut is made, in this case the exact middle of the 
 
 Because the maximal number of iterations is known, a loop can be used as seen in figure \ref{algo:cut} on line 4. A cut is then computed (line 5), which in the first iteration is the center position between left and right. We then check weather the stopping condition has already been reached (line 7-9), meaning the cut lies within $\alpha$ points of the ideal result. If it was not reached the boundaries can be improved as follows: In case there are too many elements left of the cut, we know that the cut position was chosen too far to the right and we can be sure that the ideal cut must be left of the current guess. Therefore we adjust the boundaries, in this case we set $righ$ equal to $cut$ as seen on line 13. The analog concept can be applied in the other case (line 11). 
 
-\begin{figure}
-	
-	\begin{algorithm}[H]
-		\caption{Bisection Method}\label{algo:cut}
+\begin{figure}[H]
 		\begin{algorithmic}[1]
 			\Procedure{cut}{$x, left, right, axis, percentage$}
 			\State $nLeft = 0$
@@ -740,7 +740,6 @@ Because the maximal number of iterations is known, a loop can be used as seen in
 			\State \Return $cut$
 			\EndProcedure
 		\end{algorithmic}
-	\end{algorithm}
 \caption{Bisection Method}
 \label{proc:cut}
 \end{figure}
@@ -762,7 +761,7 @@ Let us consider the following example particle distribution where $particle_1$ a
 
 In this case there exists no ideal cut in the x (horizontal) axis. As either there is 1 particle to the left or 3, but no cut can result in 2 particles to the left. If we keep adding particles along the same line, the method performs even worse. However since the algorithm uses a deterministic for loop, the algorithm will terminate anyways. 
 
-\TODO{Write this? seems to vague}
+\Q{Write this? seems too vague}
 
 \subsubsection{Runtime Analysis}
 
@@ -806,7 +805,6 @@ As seen in the pseudo code in figure \ref{proc:part}, the algorithm looks for a 
 
 \algnewcommand\And{\textbf{and} }
 
-\TODO{Add explanation}
 \begin{algorithm}[H]
 	\begin{algorithmic}[1]
 		\Procedure{partition}{$x, cut, axis$}
@@ -872,15 +870,13 @@ Note how all particles from $cell_4$ are contained in the range of 0-1. The part
 \newpage
 \section{Theoretical Analysis of ORB runtime}
 
-The nature of the ORB algorithm and its application with very large data-sizes, requires considering hardware specific performance metrics for concrete implementation details. Since the decision tree for the implementation details of the algorithm is vast and each implementation involves a significant amount of development time, we will further guide our path using a theoretical model. Furthermore the model should be seen as a theoretical maximum in terms of optimization. Of course this assumes a perfect CPU and perfect GPU implementation, which are both not achievable due to a lack of knowledge and a lock of time to optimize each an every single part of the code. The lack of knowledge, is at this stage mostly present in terms of GPU implementations: Still to this day, there are new papers published which discuss new CUDA implementation details of fairly fundamental algorithms. 
-
-When creating such a model, the performance is either bound by the number of floating point operations per minute, or in some cases its bound by the memory access speed. In our case, we have the hypothesis that at least the bisection method is memory bound.
+The main goal of this thesis, is to improve the runtime of the ORB algorithm by leveraging the graphics processing unit over the central processing unit. Before implementing, it makes sense to explore if and how strong the performance benefits could in theory manifest itself. For this purpose we develop a simplified model, which we use to compare the CPU version against two different GPU variants. As GPU programming is very low level, the knowledge gained while developing the model also builds a solid theoretical foundation.
 
 \subsection{General Memory Model}\label{sec:gmm}
 
-In order to have a clear terminology and understanding of a computing system, we will briefly describe a general model of computing system, which can be applied to most modern high performance systems. Note that we are looking at a single node and its hardware components here. A supercomputer may have thousands of these computers linked together where different bandwidth are seen between individual nodes. 
+For a consistent terminology of a computer, we briefly establish a general computing model, which can be applied to most modern high performance systems. We are looking at a single node and its hardware components, a supercomputer may have thousands of these computers linked together where different bandwidth are seen between individual nodes.
 
-A computing system consists of several nodes, where each node has one or more CPU`s where some are equipped with one or more GPU`s. Both the CPU and the GPU have their own memory which are connected by a data link. The bandwidth of this link is called Memory Bandwidth. We name the capacity of the CPU Memory Bandwidth $B_{CPU}$ and the GPU Memory Bandwidth $B_{GPU}$. Furthermore we have a separate data link between the CPU and the GPU memory which is in some cases called PCI express, NVLink (for modern NVidia GPU`s) among others. We will refer to it as $I_{GC}$. In systems with multiple CPU there is a link between the individiual CPU which we denote as $I_{CC}$. Finally we denote the link between GPUs as $I_{GG}$.
+Both the CPU and the GPU have their own memory which are connected by a data link, where the the connections are bound by the memory bandwidths. We name the capacity of the CPU memory bandwidth $B_{CPU}$ and the GPU memory bandwidth $B_{GPU}$. There is a separate data link between the CPU and the GPU memory, which is commonly referred to as PCI express or NVLink (for modern NVidia GPU`s, in our model we use the term $I_{GC}$. In systems with multiple CPU there is a link between the individual CPU's which we denote as $I_{CC}$. Finally we call the link between GPUs as $I_{GG}$.
 
 \begin{figure}[H]
 	\begin{center}
@@ -1047,8 +1043,7 @@ A computing system consists of several nodes, where each node has one or more CP
 
 \subsection{Datapoints of Supercomputers}
 
-
-In this section we introduce a table which lists all important data points for Piz Daint, Summit and Alps. We have choosen Piz Daint because we have the possibility to test the Code on its systems, Eiger because we can also access its systems and it will give us a good reference values, due to non hybrid architecture, meaning the nodes to not have GPU. Finally we analyse its performance on Summit, as its at the time of writing this thesis, one of the most capable supercomputers in the world.
+For Piz Daint, Summit and Eiger we have collected all relevant hardware metrics and compiled it into the table seen in figure \ref{fig:datapoints}. Piz Daint and Eiger were chosen, because we have the possibility to test the Code on its systems. Furthermore we include Summit as its is at the time of writing this thesis, one of the most capable supercomputers in the world.
 
 \small
 \begin{figure}[H]
@@ -1066,16 +1061,16 @@ In this section we introduce a table which lists all important data points for P
 			Base $GHZ_C$ & 2.9 GHZ & 4 GHZ & 2.25 GHZ\\
 			Max $GHZ_C$ & 3.8 GHZ & 4 GHZ & 3.4 GHZ\\
 			\# Cores & 12 & 22 & 64 \\
-			Architexture & Haswell & & AMD Infinity Architecture \\
-			Max AVX & AVX2 & ? & AVX2 \\ 
+			Architexture & Haswell & POWER9 & AMD Infinity Architecture \\
+			SIMD & AVX2 & ? & AVX2 \\ 
 			\# GPUs & 1 & 6 & 0 \\
 			GPU Model & NVIDIA P100 \cite{TESLAP100} & NVIDIA V100s \cite{NVIDIAV100} & - \\
 			GPU Mem. Cap. & 16 GB & 16 GB $\times$ 6 & -\\
 			$B_G$ & 732 GB/s & 900 GB/s $\times$ 6 & -\\
 			$I_{GC}$ & 32 GB/s & 50 GB/s $\times$ 6 & -\\
 			$I_{GG}$ & - & 50 GB/s & -\\
-			GPU Tflops & 9,3 & 16.5 &\\
-			\# CUDA Cores & 3584 & 5120 & \\
+			GPU Tflops & 9,3 & 16.5 & -\\
+			\# CUDA Cores & 3584 & 5120 & -\\
 		\end{tabular}}	
 	\end{center}
 	\caption{Datapoints of Supercomputers}
@@ -1083,24 +1078,18 @@ In this section we introduce a table which lists all important data points for P
 \end{figure}
 
 
-\subsection{Model parameters}
-
-\begin{comment}
-If we investigate the operations which are needed for the binary cut algorithm, we notice that the actual operations completed inside the loop, are only very few. When comparing the CPU implementation with GPU one, we need to not only consider benefits from increased parallelism in GPU hardware, which will lead to a higher tflops, but also possible speed-ups reached by higher bandwidths in GPU memory than CPU memory. On the other hand we need to mitigate the very low bandwidths between the GPU and CPU, which cannot be avoided altogether, as the data needs to be sent from the CPU to GPU before we can process it on the graphics processor.
-\end{comment}
-
-In order to estimate the runtime of the algorithms we denote the number of particles as $N$. Furthermore we assume a precision $p$ of 32, which is general standard for both integers and floats, furthermore its a sensible assumption for astrophysical simulations. We only look at at the positional data of the particles for the runtime analysis since its the only relevant data to be considered to find a cut. The total storage of all particles is $32 \times 3 \times N bits = 4 \times 3 \times N Bytes = 12 \times N Bytes$. Furthermore we assume $d = 1024$ and $N=10^9$.
-
 
 \subsection{Roofline Performance Model} \label{sec:roof}
 
-We test the our hypothesis, that ORB is, for the most part, memory bandwidth bound using the roofline model. In the roofline model, we compare the arithmetic intensity, which is measured in FLOPS / per byte against the number of flops per minute. 
+In a first step we determine weather our computations are bound by memory bandwidth or the actual performance of the computing unit. The most costly computation is line 6 of the cut method (figure \ref{proc:cut}) with a runtime of $O(32 \times N)$. Oftentimes when an algorithm iterates over a large dataset performing only very little calculations on its individual elements, the limiting factor is the memory. To support this claim make roofline models for all three systems and check weather they are really memory bound. A roofline model compares arithmetic intensity in flops per byte against the actual performance of the computing chip in flops. Therefore we need to gather all the relevant data first.
 
-For modern hardware, its fairly uncommon to release a peak flops value. Since 2008 Intel has introduced AVX (Advanced Vector Extensions), benchmarks performance largely depend upon the compiled assembly instructions, where the specific instructions vary a lot between implementation details. SIMD instructions can only be used when there is a contiguous memory access. Thus the peformance of the code depends on chosen memory layout as well as iteration method. Due to the lack of peak flop estimations, we build our own model to estimate the flops of the major parts of ORB. 
+\subsubsection{Estimating flops}
 
-AVX enables the processing of several floating point precision (32 bit) numbers simultaneously. AVX2, which is present in most modern hardware, enable the processing of 8 floating point instructions and its instructions have a CPI (cycles per instructions) of 0.5 on most chip architectures. A lower CPI, meaning the instruction takes only a fraction of a cycle, results in a higher efficiency. With a CPI of 0.5 we can issue two instructions in a single cycle, resulting in a doubled speed.
+For modern hardware, its fairly uncommon to release flops (floating point operations per second) values. Steadily evolving SIMD instruction sets result in varying performance for different implementation details, which in turn are compiled into different assembly instructions. Depending on the algorithm, implementation details and compilation flags the c++ compiler tries to compile ideal assembly instruction sets. SIMD instructions can only be used when there is a contiguous memory access, thus in some cases a poor memory layout choice may lead to a much lower flops. 
 
-We define in equation \ref{eq:avx}, a function to estimate the number of gigaflops for a given hardware. We define GHZ as the gigahertz which can be reached by the CPU, meanwhile $NF$ is the number of floats which can be processed simultaneously using AVX. $CPI$ is as mentioned the cycles per instructions for the AVX instruction set. Finally we have $np$ which is the number of processors and  we assume a perfect parallelization, meaning 100\% of the code can be parallelized.
+For most modern CPU chip architectures AVX is the fastest SIMD instruction set available. The common AVX2 enables the processing of 8 floating point operations per instruction with a  CPI (cycles per instructions) of 0.5. The CPI can also vary depending on chip architecture, but to our knowledge all relevant CPU's from figure \ref{fig:datapoints} indeed support a CPI of 0.5 along with AVX2. A lower CPI results in a higher efficiency, as several instructions can be completed in a single cycle. 
+
+We define in equation \ref{eq:avx}, a function to estimate the number of gigaflops for a given hardware. We define GHZ as the gigahertz which can be reached by the CPU, meanwhile $NF$ is the number of floats which can be processed simultaneously using AVX. $CPI$ is as mentioned the cycles per instructions for the AVX instruction set. Finally we have $np$ which is the number of processors, where we assume a perfect parallelization, meaning 100\% of the code can be parallelized.
 
 \begin{center}
 	\begin{equation}
@@ -1109,7 +1098,11 @@ We define in equation \ref{eq:avx}, a function to estimate the number of gigaflo
 \label{eq:avx}
 \end{center}
 
-Arithmetic intensity is usually measured in FLOPS per byte, meaning the number of floating point operations which are computed per byte which is loaded. We define the part of the cut algorithm, where we count the number of particles which are to the left of a cut position, as the count left. The count left is equivalent to line 6 in figure  \ref{proc:cut} and can be translated to the following c++ code:
+Since we have peak flops benchmarks available for the NVIDIA P100 and V100s we do not need to make any estimations on the GPU side.
+
+\subsubsection{Estimating Arithmetic Intensity}
+
+Arithmetic intensity is measured in FLOPS per byte or the number of floating point operations which are computed per byte loaded from memory. The count left part from the cut algorithm (line 6) in figure \ref{proc:cut} can be translated to the following isolated c++ code:
 
 \begin{figure}[H]
 	\begin{lstlisting}[language=c++]
@@ -1119,8 +1112,7 @@ Arithmetic intensity is usually measured in FLOPS per byte, meaning the number o
 
 \end{figure}
 
-
-Where $p$ is a C-style array which stores the particles position and $nLeft$ gives the number of particles which are left of the $cut$. In terms of arithmetic intensity, we have the following operations:
+Where $p$ is a C-style array which stores the particles position and $nLeft$ stores the number of particles which are smaller than $cut$. We can list the operations per loaded float:
 
 \begin{enumerate}
 	\item Compare particle to cut
@@ -1129,9 +1121,13 @@ Where $p$ is a C-style array which stores the particles position and $nLeft$ giv
 	\item Compare pointer $p$ with $endPtr$
 \end{enumerate}
 
-Which results in a total of 4 operations. Since a single float is stored using 4 bytes, we receive 1.0 operations per byte. Note that AVX or any SIMD instructions do not influence the arithmetic intensity, as the number of floating point operations per byte remains the same. We simply perform a set of operations concurrently. What is however influenced by AVX, is the maximum number of GFLOPS which can be processed by the hardware. If we were to ignore AVX, the algorithm would clearly not be bound by memory, as its performance would lack behind the memory bandwidth. For this reason it is so important to consider AVX.
+Which results in a total of 4 operations. Since a single float is stored using 4 bytes, this computes to 1.0 operations per byte or an arithmetic intensity of four. 
 
-Since we have peak flops benchmarks available for all the NVIDIA P100 and V100s we do not need to make any estimations about the GPU flops. Estimating the arithmetic intensity for the GPU  is a lot more complicated as it depends a lot on the specific implementation details. For now we will just assume the same arithmetic intensity as we have had for the CPU.
+Estimating the arithmetic intensity for the GPU is a lot more complicated as it can vary a lot depending on the specific implementation details. But for now we will just assume the same arithmetic intensity as we have had for the CPU.
+
+Note that SIMD instructions do not influence the arithmetic intensity, as the number of floating point operations per byte remains the same. We simply perform a set of operations concurrently. What is however influenced by AVX, is the maximum number of GFLOPS which can be processed by the hardware. If we were to ignore AVX, the algorithm would clearly not be bound by memory, as its performance would lack behind the memory bandwidth. For this reason it is important to consider SIMD instructions.
+
+\subsubsection{The Plots}
 
 Lets us compute the maximally achievable gflops for Piz Daint. To do so, we plug in the corresponding datapoints from figure \ref{fig:datapoints} into the formula \ref{eq:avx} for $np = 1, 2$ and $3$.
 
@@ -1390,7 +1386,10 @@ As visible in figure \ref{fig:roofsummit} and \ref{fig:roofsummitGPU} the same a
 \end{figure}
 
 Finally alps, which has the highest memory bandwidth compared to its flops, also becomes limited by the bandwidth after using more than four processors.
-We consider a minimal C++ code to make measurements which can prove the theoretical model. We use the -S flag along with the g++ compiler to generate assembly code from the c++ source code and make sure that AVX commands are enabled. For testing purposes all entries in the array are set to random values between 0 and 1, and cut is set to 0.5.
+
+\subsubsection{Empirical Verification}
+
+We consider a minimal C++ code verify the theoretical model. We use the -S flag along with the g++ compiler to generate assembly code from the c++ source code and make sure that AVX commands are enabled. For testing purposes all entries in the array are set to random values between 0 and 1, and cut is set to 0.5.
 
 In a first test, we do not enable AVX, but turn on $O3$. The generated assembly code looks as follows:
 
@@ -1427,7 +1426,7 @@ If we additionally set the compile flag -march=native we end up with the followi
 \label{fig:assembler-avx}
 \end{figure}
 
-We can identify $vmovups$, $vcomplpts$ and $vpsubd$ which are all AVX commands. Since they are using the ymm instead of the xmm registers, we know these are AVX2 and not AVX commands. For the chip architecture we have tested this on, AVX2 is the most optimal SIMD instruction set.
+We can identify $vmovups$, $vcomplpts$ and $vpsubd$ which are AVX commands. Since they are using the ymm instead of the xmm registers, we know these are AVX2 and not AVX commands.
 
 \TODO{Fix, Redo this part}
 The following test results were achieved from a Intel(R) Core(TM) i9-10885H CPU @ 2.40GHz
@@ -1435,9 +1434,11 @@ processor. We perform the conditional reduction on  $2^{27}$ particles. The redu
 
 But regardless if the app is actually memory bound or not, fact is that the GPU outperforms the CPU by a factor of 10-20 $\times$, thus even if it were bound by the chip architecture, there is still an improvement to be expected when porting the code to the GPU. 
 
-\subsection{Models for Different Approaches}
+\subsection{Runtime Estimates for Different Approaches}
 
 When building the models, we assume that ORB is memory bound. Meaning that the limiting factor is not the flops of the chip, but rather the memory bandwidth. We will construct and explore models for three different approaches. In the first naive implementation, we simply send an array of particles to the GPU, where the counting is then performed. In a more advanced variant, we consider sending the particles from the CPU to GPU only once and perform the partitioning on the GPU as well.  
+
+In order to estimate the runtime of the algorithms we denote the number of particles as $N$. Furthermore we assume a precision $p$ of 32, which is general standard for both integers and floats and its a sensible assumption for astrophysical simulations. We only look at at the positional data of the particles for the runtime analysis since its the only relevant data to be considered to find a cut. The total storage of all particles is $32 \times 3 \times N bits = 4 \times 3 \times N Bytes = 12 \times N Bytes$. Furthermore we assume $d = 1024$ and $N=10^9$.
  
 \subsubsection{GPU Counting}
 
