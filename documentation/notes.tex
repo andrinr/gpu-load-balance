@@ -443,13 +443,13 @@ After a plane is found, we can divide or cut the $V_{cell}$ in two volumes, wher
   
 \subsubsection{Algorithm}
 
-Depicted in figure \ref{proc:orbmain} is the main routine of the orb algorithm. All the volumes are described using a lower and an upper boundary point, sufficiently describing a box, thus the only input parameters required are is $x$ storing the particles positions, $lower$, $upper$ and finally $d$.
+Algorithm \ref{proc:orbmain} is the main routine of the orb algorithm. All the volumes are described using a lower and an upper boundary point, sufficiently describing a box, thus the only input parameters required are is $x$ storing the particles positions, $lower$, $upper$ and finally $d$.
 If $d$ is equal to 1, this means the reduction must not be continued, as the target of a single subsequent leaf cell is already reached, since the cell itself is treated as a leaf cell. The stopping condition is formulated on lines 2-4. 
 Line 6 describes a call to a method called $maxIndex()$, which essentially compares all provided values and returns the index of the maximum values. The result $i$ provides us with the axis where the cell volume is largest. 
 $d_{leftCell}$ is computed as described in equation \ref{eq:d1} and its results is stored in a variable named $d^\prime$. All prerequisites are met to compute the actual cut with the $cut$ method which we will explain in more detail in section \ref{sec:root}. The return value stored in $cut$ is equivalent to the position of the cut plane along the cut axis. Using the $cut$ value, the array of particles is partitioned as described in \ref{sec:part} returning the $mid$ value which is the pivot index of the partitioning.
 Finally we can divide the original volume into two volumes as described on lines 10-13 and recursively call $ORB$ method where we provide it with two slices of the $x$ array.
 
-\begin{figure}[H]
+\begin{algorithm}[H]
  	\begin{algorithmic}[1]
  		\Procedure{orb}{$x$, $\vec{lower}, \vec{upper}, d$}
  		\If{d = 1}
@@ -475,7 +475,7 @@ Finally we can divide the original volume into two volumes as described on lines
  		\EndProcedure
  	\end{algorithmic}
  	\caption{The ORB main routine}\label{proc:orbmain}
-\end{figure}
+\end{algorithm}
 
 
 
@@ -713,9 +713,9 @@ Since we are operating on binary numbers with a limited precision, the bisection
 
 Initially an estimation for a cut is made, in this case the exact middle of the domain boundaries. Some median finding algorithms use improved guessing to speed up the process, again a method which could be leveraged in later work. 
 
-Because the maximal number of iterations is known, a loop can be used as seen in figure \ref{algo:cut} on line 4. A cut is then computed (line 5), which in the first iteration is the center position between left and right. We then check weather the stopping condition has already been reached (line 7-9), meaning the cut lies within $\alpha$ points of the ideal result. If it was not reached the boundaries can be improved as follows: In case there are too many elements left of the cut, we know that the cut position was chosen too far to the right and we can be sure that the ideal cut must be left of the current guess. Therefore we adjust the boundaries, in this case we set $righ$ equal to $cut$ as seen on line 13. The analog concept can be applied in the other case (line 11). 
+Because the maximal number of iterations is known, a loop can be used as seen in algorithm \ref{proc:cut} on line 4. A cut is then computed (line 5), which in the first iteration is the center position between left and right. We then check weather the stopping condition has already been reached (line 7-9), meaning the cut lies within $\alpha$ points of the ideal result. If it was not reached the boundaries can be improved as follows: In case there are too many elements left of the cut, we know that the cut position was chosen too far to the right and we can be sure that the ideal cut must be left of the current guess. Therefore we adjust the boundaries, in this case we set $righ$ equal to $cut$ as seen on line 13. The analog concept can be applied in the other case (line 11). 
 
-\begin{figure}[H]
+\begin{algorithm}[H]
 		\begin{algorithmic}[1]
 			\Procedure{cut}{$x, left, right, axis, percentage$}
 			\State $nLeft = 0$
@@ -742,7 +742,7 @@ Because the maximal number of iterations is known, a loop can be used as seen in
 		\end{algorithmic}
 \caption{Bisection Method}
 \label{proc:cut}
-\end{figure}
+\end{algorithm}
 
 
 \subsubsection{Edge cases}
@@ -769,44 +769,16 @@ On line 5, the number of particles to the left of the cut plane are summed. As t
 
 To proof that the loop concludes after $p$ iterations we assume integer numbers. With each iteration the range of possible solutions is divided by two. The same goes for integer numbers, each time a bit is removed, the size of the range of numbers which can be represented is reduced by two. Thus after $p$ iterations the precision limit is reached and the cut cannot be improved.
 
-\begin{comment}
-
-\subsubsection{Binary Search with improved guessing}
-
-As we can see in \ref{algo:cut}, the initial guess of the cut is simply the center of the domain. But if we consider non uniform distributions, this initial guess can possibly rather bad. Let us consider the following example:
-
-\begin{figure}[H]
-	\begin{center}
-		\begin{tikzpicture}
-			\def\mean{0.1}
-			\def\sigma{0.1}
-			\def\pi{3.14159265359}
-			\begin{axis}[xmin = 0, xmax = 1, ymin=0, ymax=5, samples=60]
-				\addplot[domain = 0:1,blue] {1 / (\sigma * sqrt(2 * \pi)) * exp(-0.5 * ((x - \mean) / \sigma)^2) };
-				\draw (axis cs:0.5,0) -- node[left]{$c_0$} (axis cs:0.5,5);
-				\draw (axis cs:0.25,0) -- node[left]{$c_1$} (axis cs:0.25,5);
-				\draw (axis cs:0.125,0) -- node[left]{$c_2$} (axis cs:0.125,5);
-			\end{axis}
-		\end{tikzpicture}
-	\end{center}
-	\caption{3 iterations of binary search with naive initial guess}\label{euclid}
-\end{figure}
-
-The underlying distribution is a normal distribution. \TODO{Add reference to section about data}. We can see that the algorithm will have to sweep 3 times over the entire array to get into the region of the actual median. One suggestion for improvement is to use an approximated median as a guess for the first split. We can sample 100 particles and find their median in constant time. Then we will run the binary cut algorithm using the approximated median as an initial guess. This can reduce the runtime by a few iterations, however we cannot make any assessment about the runtime, as this improvement will make the algorithm even slower on some distributions. Let us for example consider the uniform distribution, in this case the addition is pure overhead as the center is already the most accurate initial guess.
-\end{comment}
-
-
-
 \subsection{Partition Algorithm}\label{sec:part}
 
 We want to continuously update the array storing the positions of the particles and in the words used before, have a direct correlation between $x_i$ and $i$. This enables grouping particles within a cell in a fixed range of two indexes of the particles array. The advantages of this are two fold: Access all particles within a cell in constant time, manipulate particles within a cell using a slice of the array. 
 
-As seen in the pseudo code in figure \ref{proc:part}, the algorithm looks for a pair of particles, where for both the coordinate along the relevant axis are  on the wrong side of the cut plane. In this case the particles can be swapped (line 8) resulting in the correct position of both particles. We refer to \cite{algorithms} for a correctness proof and a more detailed explanation of the algorithm. 
+As seen in the pseudo code in algorithm \ref{proc:part}, the algorithm looks for a pair of particles, where for both the coordinate along the relevant axis are  on the wrong side of the cut plane. In this case the particles can be swapped (line 8) resulting in the correct position of both particles. We refer to \cite{algorithms} for a correctness proof and a more detailed explanation of the algorithm. 
 
 \algnewcommand\And{\textbf{and} }
 
 
-\begin{figure}[H]
+\begin{algorithm}[H]
 	\begin{algorithmic}[1]
 		\Procedure{partition}{$x, cut, axis$}
 		\State $i = 0$
@@ -825,7 +797,7 @@ As seen in the pseudo code in figure \ref{proc:part}, the algorithm looks for a 
 	\end{algorithmic}
 \caption{Partition Method}
 \label{proc:part}
-\end{figure}
+\end{algorithm}
 
 A runtime of $O(N)$ can be derived, as the algorithm iterates over all particles once. Since we need to touch each element at least once to partition the entire array there exists no better method.
 
@@ -1040,14 +1012,15 @@ Both the CPU and the GPU have their own memory which are connected by a data lin
 			
 		\end{tikzpicture}
 	\end{center}
+\caption{Illustration of the universal computing model}
 \end{figure}
 
-\subsection{Datapoints of Supercomputers}
+\subsection{Supercomputers}
 
-For Piz Daint, Summit and Eiger we have collected all relevant hardware metrics and compiled it into the table seen in figure \ref{fig:datapoints}. Piz Daint and Eiger were chosen, because we have the possibility to test the Code on its systems. Furthermore we include Summit as its is at the time of writing this thesis, one of the most capable supercomputers in the world.
+For Piz Daint, Summit and Eiger we have collected all relevant hardware metrics and compiled it into the table seen in table \ref{fig:datapoints}. Piz Daint and Eiger were chosen, because we have the possibility to test the Code on its systems. Furthermore we include Summit as its is at the time of writing this thesis, one of the most capable supercomputers in the world.
 
 \small
-\begin{figure}[H]
+\begin{table}[H]
 	\begin{center}
 		\resizebox{\textwidth}{!}{%
 		\begin{tabular}{|@{} c | c | c | c | }
@@ -1076,7 +1049,7 @@ For Piz Daint, Summit and Eiger we have collected all relevant hardware metrics 
 	\end{center}
 	\caption{Datapoints of Supercomputers}
 	\label{fig:datapoints}
-\end{figure}
+\end{table}
 
 
 
@@ -1105,13 +1078,9 @@ Since we have peak flops benchmarks available for the NVIDIA P100 and V100s we d
 
 Arithmetic intensity is measured in FLOPS per byte or the number of floating point operations which are computed per byte loaded from memory. The count left part from the cut algorithm (line 6) in figure \ref{proc:cut} can be translated to the following isolated c++ code:
 
-\begin{figure}[H]
-	\begin{lstlisting}[language=c++]
-		for(auto p= startPtr; p<endPtr; ++p) nLeft += *p < cut;
-	\end{lstlisting}
-\caption{Counting the particles left of a cut plane}
-
-\end{figure}
+\begin{lstlisting}[language=c++, caption=Counting the particles left of a cut plane, label=Minimal Count Left C++]
+	for(auto p= startPtr; p<endPtr; ++p) nLeft += *p < cut;
+\end{lstlisting}
 
 Where $p$ is a C-style array which stores the particles position and $nLeft$ stores the number of particles which are smaller than $cut$. We can list the operations per loaded float:
 
@@ -1392,10 +1361,9 @@ Finally alps, which has the highest memory bandwidth compared to its flops, also
 
 We consider a minimal C++ code to verify the theoretical model. We use the -S flag along with the g++ compiler to generate assembly code from the c++ source code and make sure that AVX commands are enabled. For testing purposes all entries in the array are set to random values between 0 and 1, and cut is set to 0.5.
 
-In a first test, we do not enable AVX, but turn on $O3$. The generated assembly code looks as follows:
+In a first test, we do not enable AVX, but turn on $O3$. The generated assembly code is depicted in listing \ref{assembler}.
 
-\begin{figure}[H]
-	\begin{lstlisting}
+\begin{lstlisting}[language=c++, caption=Reduction Assembler Code without AVX, label=assembler]
 .L18:
 	movups	(%rax), %xmm0
 	addq	$16, %rax
@@ -1404,16 +1372,13 @@ In a first test, we do not enable AVX, but turn on $O3$. The generated assembly 
 	cmpq	%rdx, %rax
 	jne	.L18
 
-	\end{lstlisting}
-\caption{Reduction Assembler Code without AVX}
-\label{fig:assembler}
-\end{figure}
+\end{lstlisting}
+
 $psubd$ is a packaged instruction, meaning it already uses some form of SIMD instructions. The command is used in the MME and later the SSE2 instruction set. Since we can observe that the $xmm$ registers are used, we know its a SSE2 instruction. 
 
-If we additionally set the compile flag -march=native we end up with the following code:
+If we additionally set the compile flag -march=native we end up with the instructions as depicted in listing \ref{assembler-avx}.
 
-\begin{figure}[H]
-\begin{lstlisting}
+\begin{lstlisting}[language=c++, caption=Reduction Assembler Code with AVX2, label=assembler-avx]
 .L19:
 	vmovups	(%rax), %ymm3
 	addq	$32, %rax
@@ -1423,9 +1388,6 @@ If we additionally set the compile flag -march=native we end up with the followi
 	jne	.L19	
 
 \end{lstlisting}
-\caption{Reduction Assembler Code with AVX2}
-\label{fig:assembler-avx}
-\end{figure}
 
 We can identify $vmovups$, $vcomplpts$ and $vpsubd$ which are AVX commands. Since they are using the ymm instead of the xmm registers, we know these are AVX2 and not AVX commands.
 
@@ -1637,9 +1599,7 @@ This yields in a speed-up of:
 \subsection{Conclusion}
 
  
-The computations for Eiger and Summit can analogously to the ones from Piz Daint. For Eiger we cannot make any assumption for a GPU version as its CPU only system. All the results are plotted in \ref{fig:exectimes}.
-
-We conclude that the GPU version with GPU Tree building enabled yields the best speedup and also performs a lot better than the CPU version. Furthermore we can observe that the speedup is bounded by $\frac{B_{GPU}}{B_{CPU}}$/, because both the CPU and GPU implemented version are ultimately limited by the bandwidth.
+The computations for Eiger and Summit can analogously to the ones from Piz Daint. For Eiger we cannot make any assumption for a GPU version as its CPU only system. All the results are plotted in \ref{fig:exectimes}. As expected the GPU Counting outperforms the CPU version on both hybrid (CPU and GPU available )super computers. Furthermore GPU Counting and Partitioning yields more performance improvements, but the speed up is less drastic. As the model may differ from reality depending in implementation and compilation details, these results cannot be taken for granted and we will compare the results with actual empirical observations in section \ref{sec:empan}. 
 
 \begin{figure}[H]
 	\begin{center}
@@ -1682,9 +1642,9 @@ We conclude that the GPU version with GPU Tree building enabled yields the best 
 \newpage
 \section{CPU Implementation}
 
-In this section describe the stand-alone implementation of the accelerated ORB algorithm using CPU acceleration only. Building on the CPU version, we introduce possible improvements to selected parts of the code in the next section \ref{sec:gpuimpl}. 
+In this section describe the stand-alone implementation of the accelerated ORB algorithm using CPU acceleration only. Building on the CPU version, we introduce GPU accelerated alternatives to selected parts of the code in section \ref{sec:gpuimpl}. 
 
-We develop somewhat separately from the PKDGrav codebase in order to keep the project smaller and more easily understandable. However we make use of mdl from PKDGrav, which can be used to distribute the workload among nodes and processors on a single chip. This reduces the complexity and we do not have to worry about communication methods and CPU parallelism too much. Since the parallelization are abstracted using mdl, we only use the term threads when referring to computation units. Individual threads might be computed on a different node, or on a different processor on the same node, but this does not change things from an implementation side.
+We develop somewhat separately from the PKDGrav codebase in order to keep the project smaller and more easy to understand. However we make use of mdl from PKDGrav, which can be used to distribute the workload among nodes and processors on a single chip. This reduces the complexity and we do not have to worry about communication methods and CPU parallelism too much. Since the parallelization are abstracted using mdl, we only use the term threads when referring to computation units. Individual threads might be computed on a different node, or on a different processor on the same node, but this does not change things from an implementation side.
 
 We refrain from describing each part of the code in detail, however any performance critical details and all the important data-structures are described. Furthermore, we will pay special attention to the CUDA kernels and also memory management strategies for several reasons: minor implementation details can have a big impact upon the performance and increased replicability of the results.
 
@@ -1786,7 +1746,7 @@ In the example tree depicted in figure \ref{fig:extree} we indeed observe that t
 The cell class consists of the following variables:
 
 \begin{itemize}
-	\item $id$: Unique identification of the cell instance and corresponds to its index in the heap array plus one. The plus one comes from the different indexing for heap constraints, where we start with 1, and the classic array indexing starting with 0. It can be used to compute  indices of both child cells and parent cells using the above shown formulas.
+	\item $id$: Unique identification of the cell instance. Corresponds to its index in the heap array plus one. The plus one comes from the different indexing for heap constraints, where we start with 1, and the classic array indexing starting with 0. It can be used to compute  indices of both child cells and parent cells using the above shown formulas.
 	\item $nLeafCells$: Equivalent to  $d_{cell}$ and depicts the number of leaf cells to be found in all of its successors. Its used when building the tree, to track weather a cell needs to be split or not. 
 	\item $lower$: 3D point coordinate representing the lower boundary corner of the 3D volume $V_{cell}$ which is encompassed by this cells.
 	\item $upper$: Represents the upper boundary corner of the volume.	
@@ -1829,31 +1789,32 @@ We then check weather the proper cut has already been found, if so we directly c
 We then take a slice of the particles array and store a pointer to the data in $startPtr$ and correspondingly compute the end pointer as well. (10-14).
 Finally we simple iterate over the particles and count up, as previously mentioned, this can enable AVX, given hardware support and the proper compile flags. Usually $-march=native$ along with $O3$ will enable AVX. 
 
-\begin{lstlisting}[language=c++]
-	for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset){
-		auto cell = static_cast<Cell>(*(in + cellPtrOffset));
-		
-		if (cell.foundCut) {
-			continue;
-		}
-		int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
-		int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
-		
-		blitz::Array<float,1> particles =
-		pst->lcl->particlesAxis(blitz::Range(beginInd, endInd));
-		
-		float * startPtr = particles.data();
-		float * endPtr = startPtr + (endInd - beginInd);
-		
-		int nLeft = 0;
-		float cut = cell.getCut();
-		for(auto p= startPtr; p<endPtr; ++p)
-		{
-			nLeft += *p < cut;
-		}
-		
-		out[cellPtrOffset] = nLeft;
+
+\begin{lstlisting}[language=c++, caption=Count Left Service]
+for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset){
+	auto cell = static_cast<Cell>(*(in + cellPtrOffset));
+	
+	if (cell.foundCut) {
+		continue;
 	}
+	int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
+	int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
+	
+	blitz::Array<float,1> particles =
+	pst->lcl->particlesAxis(blitz::Range(beginInd, endInd));
+	
+	float * startPtr = particles.data();
+	float * endPtr = startPtr + (endInd - beginInd);
+	
+	int nLeft = 0;
+	float cut = cell.getCut();
+	for(auto p= startPtr; p<endPtr; ++p)
+	{
+		nLeft += *p < cut;
+	}
+	
+	out[cellPtrOffset] = nLeft;
+}
 \end{lstlisting}
 
 
@@ -1861,7 +1822,7 @@ Finally we simple iterate over the particles and count up, as previously mention
 
 Counting the total number of particles is very trivial, given the cellToRange map. 
 
-\begin{lstlisting}[language=c++]
+\begin{lstlisting}[language=c++, caption=Count Service]
 	for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset) {
 		auto cell = static_cast<Cell>(*(in + cellPtrOffset));
 		out[cellPtrOffset] = 
@@ -1878,46 +1839,46 @@ Its implementation is equivalent to a hoare partition. The implementation is str
 On line 31 till 37 we also update the cellToRangeMap in order to reflect the changes we have made in the particles array.
 
 \begin{figure}[H]
-	\begin{lstlisting}[language=c++]
-		for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset){
-			auto cell = static_cast<Cell>(*(in + cellPtrOffset));
-			
-			int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
-			int endInd = pst->lcl->cellToRangeMap(cell.id, 1);
-			
-			int i = beginInd-1, j = endInd;
-			float cut = cell.getCut();
-			
-			while(true)
-			{
-				do
-				{
-					i++;
-				} while(lcl->particles(i, cell.cutAxis) < cut && i <= endInd);
-				
-				do
-				{
-					j--;
-				} while(lcl->particles(j, cell.cutAxis) > cut && j >= beginInd);
-				
-				if(i >= j) {
-					break;
-				}
-				
-				swap(lcl->particles, i, j);
-			}
-			
-			swap(lcl->particles, i, endInd -1);
-			
-			lcl->cellToRangeMap(cell.getLeftChildId(), 0) =
-			lcl->cellToRangeMap(cell.id, 0);
-			lcl->cellToRangeMap(cell.getLeftChildId(), 1) = i;
-			
-			lcl->cellToRangeMap(cell.getRightChildId(), 0) = i;
-			lcl->cellToRangeMap(cell.getRightChildId(), 1) =
-			lcl->cellToRangeMap(cell.id, 1);
-			
+	\begin{lstlisting}[language=c++, caption=Partition Service, label=partition]
+for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset){
+	auto cell = static_cast<Cell>(*(in + cellPtrOffset));
+	
+	int beginInd = pst->lcl->cellToRangeMap(cell.id, 0);
+	int endInd = pst->lcl->cellToRangeMap(cell.id, 1);
+	
+	int i = beginInd-1, j = endInd;
+	float cut = cell.getCut();
+	
+	while(true)
+	{
+		do
+		{
+			i++;
+		} while(lcl->particles(i,cell.cutAxis)<cut and i<=endInd);
+		
+		do
+		{
+			j--;
+		} while(lcl->particles(j,cell.cutAxis)>cut and j>=beginInd);
+		
+		if(i >= j) {
+			break;
 		}
+		
+		swap(lcl->particles, i, j);
+	}
+	
+	swap(lcl->particles, i, endInd -1);
+	
+	lcl->cellToRangeMap(cell.getLeftChildId(), 0) =
+	lcl->cellToRangeMap(cell.id, 0);
+	lcl->cellToRangeMap(cell.getLeftChildId(), 1) = i;
+	
+	lcl->cellToRangeMap(cell.getRightChildId(), 0) = i;
+	lcl->cellToRangeMap(cell.getRightChildId(), 1) =
+	lcl->cellToRangeMap(cell.id, 1);
+	
+}
 	\end{lstlisting}
 \end{figure}
 
@@ -2718,7 +2679,7 @@ int n) {
 
 
 \newpage
-\section{Performance Analysis of ORB}
+\section{Performance Analysis of ORB}\label{sec:empan}
 
 We will use two system for our performance analysis. One is the Summit supercomputer which has been described in section 3.1. The other has the following specs:
 
