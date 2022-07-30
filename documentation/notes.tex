@@ -1390,7 +1390,7 @@ Finally alps, which has the highest memory bandwidth compared to its flops, also
 
 \subsubsection{Empirical Verification}
 
-We consider a minimal C++ code verify the theoretical model. We use the -S flag along with the g++ compiler to generate assembly code from the c++ source code and make sure that AVX commands are enabled. For testing purposes all entries in the array are set to random values between 0 and 1, and cut is set to 0.5.
+We consider a minimal C++ code to verify the theoretical model. We use the -S flag along with the g++ compiler to generate assembly code from the c++ source code and make sure that AVX commands are enabled. For testing purposes all entries in the array are set to random values between 0 and 1, and cut is set to 0.5.
 
 In a first test, we do not enable AVX, but turn on $O3$. The generated assembly code looks as follows:
 
@@ -1429,82 +1429,76 @@ If we additionally set the compile flag -march=native we end up with the followi
 
 We can identify $vmovups$, $vcomplpts$ and $vpsubd$ which are AVX commands. Since they are using the ymm instead of the xmm registers, we know these are AVX2 and not AVX commands.
 
-\TODO{Fix, Redo this part}
+\TODO{Fix, Redo this part on daint}
 The following test results were achieved from a Intel(R) Core(TM) i9-10885H CPU @ 2.40GHz
 processor. We perform the conditional reduction on  $2^{27}$ particles. The reduction takes 244420 microseconds. This means we have a throughput of $2^{27} / 10^{12} * 10^6 / 24420 = 0.00549 tflops$. This of course does not lie anywhere near the theoretical maximum, which even for a single processor ($np = 1$) is $2.4 * 8 * 2 * 1 / 1000 = 0.0384 tflops.$. This is a strong indication, that already with a single processor solutions, we are in the realm of bandwidth limited algorithms. This effect of course, would become even stronger when including parallelism.
 
-But regardless if the app is actually memory bound or not, fact is that the GPU outperforms the CPU by a factor of 10-20 $\times$, thus even if it were bound by the chip architecture, there is still an improvement to be expected when porting the code to the GPU. 
 
 \subsection{Runtime Estimates}
 
-We will construct and explore models for three different approaches. In the first naive implementation, we simply send an array of particles to the GPU, where the counting is then performed. In a more advanced variant, we consider sending the particles from the CPU to GPU only once and perform the partitioning on the GPU as well.  
+We construct runtime estimation for the CPU version and two different GPU implementations. In the first GPU implementation \textit{GPU Counting}, we simply send an array of particles to the GPU, where counting is then performed. In a more advanced variant \textit{GPU Counting and Partitioning} we send the particles from the CPU to GPU only once and perform the partitioning on the GPU as well.  
 
-In order to estimate the runtime of the algorithms we denote the number of particles as $N$. Furthermore we assume a precision $p$ of 32, which is general standard for both integers and floats and its a sensible assumption for astrophysical simulations. We only look at at the positional data of the particles for the runtime analysis since its the only relevant data to be considered to find a cut. The total storage of all particles is $32 \times 3 \times N bits = 4 \times 3 \times N Bytes = 12 \times N Bytes$. Furthermore we assume $d = 1024$ and $N=10^9$.
+We assume a precision $p$ of 32, which is general standard for both integers and floats and its a sensible assumption for astrophysical simulations. The total storage required for all particle positions is $32 \times 3 \times N bits = 4 \times 3 \times N Bytes = 12 \times N Bytes$. Furthermore we assume $d = 1024$ and $N=10^9$.
  
-\subsubsection{GPU Counting}
+\subsubsection{CPU Version}
 
-Each time we split all leaf cells into two child cells, we end up with twice the amount of cells. Considering we want to end up with $d$ leaf cells in the end, we need to perform the cut algorithm $log(d)$ times, which corresponds to the height of the tree. Each time we perform the cut algorithm, we test a maximum of $p$ different cut guesses. As we traverse the tree the number of cells increases, but at the same time the number of particles which need to counted decrease by the same factor. Thus the amount of cells which are to be iterated cancels out and we end up with the size of all particles $s$ divide by the memory bandwidth $B_C$.  
- 
+
+Whilst the number of cells increases each time a level is added, simultaneously the number of particles to be iterated over . Thus the amount of cells which are to be iterated cancels out and we end up with the size of all particles $s$ divide by the memory bandwidth $B_C$.  
+
+
+Each time the leaf cells of the SPTDS are split into two child cells and appended to the tree, we end up with twice the number of leaf cells. Considering we want to end up with $d$ leaf cells in the end, we need to perform the cut algorithm $\lceil log_2(d) \rceil$ times for all leaf cells. 
+
+Consequently we sum over all $\lceil log_2(d) \rceil$ iterations, where in each iteration a cut has to be found for $i$ cells. The cut itself is found in $p$ iterations, where the actual array of particles is each time we grow the SPTDS by a level. As only the memory bandwidth is considered, we divide the size of the particles to be iterated over.
+
 \begin{center}
 	\begin{equation}
-			log(d) \times \left ( p \times \frac{ s }{B_{C}} \right ) = t
-			\label{eq:cpu}
+		\sum_{i=1}^{\lceil \log_2{d} \rceil} i \times p \times  \frac{ \frac{s}{i}}{B_C} 
+		\label{eq:cpu1}
 	\end{equation}
 \end{center}
 
-\vspace{5mm}
+$i$ cancels out from the equation and we end up with:
+
+\begin{center}
+	\begin{equation}
+		\sum_{i=1}^{\lceil \log_2{d} \rceil} p \times \frac{s}{B_C} 
+		\label{eq:cpu2}
+	\end{equation}
+\end{center}
+
+Finally we can simplify to:
+
+\begin{center}
+	\begin{equation}
+		\lceil \log_2(d) \rceil  \times \left ( p \times \frac{ s }{B_{C}} \right )
+		\label{eq:cpu}
+	\end{equation}
+\end{center}
+
+\subsubsection{GPU Counting}
 
 
 The Equation \ref{eq:gpu} for the GPU is similar, the only difference being that we use the GPU memory bandwidth $B_{GPU}$ instead of the CPU bandwidth. Furthermore we have to consider the time it takes to send the data from the CPU to the GPU. This adds the terms size divided by CPU to GPU memory bandwidth denoted as $I_{GC}$. Finally we also need to load the data from the CPU memory to the CPU before we are able to send it. 
 
 \begin{center}
 	\begin{equation}
-			log(d) \times \left ( p \times \frac{s}{B_{G}} + \frac{s}{I_{GC}}  + \frac{s}{B_{C}} \right ) = t
+			\lceil log(d) \rceil \times \left ( p \times \frac{s}{B_{G}} + \frac{s}{I_{GC}}  + \frac{s}{B_{C}} \right )
 		\label{eq:gpu}
 	\end{equation}
 \end{center}
 
-\vspace{5mm}
-
 
 \subsubsection{GPU Counting and Partitioning}\label{gpu-tree-building}
 
-We can also consider performing the partitioning on the GPU, this means that there is no need to send data from the CPU to GPU each time we want to find a cut, allowing us to reduce the costly overheads. This means that we are able to move the considering the CPU GPU bandwidths and the initial loading data out of the bracket and reducing the runtime.
+We can also consider performing the partitioning on the GPU, this means that there is no need to send data from the CPU to GPU each time we want to find a cut, allowing us to reduce the costly overheads. This means that we are able to move the corresponding terms out of the brackets. 
 
 \begin{center}
 	\begin{equation}
-		log(d) \times \left ( p \times \frac{s}{B_{G}} \right ) + \frac{s}{I_{GC}} + \frac{s}{B_{C}} = t
+		\lceil log(d) \rceil \times \left ( p \times \frac{s}{B_{G}} \right ) + \frac{s}{I_{GC}} + \frac{s}{B_{C}} = t
 		\label{eq:gputree}
 	\end{equation}
 \end{center}
 
-
-\begin{comment}
-\subsubsection{Batch loading}
-
-Finally we can also try to mitigate the overheads introduced by CPU to GPU communication by sending small batches, such that the GPU can already start processing the data, before the data transfer was completed. Lets denote the number of batches by $b$. For the sake of simplicity we only make a single cut and thus can reuse Equation \ref{eq:cpu} for the CPU version. For the GPU we now omit the term for memory access from the GPU. Because we can already start processing data in parallel when the first batch arrived and $B_{G} > I_{GC}$ holds for every modern hardware. Thus the only overhead we still get is $\frac{s \div b}{B_{G}}$ for the very last batch, but as we can just increase b in relation to N, this becomes negligible. Note that this only counts for the very first iteration, thus the only difference we have is the constant of 31 and not 32. 
-
-\begin{center}
-	\begin{equation}
-		(d-1) \times p \times \frac{s}{B_{G}} + 2 \times \frac{s}{I_{GC}} = t
-		\label{eq:gpubatch}
-	\end{equation}
-\end{center}
-
-Due to possible overhead and no real improvement over the naive GPU version, we will omit the analysis using this method.
-
-\subsubsection{Data compression}
-
-Since for most computer the Interconnect bandwidth is greatly smaller than the Memory bandwidth, we could potentially also think about compressing the particle data. This would increase computational costs, but would allow us to store a higher amount of particles and reduce the cost which comes from loading the particles from memory as well as sending the data over the Interconnect.
-
-\begin{itemize}
-	\item Why do we even use floats in the first place? wouldn't integers suit better since precision is uniformly equal?
-	\item Reduce transferred number of bits, sacrifice precision?
-\end{itemize}
-
-\TODO{Add plots?}
-
-\end{comment}
 \newcommand\s{12}
 
 \newcommand\p{32}
@@ -1512,18 +1506,16 @@ Since for most computer the Interconnect bandwidth is greatly smaller than the M
 %\newcommand\d{1024}
 
 \normalfont
-\subsection{Piz Daint} 
+\subsubsection{Plugin Values} 
 
-Let us plugin the values from figure \ref{fig:datapoints} into the corresponding formulas \ref{eq:cpu}, \ref{eq:gpu} and \ref{eq:gputree} for piz daint.
-
-\subsubsection{Naive implementation}
+Let us plugin the values from figure \ref{fig:datapoints} into the corresponding formulas \ref{eq:cpu}, \ref{eq:gpu} and \ref{eq:gputree} for Piz Daint.
 The naive implementation yields the following speeds for the naive CPU  implementation:
 
 \pgfmathsetmacro\cpuPiz{ln(1024) / ln(2) * (\p * \s / 68)}
 
 \begin{center}
 	\begin{equation}
-		log(1024) \times \left ( \p \times \frac{ \s GB }{68 GB/s} \right )  = \cpuPiz s
+		\lceil log(1024) \rceil \times \left ( \p \times \frac{ \s GB }{68 GB/s} \right )  = \cpuPiz s
 	\end{equation}
 \end{center}
 
@@ -1532,7 +1524,7 @@ And the corresponding GPU implementation:
 \pgfmathsetmacro\gpuPizN{ ln(1024) / ln(2) * (\p * \s / 732 + \s / 32 + \s / 68)}
 \begin{center}
 	\begin{equation}
-		log(1024) \times \left ( 32 \times \frac{12 GB}{732 GB/s} + \frac{12 GB}{32 GB/s}  + \frac{12 GB}{68 GB/s} \right )=  \gpuPizN s
+		\lceil log(1024) \rceil \times \left ( 32 \times \frac{12 GB}{732 GB/s} + \frac{12 GB}{32 GB/s}  + \frac{12 GB}{68 GB/s} \right )=  \gpuPizN s
 	\end{equation}
 \end{center}
 
@@ -1545,14 +1537,12 @@ This yields in a speed-up of:
 \end{center}
 
 
-\subsubsection{GPU Tree Building}
-
-And the corresponding GPU implementation:
+When considering the GPU Counting and Partitioning we end up with:
 \pgfmathsetmacro\gpuPizT{ ln(1024)/ln(2) * (\p * \s / 732)  + \s / 32 + \s / 68}
 And the corresponding GPU implementation:
 \begin{center}
 	\begin{equation}
-		log(1024) \times \left ( \p \times \frac{\s GB}{732 GB/s} \right ) + \times \frac{\s GB}{32 GB/s}  + \frac{\s GB}{68 GB/s} = \gpuPizT s
+		\lceil log(1024) \rceil \times \left ( \p \times \frac{\s GB}{732 GB/s} \right ) + \times \frac{\s GB}{32 GB/s}  + \frac{\s GB}{68 GB/s} = \gpuPizT s
 	\end{equation}
 \end{center}
 
@@ -1575,8 +1565,7 @@ This yields in a speed-up of:
 	(\p * \s / (900 * 6))
 	+  \s / (50 * 6) + \s /(170 * 2)}
 \pgfmathsetmacro\cpuEiger{ln(1024) / ln(2) * (\p * \s / (204.8 * 2)}
- 
-The computations for Eiger and Summit can performed in the same way as we have shown for Piz Daint. For Eiger we cannot make any assumption for a GPU version as its CPU only system.
+
 
 \begin{comment}
 
@@ -1647,6 +1636,9 @@ This yields in a speed-up of:
 
 \subsection{Conclusion}
 
+ 
+The computations for Eiger and Summit can analogously to the ones from Piz Daint. For Eiger we cannot make any assumption for a GPU version as its CPU only system. All the results are plotted in \ref{fig:exectimes}.
+
 We conclude that the GPU version with GPU Tree building enabled yields the best speedup and also performs a lot better than the CPU version. Furthermore we can observe that the speedup is bounded by $\frac{B_{GPU}}{B_{CPU}}$/, because both the CPU and GPU implemented version are ultimately limited by the bandwidth.
 
 \begin{figure}[H]
@@ -1686,28 +1678,6 @@ We conclude that the GPU version with GPU Tree building enabled yields the best 
 \label{fig:exectimes}
 \end{figure}
 
-
-
-
-\begin{comment}
-\begin{figure}
-\begin{center}
-\begin{tikzpicture}
-\begin{axis}[xmin = -1, xmax = 13, ymin=-1, ymax=6]
-\addplot[domain = 0:12,blue] {ln(1024) / ln(2) * 
-(\p * x / (900 * 6))
-+  x / (50 * 6) + x /(170 * 2)};
-\addplot[domain = 0:12,blue] {ln(1024 * 16) / ln(2) * 
-(\p * x / (900 * 6))
-+  x / (50 * 6) + x /(170 * 2)};
-\end{axis}
-\end{tikzpicture}
-\end{center}
-\caption{??}
-\label{fig:exectimes}
-\end{figure}
-
-\end{comment}
 
 \newpage
 \section{CPU Implementation}
