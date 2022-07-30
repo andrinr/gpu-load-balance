@@ -132,7 +132,7 @@ Note that this example does not directly translate to the simulations, as a part
 
 %After the SPTDS is built, we compute the multipole for all cells in the tree. This allows us to dynamically select more or less detailed functions to represent a group of particles. Depending on the distance between the particle we want to determine the forces for and the particles which exert the forces, we might choose a higher or lower multipole expansion.
 
-\subsubsection{Advantage of Square Shapes}
+\subsubsection{Advantage of Cubic Bounding Volumes}
 
 As mentioned, when building the SPTDS with ORB, we search for a median in the axis where the cell volume is largest. It is assumed that this is the best method to build cubic shapes on all levels of the tree, as also intermediate cell volumes are leveraged by FMM. 
 
@@ -805,7 +805,8 @@ As seen in the pseudo code in figure \ref{proc:part}, the algorithm looks for a 
 
 \algnewcommand\And{\textbf{and} }
 
-\begin{algorithm}[H]
+
+\begin{figure}[H]
 	\begin{algorithmic}[1]
 		\Procedure{partition}{$x, cut, axis$}
 		\State $i = 0$
@@ -824,7 +825,7 @@ As seen in the pseudo code in figure \ref{proc:part}, the algorithm looks for a 
 	\end{algorithmic}
 \caption{Partition Method}
 \label{proc:part}
-\end{algorithm}
+\end{figure}
 
 A runtime of $O(N)$ can be derived, as the algorithm iterates over all particles once. Since we need to touch each element at least once to partition the entire array there exists no better method.
 
@@ -868,7 +869,7 @@ Note how all particles from $cell_4$ are contained in the range of 0-1. The part
 
 
 \newpage
-\section{Theoretical Analysis of ORB runtime}
+\section{Theoretical Analysis}
 
 The main goal of this thesis, is to improve the runtime of the ORB algorithm by leveraging the graphics processing unit over the central processing unit. Before implementing, it makes sense to explore if and how strong the performance benefits could in theory manifest itself. For this purpose we develop a simplified model, which we use to compare the CPU version against two different GPU variants. As GPU programming is very low level, the knowledge gained while developing the model also builds a solid theoretical foundation.
 
@@ -1434,9 +1435,9 @@ processor. We perform the conditional reduction on  $2^{27}$ particles. The redu
 
 But regardless if the app is actually memory bound or not, fact is that the GPU outperforms the CPU by a factor of 10-20 $\times$, thus even if it were bound by the chip architecture, there is still an improvement to be expected when porting the code to the GPU. 
 
-\subsection{Runtime Estimates for Different Approaches}
+\subsection{Runtime Estimates}
 
-When building the models, we assume that ORB is memory bound. Meaning that the limiting factor is not the flops of the chip, but rather the memory bandwidth. We will construct and explore models for three different approaches. In the first naive implementation, we simply send an array of particles to the GPU, where the counting is then performed. In a more advanced variant, we consider sending the particles from the CPU to GPU only once and perform the partitioning on the GPU as well.  
+We will construct and explore models for three different approaches. In the first naive implementation, we simply send an array of particles to the GPU, where the counting is then performed. In a more advanced variant, we consider sending the particles from the CPU to GPU only once and perform the partitioning on the GPU as well.  
 
 In order to estimate the runtime of the algorithms we denote the number of particles as $N$. Furthermore we assume a precision $p$ of 32, which is general standard for both integers and floats and its a sensible assumption for astrophysical simulations. We only look at at the positional data of the particles for the runtime analysis since its the only relevant data to be considered to find a cut. The total storage of all particles is $32 \times 3 \times N bits = 4 \times 3 \times N Bytes = 12 \times N Bytes$. Furthermore we assume $d = 1024$ and $N=10^9$.
  
