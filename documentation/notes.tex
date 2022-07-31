@@ -1987,19 +1987,17 @@ The Master schedules all other processors but also performs tasks by itself. The
 \newpage
 \section{GPU Implementation}\label{sec:gpuimpl}
 
-CUDA is programming language developed by NVIDIA allowing us to write code which is run directly on the graphics card.
-
-Note that the total number of particles, which can be simulated, will be reduced in both implementations, as the GPU memory is a lot smaller than the CPU memory. One could propose to load and offload several batches from the CPU to GPU but, this comes with a significant overhead due to the slow memory bandwidth between the CPU and the GPU $I_{GC}$.
-
+CUDA is a parallel computing platform and programming model invented by Nvidia. It allows software developers and programmers to use a CUDA-enabled graphics processing unit (GPU) for general purpose processing.
+The CUDA platform is designed to work with programming languages such as C, C++, and Fortran and gives direct access to the GPU's virtual instruction set and parallel computational elements.
 
 \subsection{Relevant CUDA Concepts}
 
 CUDA gives us the ability to launch kernels, which are written in C with some additional CUDA specific syntax. These kernel can be run from the CPU, commonly refereed to as the host, and are then executed on the GPU, also known as the device. The device and the host have a separate memory and as seen in section \ref{sec:gmm} the transfer $I_{CG}$ rates between the GPU and CPU are generally slower, under performing $I_{C}$ and $I_G$ speeds. Therefore one of key the challenges when rewriting CPU code to GPU code is to limit data transfers between the GPU and CPU as much as possible. Furthermore we have divide our problems into subproblems, where each subproblem is then executed on a block. CUDA cannot give any guarantees considering the order of execution of these blocks, therefore we have to fundamentally rethink algorithms when porting them from CPU to GPU code, where some algorithms are more or less fitted. Generally we only think about problems which are applied on large data arrays, the less connection between the individual results exists, the easier it is to implement an GPU version of the computation. Furthermore we can assume that problems with less branching work better on the GPU due to various reasons, which we will explain in detail later. 
 
-Building a tree is therefore a rather challenging problem as there are many computations which influence another and building a tree involves a lot of branching, at least when it is done in a conventional manner. 
+Building a tree is therefore a rather challenging problem as there are many computations which influence another and building a tree involves a lot of branching, at least when it is done in a conventional manner.
 
-\begin{figure}[H]
-	\begin{lstlisting}[language=c++]
+
+\begin{lstlisting}[language=c++, caption=Calling a CUDA Kernel, label=cuda:call]
 add<<<
 	nBlocks,
 	nThreads,
@@ -2009,10 +2007,8 @@ add<<<
 	param1,
 	param2
 );
-	\end{lstlisting}
-\caption{Calling a CUDA kernel}
-\label{cuda:call}
-\end{figure}
+\end{lstlisting}
+
 
 A kernel is executed exactly once for every kernel, where a block consists of many kernels. The number of kernels per block and the total number of blocks can be defined by the user as seen in the kernel call syntax in figure \ref{cuda:call} on line 2 and 3. 
 
@@ -2036,8 +2032,6 @@ Global memory is fetched from memory in 32 Byte packages, which translates to $\
 For shared memory each bank consists of 32 bits, which translates to a 32 bit precision number. If 32 unique threads access 32 different banks, then its considered an ideal access pattern, because the banks can be loaded in parallel. If however multiple threads access the same memory, a bank conflict is introduced and the access speed is greatly reduced.
 
 
-
-
 \begin{figure}[H]
 	\begin{center}
 		\begin{tikzpicture}
@@ -2051,14 +2045,14 @@ For shared memory each bank consists of 32 bits, which translates to a 32 bit pr
 			minimum height = 7.5cm] (cpu1) at (3.75 cm, -0.75cm) {};
 			\node[anchor=center] at (9 cm, 2.75 cm) {$GPU$};
 			
-			\node[rectangle,
-			draw = black,
-			text = black,
-			anchor = center,
-			align=center,
-			minimum width = 11.5cm, 
-			minimum height = 1.5cm] (cpu1) at (3.75 cm, -6cm) {};
-			\node[anchor=center] at (9 cm, -5.5 cm) {$CPU$};
+			%\node[rectangle,
+			%draw = black,
+			%text = black,
+			%anchor = center,
+			%align=center,
+			%minimum width = 11.5cm, 
+			%minimum height = 1.5cm] (cpu1) at (3.75 cm, -6cm) {};
+			%\node[anchor=center] at (9 cm, -5.5 cm) {$CPU$};
 			
 			
 			\block{0}{0}{0}
@@ -2081,6 +2075,11 @@ For shared memory each bank consists of 32 bits, which translates to a 32 bit pr
 			minimum height = 1cm] (cpu1) at (3.75 cm,-4cm) {};
 			\node[anchor=west] at (2.5 cm, -4 cm) {$Global Memory$};
 			
+			\draw[orange, snake it] (-1 cm, -5.5cm) to
+			(-1 cm, -6.1cm);
+			
+			\node[anchor=west] at (-0.5cm, -5.8) {$Thread$};
+			
 		\end{tikzpicture}
 	\end{center}
 \end{figure}
@@ -2099,25 +2098,6 @@ Whilst threads within a block can be synchronized, this is not the case for the 
 Since the GPU is limited in its computing and also memory capabilities, the number of blocks which are run in parallel are limited, therefore CUDA cannot give us any guarantee, weather a set of blocks are run serially or in parallel. Some of the blocks might be run in parallel, meanwhile others are run serially. This very constraint, forces the programmer to rethink algorithms and think of ways, how individual subproblems can be run somewhat independently of each other. 
 
 There exists however a way to communicate between blocks in a safe way. Atomic operations can be performed on global memory without any race conditions.
-\begin{figure}
-	\begin{center}
-		\begin{tikzpicture}
-			% draw horizontal line   
-			\draw[thick, -Triangle] (0,0) -- (\textwidth,0) node[font=\scriptsize,below left=3pt and -8pt]{t};
-			\draw[darkgray, line width=4pt] 
-			(0.5,.5) -- +(1,0);
-			
-			\draw[red, line width=4pt] 
-			(1.5,1.0) -- +(3,0);
-			
-			\draw[green, line width=4pt] 
-			(4.5,1.5) -- +(3,0);
-	
-		\end{tikzpicture}
-	\end{center}
-	\caption{timeline}
-	\label{u}
-\end{figure}
 
 \subsection{Streams}
 
@@ -2189,7 +2169,7 @@ The tree building loop is then repeated or if the desired size of the SPTDS is r
 
 \subsubsection{Service}
 
-The Count Left Service invokes the Count Left kernel exactly once for every leaf cell of the current SPTDS. Meaning on level 0 of the tree there is only one kernel per thread being executed, when proceeding to further levels, the number of kernels is equivalent to $2^{level}$. 
+The GPU version of the Count Left Service invokes the reduction kernel exactly once for every leaf cell of the current SPTDS. Meaning on level 0 of the tree there is only one kernel per thread being executed, when proceeding to further levels, the number of kernels is equivalent to $2^{level}$. 
 The number of blocks can be determined by the number of particles in this cell $n_{cell}$ divided by the number of threads per block which is set to 256 and finally we divide this further by the number of elements per thread $r$. 
 
 Since we can pass all the relevant information regarding a cell as input parameters to the cell, there is no need to copy any additional data from the CPU to the GPU. We only need to copy back the results from the GPU to the GPU.
@@ -2201,7 +2181,7 @@ We will
 	\item \textbf{Leverage Shared Memory} 
 	In the code on line 17 we invocate the shared memory, where is equivalent to the block size, which corresponds to a single float per thread. In a next step (lines 24-27) we apply our condition and copy the results to shared memory. This allows us to work exclusively with shared memory, reducing the amount of costly accesses performed on global memory.
 	
-	\item \textbf{Increase Thread Occupancy} There exists an optimum when considering the number of operation performed by a single thread. In order to adapt the number of ops dynamically, we iterate over a certain number of elements in the global memory, as seen in lines 24-27. The input parameter n defines the total number of particles. Therefore if we reduce the total number of blocks by a factor of $r$, the while loop will iterate over $r$ elements. In our case we set $r$ to 32. \TODO{Say why optimal value}
+	\item \textbf{Increase Thread Occupancy} There exists an optimum when considering the number of operation performed by a single thread. In order to adapt the number of ops dynamically, we iterate over a certain number of elements in the global memory, as seen in lines 24-27. The input parameter n defines the total number of particles. Therefore if we reduce the total number of blocks by a factor of $r$, the while loop will iterate over $r$ elements. In our case we set $r$ to 16 as more or less items per thread will result in a lower performance.
 	
 	\item \textbf{Meta Programming} The reduction is optimized by using a template, which indicates the total number of thread per block, which is equivalent to the blockSize. Since the template is evaluated at compile time, all the if statements taking blockSize as a parameter in figure do not cause any performance loss. In fact, because we are able to unroll loops, which would be evaluated at runtime, we increase the performance of the code. 
 	
@@ -2247,7 +2227,6 @@ We will
 			\draw[darkgray, line width=4pt] 
 			(2.75cm,-2cm) -- +(2.25cm,0);
 
-
 			
 		\end{tikzpicture}
 	\end{center}
@@ -2256,10 +2235,10 @@ We will
 \end{figure}
 \end{comment}
 
-\begin{figure}[H]
-	\begin{lstlisting}[language=c++]
+\begin{lstlisting}[language=c++, caption=Conditional Reduction in CUDA, label=cuda:reduction]
 template <unsigned int blockSize>
-extern __device__ void warpReduce(volatile int *sdata, unsigned int tid) {
+extern __device__ void warpReduce(
+	volatile int *sdata, unsigned int tid) {
 	if (blockSize >= 64) sdata[tid] += sdata[tid + 32];
 	if (blockSize >= 32) sdata[tid] += sdata[tid + 16];
 	if (blockSize >= 16) sdata[tid] += sdata[tid + 8];
@@ -2310,10 +2289,8 @@ extern __global__ void reduce(
 		g_odata[blockIdx.x] = sdata[0];
 	}
 }
-	\end{lstlisting}
-	\caption{Reduction in CUDA}
-	\label{cuda:reduction}
-\end{figure}
+\end{lstlisting}
+
 
 
 We execute the reduction kernel once for each cell, where we distribute the particles within the cell among a set of blocks. This makes the implementation straight forward but as we increase the number of cells, we make make more calls to the reduction kernel. This is problematic because each initialization of a kernel comes with some overhead, degrading the performance gradually with the tree traversal, as the overhead to computation ratio becomes more and more unfavorable.  
@@ -2720,5 +2697,8 @@ AMD EPYC 7702 64-Core Processor, Tesla T4.
 % Use for reduction explanation https://texample.net/tikz/examples/database-decimation-process/
 \bibliographystyle{unsrt}
 \bibliography{reference}
+
+\listoffigures
+\listoftables
 
 \end{document}

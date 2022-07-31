@@ -1,0 +1,32 @@
+\contentsline {figure}{\numberline {1}{\ignorespaces Uniform random distribution of 3D coordinates in cube domain projected onto a 2d plane\relax }}{7}{}%
+\contentsline {figure}{\numberline {2}{\ignorespaces Initial data with particles\relax }}{8}{}%
+\contentsline {figure}{\numberline {3}{\ignorespaces Particles are randomly distributed among 4 nodes\relax }}{8}{}%
+\contentsline {figure}{\numberline {4}{\ignorespaces Space partitioning tree data structure is computed\relax }}{9}{}%
+\contentsline {figure}{\numberline {5}{\ignorespaces Leaf cells of data structure are distributed among nodes\relax }}{9}{}%
+\contentsline {figure}{\numberline {6}{\ignorespaces Example distribution with $N$ = 7\relax }}{15}{}%
+\contentsline {figure}{\numberline {7}{\ignorespaces Example particles with ORB at recursion depth 0\relax }}{15}{}%
+\contentsline {figure}{\numberline {8}{\ignorespaces Tree with ORB at recursion depth 0\relax }}{15}{}%
+\contentsline {figure}{\numberline {9}{\ignorespaces Example particles with ORB at recursion depth 1\relax }}{16}{}%
+\contentsline {figure}{\numberline {10}{\ignorespaces Tree with ORB at recursion depth 1\relax }}{16}{}%
+\contentsline {figure}{\numberline {11}{\ignorespaces Example particles with ORB at recursion depth 2\relax }}{17}{}%
+\contentsline {figure}{\numberline {12}{\ignorespaces Tree with ORB at recursion depth 2\relax }}{17}{}%
+\contentsline {figure}{\numberline {13}{\ignorespaces Illustration of the universal computing model\relax }}{23}{}%
+\contentsline {figure}{\numberline {14}{\ignorespaces Roofline Model for Piz Daint CPU\relax }}{26}{}%
+\contentsline {figure}{\numberline {15}{\ignorespaces Roofline Model for Piz Daint GPU\relax }}{27}{}%
+\contentsline {figure}{\numberline {16}{\ignorespaces Roofline Model for Summit\relax }}{27}{}%
+\contentsline {figure}{\numberline {17}{\ignorespaces Roofline Model for Summit GPU\relax }}{28}{}%
+\contentsline {figure}{\numberline {18}{\ignorespaces Roofline Model for Alps\relax }}{28}{}%
+\contentsline {figure}{\numberline {19}{\ignorespaces Execution times of different strategies\relax }}{32}{}%
+\contentsline {figure}{\numberline {20}{\ignorespaces Tree as heap\relax }}{34}{}%
+\contentsline {figure}{\numberline {21}{\ignorespaces Tree with $d$ = 3\relax }}{35}{}%
+\contentsline {figure}{\numberline {22}{\ignorespaces Example particles distributed randomly across 3 nodes\relax }}{39}{}%
+\contentsline {figure}{\numberline {23}{\ignorespaces Parallelized ORB CPU version\relax }}{40}{}%
+\contentsline {figure}{\numberline {24}{\ignorespaces Parallelized ORB GPU version\relax }}{46}{}%
+\contentsline {figure}{\numberline {25}{\ignorespaces Parallelized ORB GPU version 2\relax }}{50}{}%
+\contentsline {figure}{\numberline {26}{\ignorespaces Reduction in CUDA\relax }}{51}{}%
+\contentsline {figure}{\numberline {27}{\ignorespaces Parallelized ORB with GPU counting and GPU partitioning\relax }}{53}{}%
+\contentsline {figure}{\numberline {28}{\ignorespaces timeline\relax }}{54}{}%
+\contentsline {figure}{\numberline {29}{\ignorespaces Partitioning kernel I\relax }}{55}{}%
+\contentsline {figure}{\numberline {30}{\ignorespaces Partitioning kernel II\relax }}{56}{}%
+\contentsline {figure}{\numberline {31}{\ignorespaces Device Scan Kernel\relax }}{57}{}%
+\contentsline {figure}{\numberline {32}{\ignorespaces Device Permute Kernel\relax }}{57}{}%
