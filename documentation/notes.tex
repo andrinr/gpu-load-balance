@@ -1762,24 +1762,24 @@ Thanks to the partitioning algorithm all particles belonging to a single cell ca
 
 \subsection{Services}\label{services}
 
-A service implementation consists of a $Service()$ function as well as a $Combine$ function. The service is handed two a $PST$ class which stores information about the process location as well as the local data. Furthermore two void pointers storing providing storage for the input and output data. The reason void pointers are used, is the actual data structure of the input is variable for each service and this solution provides enough flexibility. Data stored inside the void pointers can be converted into their respective classes using casting. The finished results of the computations are then stored inside the output pointers. 
+A service implementation consists of a $Service()$ function as well as a $Combine$ function. The service is handed two a $PST$ class which stores information about the process location as well as the local data. Furthermore two void pointers storing providing storage for the input and output data called $in$ and $out$ along with their respective sizes. The reason void pointers are used, is the actual data structure of the input is variable for each service and this solution provides enough flexibility. Data stored inside the void pointers can be converted into their respective classes using casting. The finished results of the computations are then stored inside the output pointers. 
 
-In the $Combine()$ function two output void pointers are given as parameters and a combination strategy can be formulated. For example if we were to implement a service which returns the sum of all particles, the combine function would simply return the sum of the two parameters. 
+In the $Combine()$ function two output void pointers $vout$ and $vout2$ and the sizes of the underlying arrays are given as parameters. A combination strategy of the elements can be chosen and implemented, where the results is to be stored in $vout$. For example if we were to implement a service which returns the sum of all particles, the combine function would simply store the sum of $vout$ and $vout2$ in $vout$.
 
-\subsubsection{Init Service}
+\subsubsection{Init and Finalize Service}
+
+All data stored as local data, which is not managed by Blitz++, must be allocated when initializing and after the program has finished, the memory is freed to avoid any leaks. Allocation and freeing is not free of cost, thus it makes sense to reuse memory whenever possible. 
+
+The initialize service is also responsible to load the particle data into the local memory of each PST. 
+
+\subsubsection{Count Left Service}
+
+As mentioned counting the elements smaller than the cut position, or as we call it the count left procedure is computationally intensive. For this reason we introduce a service which along with PST distributes the task among the processors. 
+For the $Service()$ function which performs the actual computations, $in$ points to an array of cells and as we know the length of the array, we can simply iterate over all of its elements and cast them to the correct cell data structure as shown in listing \ref{ctl} on line 1-2. In case the $foundCut$ flag of cell was set to true, we know that the ideal cut was already found, thus we can continue with the next cell (line 4-6).
+We then read the begin and end indices of the particles array corresponding to the range of objects contained within the cells volume and respectively make a slice of the local particles array (lines 7-11). We then start and end pointers and obtain the cut position to be tested (lines 13 -17). We then count the number of particles smaller than the cut and write the result in the proper index of the output arrays (lines 18-23).   
 
 
-\subsubsection{Count Left}
-
-The countLeftService takes as a input an array of cells and stores the counts in an output array. Each cell comes with a cut position and a cut axis, thus the service counts the number of particles to the left of this position in the given axis. 
-
-As for every service, we have access to the input array with a pointer to its first element in memory called $in$ and correspondingly $out$ for the output array. We then iterate over the number of cells and access the cell structure given the cellPtrOffset as seen on line number two.
-We then check weather the proper cut has already been found, if so we directly continue with the next cell (Line 4-6). We use the cellToRangeMap, which is stored as local data of the pst to retrieve the begin and end index of this cell in the particles array. (Line 7-8).
-We then take a slice of the particles array and store a pointer to the data in $startPtr$ and correspondingly compute the end pointer as well. (10-14).
-Finally we simple iterate over the particles and count up, as previously mentioned, this can enable AVX, given hardware support and the proper compile flags. Usually $-march=native$ along with $O3$ will enable AVX. 
-
-
-\begin{lstlisting}[language=c++, caption=Count Left Service]
+\begin{lstlisting}[language=c++, caption=Part of the Count Left Service() method, label=ctl]
 for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset){
 	auto cell = static_cast<Cell>(*(in + cellPtrOffset));
 	
@@ -1806,28 +1806,31 @@ for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset){
 }
 \end{lstlisting}
 
+Combining the data is straight forward, as in $Combine()$ $vout$ and $vout2$ contain the counts for a given number of particles. As the master is interested in a global count across all the particles contained within all local storages, we simply sum each element of $vout$ together with $vout2$. 
+
+\begin{lstlisting}[language=c++, caption=Part of the Count Left Combine() method, label=ctlc]
+	for(auto i=0; i<nCounts; ++i)
+		out[i] += out2[i];
+\end{lstlisting}
 
 \subsubsection{Count}
 
-Counting the total number of particles is very trivial, given the cellToRange map. 
+Counting the total number of particles for each cell is trivial with the $cellToRange$ map, as we can directly know the result when subtracting the begin index from the end index of each cell. The $Combine()$ is equal to the one shown for the Count Left Service.
 
-\begin{lstlisting}[language=c++, caption=Count Service]
+\begin{lstlisting}[language=c++, caption=Part of Count Service() method]
 	for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset) {
 		auto cell = static_cast<Cell>(*(in + cellPtrOffset));
 		out[cellPtrOffset] = 
 		lcl->cellToRangeMap(cell.id,1) - 
 		lcl->cellToRangeMap(cell.id,0);
 	}
-	
 \end{lstlisting}
 
 \subsubsection{Partition}
-The local reshuffle service is responsible for rearranging the particles in such a way, that each range in the particles array, corresponds to a single cell. 
-Its implementation is equivalent to a hoare partition. The implementation is straight forward and there exists no known way to improve this, at least from an algorithmic perspective. There might be some ways to explore in terms of memory access speed, or even porting the algorithm to CUDA. 
 
-On line 31 till 37 we also update the cellToRangeMap in order to reflect the changes we have made in the particles array.
+The Partitioning Service is a direct implementation of the hoare partition and can be seen in \ref{partition} on lines 1-29. Interesting about the code bit are lines 31 to 37 where the CellToRange map is updated for the pair of children of the divided cell \TODO{extend}
 
-\begin{figure}[H]
+\begin{figure}[H] 
 	\begin{lstlisting}[language=c++, caption=Partition Service, label=partition]
 for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset){
 	auto cell = static_cast<Cell>(*(in + cellPtrOffset));
@@ -1878,13 +1881,12 @@ As mentioned in section \ref{sec:multipole} the relevant axis to search for the 
 
 
 
-\subsection{Parallel implementation of ORB }\label{sec:parellize-orb}
+\subsection{Parallel Schedule}\label{sec:parellize-orb}
 
-In the context of parallelization, we define the number of processors as $np$. When the goal of the algorithm is workload balancing, we will want to set $d = np$ to end up with exactly as many leaf cells as we have processors. In the context of a supercomputing system $np$ is usually equivalent to the number of nodes in the system.
+In the context of parallelization, we define the number of processors as $np$. 
+Initially we assume that each processor has a random unique subset of all the particles stored in its local memory, this has two reasons. For one we run into memory limitations quickly when trying to load all the particles onto a single node, furthermore memory bandwidths limitations can be multiplied by the number of processors and are thus a lot higher. 
 
-Initially we assume that each processor has a random unique subset of all the particles stored in its memory, this has two reasons. For one we run into memory limitations quickly when trying to load all the particles onto a single node, furthermore memory bandwidths limitations can be multiplied by the number of processors and are thus a lot higher. 
-
-Let us now apply this to our running example where we have 3 nodes.
+In the running example this might look as follows:
 
 \begin{figure}[H]
 	
@@ -1943,7 +1945,7 @@ Let us now apply this to our running example where we have 3 nodes.
 	\caption{Example particles distributed randomly across 3 nodes}
 \end{figure}
 
-The ORB algorithm is only executed form the operative node, all other nodes are purely worker nodes and perform certain parts of the algorithm. In our case one of the most performance intensive tasks is found on line 6 from the cut procedure as seen in figure \ref{proc:cut}. Not only is it costly, its also a task that can only be executed from the node, which owns the particles array, i.e. its stored in its memory. Therefore the worker nodes count the number of particles on the left side of a 2D cut plane individually and send back the results to the operative thread as seen in figure \ref{fig:orbp}. Besides the counting we also have the partitioning which also concerns the particles array and thus can only be executed by its corresponding owner. Consequently the procedure is also executed on the worker nodes individually. Note that the operative node can also perform work, thus become a worker node at times. This can be seen in figure \ref{fig:orbp}, where p0 is the operative node, but still performs partition and counting operations.
+The Master schedules all other processors but also performs tasks by itself. The exact schedule is illustrated in figure \ref{fig:orbp} where a service which is dispatched from the master and executed on all processors is depicted as a horizontal rectangle. Computations which are only performed by a single processor are represented by a vertical rectangle. 
 
 \begin{figure}[H]
 	\begin{center}
