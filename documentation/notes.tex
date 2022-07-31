@@ -745,7 +745,7 @@ Because the maximal number of iterations is known, a loop can be used as seen in
 \end{algorithm}
 
 
-\subsubsection{Edge cases}
+\subsubsection{Edge Cases}
 
 Let us consider the following example particle distribution where $particle_1$ and $particle_2$ have identical x coordinates. 
 
@@ -1057,7 +1057,7 @@ For Piz Daint, Summit and Eiger we have collected all relevant hardware metrics 
 
 In a first step we determine weather our computations are bound by memory bandwidth or the actual performance of the computing unit. The most costly computation is line 6 of the cut method (figure \ref{proc:cut}) with a runtime of $O(32 \times N)$. Oftentimes when an algorithm iterates over a large dataset performing only very little calculations on its individual elements, the limiting factor is the memory. To support this claim make roofline models for all three systems and check weather they are really memory bound. A roofline model compares arithmetic intensity in flops per byte against the actual performance of the computing chip in flops. Therefore we need to gather all the relevant data first.
 
-\subsubsection{Estimating flops}
+\subsubsection{Estimating Flops}
 
 For modern hardware, its fairly uncommon to release flops (floating point operations per second) values. Steadily evolving SIMD instruction sets result in varying performance for different implementation details, which in turn are compiled into different assembly instructions. Depending on the algorithm, implementation details and compilation flags the c++ compiler tries to compile ideal assembly instruction sets. SIMD instructions can only be used when there is a contiguous memory access, thus in some cases a poor memory layout choice may lead to a much lower flops. 
 
@@ -1642,37 +1642,38 @@ The computations for Eiger and Summit can analogously to the ones from Piz Daint
 \newpage
 \section{CPU Implementation}
 
-In this section describe the stand-alone implementation of the accelerated ORB algorithm using CPU acceleration only. Building on the CPU version, we introduce GPU accelerated alternatives to selected parts of the code in section \ref{sec:gpuimpl}. 
+In this section we describe the stand-alone implementation of the ORB algorithm using CPU acceleration only. Building on the CPU version, we later introduce GPU accelerated alternatives to selected parts of the code. 
 
-We develop somewhat separately from the PKDGrav codebase in order to keep the project smaller and more easy to understand. However we make use of mdl from PKDGrav, which can be used to distribute the workload among nodes and processors on a single chip. This reduces the complexity and we do not have to worry about communication methods and CPU parallelism too much. Since the parallelization are abstracted using mdl, we only use the term threads when referring to computation units. Individual threads might be computed on a different node, or on a different processor on the same node, but this does not change things from an implementation side.
+We develop somewhat separately from the PKDGrav codebase in order to keep the project smaller and more easy to understand. However we make use of the machine dependent layer (MDL) from PKDGrav, which is used to distribute the workload among processors. This reduces the complexity of the implementation and we do not have to worry about communication methods and CPU parallelism too much. Furthermore it makes integration into PKDGrav simple. Note that processors might be located in different nodes, but MDL is general enough to abstract node and processor level communication and parallelization away.
 
-We refrain from describing each part of the code in detail, however any performance critical details and all the important data-structures are described. Furthermore, we will pay special attention to the CUDA kernels and also memory management strategies for several reasons: minor implementation details can have a big impact upon the performance and increased replicability of the results.
-
-A brief overview of the core elements are:
-
-\begin{itemize}
-	\item \textbf{particles}: The particles array has ownership over all particle objects. It has the shape of a multidimensional array, where the first three axes are occupied by positional data and the rest can be filled with meta data.
-	\item \textbf{Cell}: The cell class is a structure keeping track of the fundamental cell information. In essence it is the analogue to the concept of the $cell$ which we have already introduced in section \ref{section:orb}.
-	\item \textbf{Services}: The services are a set of functions, which together form the building block of the ORB algorithm. This abstraction layer allows us to dynamically distribute and collect tasks from different processors. Each service builds on top of a PST class which is introduced by mdl2.
-	
-\end{itemize}
+We refrain from describing each part of the code in detail, however any details crucial to performance are described. Furthermore, we will pay special attention to the CUDA kernels and also memory management strategies for several reasons: minor implementation details can have a big impact upon the performance and increased replicability.
 
 For this project we will use C++ 17 along with CUDA 11.3, OpenMPI 4.1.0 and Blitz++ 1.0.2 \cite{blitzcpp}. 
 
-\subsection{MDL}
+\subsection{MDL and PKDGrav}
 
-MDL is essentially an abstraction layer around a multiprocessor communication as well as a multiprocessor scheduler. It decomposes threads into worker and a master threads and builds a tree hierarchy around the threads. The coordination works with a object called services, where the master can start services, the service objects then traverse the tree of threads until every thread has received the input data of the service. A service can be run via a method called $RunService$ where the input data is given via simple pointers. With the help of void pointers, we can use any object or array of objects as an input or output of the service. 
+MDL, the machine dependent layer provides an abstraction layer around the parallel primitives introduced by PKDGrav. The Master layer is responsible to coordinate the flow of the program. It does so by calling the PST (Processor Set Tree), which distributes the tasks and gets processors to work on them. As the name suggests, the PST is organized as a binary tree where intermediate nodes contains a pointer to a consecutive processor as well as a next lower node. Each leaf cell of the graph then correspond to an individual processor.
+
+Parallel processes are dispatched by descending the PST until they reach all processors. There computations are performed and the results are combined by passing them back up the PST until they reach the master.
+A parallel process can be programmed by implementing the service interface as explained in section \ref{services}.
+
+Each processor has its own local data, which can be accessed by calling $pst->lcl$. 
 
 \subsection{Particles}
 
-We use C-style arrays interchangeably with blitz++ arrays to store all particles. blitz++ is a wrapper class around C-style arrays, which helps with pointer management and can speed up the debugging process by keeping track of the array boundaries. Furthermore it features array slicing and does its own memory management. In certain cases we need to access the actual C-style array, which can be accessed with $array.data()$, for example iterating over the Blitz++ array is observed to compile to optimized assembly instructions which do not leverage the latest SIMD instructions as explained in section \ref{sec:roof}.
+The particles array has ownership over all particle objects. It has a (N,3) shape where each row represents a single particle. To enable coalesced memory access when iterating over a single axis i.e. $x_{:, axis}$, we choose a row major storage order, over a column major storage order. Even though column accesses patterns i.e. $x_{i,:}$ are used as well, they happen less frequently. Most importantly there are cases where entire section of a row have to copied, which is by magnitude faster with row major storage.
 
-The array has a (N,3) shape where each row represents a single particle. To enable coalesced memory access when iterating over a single axis i.e. $x_{:, axis}$, we choose a row major storage order, over a column major storage order. Even though column accesses patterns i.e. $x_{i,:}$ are used as well, they happen less frequently. Most importantly there are cases where entire section of a row have to copied, which is by magnitude faster with row major storage.
+We use C-style arrays interchangeably with Blitz++ arrays to store all particles. Blitz++ is an open source wrapper class around C-style arrays, which helps with pointer management and can speed up the debugging process by keeping track of the array boundaries. Furthermore it features array slicing and does its own memory management. In certain cases we need to access the actual C-style array, which can be accessed with $array.data()$. For example when iterating over the Blitz++ array, we have observed compiled assembly code  which does not reflect the latest SIMD instructions.
 
+The particle data is loaded into the local data storage of each processor, meaning each processor owns a different unique set of particles.
 
 \subsection{Cell}
 
+The cell class is a structure keeping track of the fundamental cell information. In essence it is the analogue to the concept of the $cell$ which we have already introduced in section \ref{section:orb}.
+
 Quickly building and accessing elements of the SPTDS generated by ORB requires a suitable data structure. Instead of a tree with pointers, we can use a heap since the necessary conditions for a nearly complete binary tree are met as seen in section \ref{section:orb-example}. Elements within a heap can be accessed and added in constant runtime. Depicted in figure \ref{fig:treeheap} is the finished SPTDS of the sample dataset stored as a heap.
+
+The SPTDS and thus the cells are constructed on the master alone, subsets cells are only distributed along the SPTDS when launching certain services.
 
 \begin{figure}[H]
 	\begin{center}
@@ -1706,9 +1707,9 @@ Quickly building and accessing elements of the SPTDS generated by ORB requires a
 \end{figure}
 
 An array can be used as an efficient storage medium for the heap, since in our case $d$ can be set at compile time and the maximum number of cells in the SPTDS can be derived from that. Meaning the array can be allocated statically.
-Because mdl communicates data as arrays between the threads, another advantage of the array storage is the absence of any costly data structure conversion. 
+Because MDL communicates data as arrays between the threads, another advantage of the array storage is the absence of any costly data structure conversion. 
 
-Since the STPDS is only a nearly complete binary tree and not a complete binary tree, we have to be careful when iterating over the levels of three, as the very last level is not filled entirely with cells. But because $d$ is known, many attributes of the SPTDS can determined deterministically.
+Since the STPDS is only a nearly complete binary tree and not a complete binary tree, we have to be careful when iterating over the levels of three, as the very last level is not filled entirely with cells. But because $d$ is known, many attributes of the SPTDS can be determined deterministically.
 
 \subsubsection{Heap Conditions}
 As with all heap data-structures we have the following conditions:
@@ -1754,14 +1755,14 @@ The cell class consists of the following variables:
 	\TODO{LOD??}
 \end{itemize}
 
-\subsection{Mapping cells to particles}
+\subsection{Mapping Cells to Particles}
 
-The SPTDS is consistent across all nodes, therefore it is stored on a single thread, also named master thread in mdl. Very often we need to know which particles are encompassed in the volume of which cell and since the particles are distributed among the threads. Thus we introduce a data structure to keep track of the relation between cells and its particles. 
-Thanks to the partitioning algorithm all particles belonging to a single cell can be found in a consecutive section of the particles array. Thus we can use a 2D array, where for each cell we store the corresponding range as a tuple, making the size of the array equivalent to the total number of cells $2 \times d -1$ multiplied by two. We name the data structure $cellToRangeMap$ and it is stored in the local data of each pst, meaning each thread has a different version the $cellToRangeMap$ array. Furthermore this implies that the data structure needs to be updated across all threads whenever we perform a partition.
+As SPTDS heap is stored on the master but the particles are distributed among the local storages of the processors, its is crucial to know which particles are encompassed in the volume of which cell. Thus we introduce a data structure to keep track of the relation between cells and its particles. 
+Thanks to the partitioning algorithm all particles belonging to a single cell can be found in a consecutive section of the particles array. Thus we can use a 2D array, which again is stored in the local data of the processor, where for each cell the corresponding range is stored as a tuple. Making the size of the array equivalent to the total number of cells $2 \times d -1$ multiplied by two. Naturally the data structure needs to be updated across all processors whenever we a partition is performed.
 
+\subsection{Services}\label{services}
 
-\subsection{Services}
-
+The services are a set of functions, which together form the building block of the ORB algorithm. This abstraction layer allows us to dynamically distribute and collect tasks from different processors. Each service builds on top of a PST class which is introduced by mdl2.
 
 There are several implementation of services, but in our case we make use of the traverse combine service. As the name says, it traverses the tree of threads until all threads are reached, then the predefined computations are executed on the input data. After the computations have finished, the results traverse the tree in the opposite direction, until they reach the master thread which initialized the service in the first place. MDL also exposes a function which allows us to define, how we treat two data packages when they are combined.
 
