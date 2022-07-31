@@ -1762,23 +1762,11 @@ Thanks to the partitioning algorithm all particles belonging to a single cell ca
 
 \subsection{Services}\label{services}
 
-The services are a set of functions, which together form the building block of the ORB algorithm. This abstraction layer allows us to dynamically distribute and collect tasks from different processors. Each service builds on top of a PST class which is introduced by mdl2.
+A service implementation consists of a $Service()$ function as well as a $Combine$ function. The service is handed two a $PST$ class which stores information about the process location as well as the local data. Furthermore two void pointers storing providing storage for the input and output data. The reason void pointers are used, is the actual data structure of the input is variable for each service and this solution provides enough flexibility. Data stored inside the void pointers can be converted into their respective classes using casting. The finished results of the computations are then stored inside the output pointers. 
 
-There are several implementation of services, but in our case we make use of the traverse combine service. As the name says, it traverses the tree of threads until all threads are reached, then the predefined computations are executed on the input data. After the computations have finished, the results traverse the tree in the opposite direction, until they reach the master thread which initialized the service in the first place. MDL also exposes a function which allows us to define, how we treat two data packages when they are combined.
+In the $Combine()$ function two output void pointers are given as parameters and a combination strategy can be formulated. For example if we were to implement a service which returns the sum of all particles, the combine function would simply return the sum of the two parameters. 
 
-The most important services for the CPU version are:
-
-
-\begin{itemize}
-	\item $init$ : Reads the particles and allocates memory on the CPU accordingly.
-	\item $finallize$ : Frees all the memory and ensures a memory leak free execution.  
-	\item $countLeft$ : Counts the number of particles left of a provided cut position for each of the cells.
-	\item $makeAxis$ : 
-	\item $count$ : Counts the total number particles inside the domain for each of the provided cells.
-	\item $partition$ : Partitions the particles to preserve memory locality.
-\end{itemize}
-
-
+\subsubsection{Init Service}
 
 
 \subsubsection{Count Left}
