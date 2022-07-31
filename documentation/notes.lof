@@ -24,8 +24,8 @@
 \contentsline {figure}{\numberline {24}{\ignorespaces Parallelized ORB GPU version\relax }}{46}{}%
 \contentsline {figure}{\numberline {25}{\ignorespaces Parallelized ORB GPU version 2\relax }}{50}{}%
 \contentsline {figure}{\numberline {26}{\ignorespaces Reduction in CUDA\relax }}{52}{}%
-\contentsline {figure}{\numberline {27}{\ignorespaces Parallelized ORB with GPU counting and GPU partitioning\relax }}{54}{}%
-\contentsline {figure}{\numberline {28}{\ignorespaces timeline\relax }}{55}{}%
+\contentsline {figure}{\numberline {27}{\ignorespaces Data transferred with and without GPU partitioning\relax }}{53}{}%
+\contentsline {figure}{\numberline {28}{\ignorespaces Parallelized ORB with GPU counting and GPU partitioning\relax }}{54}{}%
 \contentsline {figure}{\numberline {29}{\ignorespaces Partitioning kernel I\relax }}{56}{}%
 \contentsline {figure}{\numberline {30}{\ignorespaces Partitioning kernel II\relax }}{57}{}%
 \contentsline {figure}{\numberline {31}{\ignorespaces Device Scan Kernel\relax }}{58}{}%

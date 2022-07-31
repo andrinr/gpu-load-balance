@@ -2406,11 +2406,51 @@ unsigned int * g_odata) {
 
 \subsection{GPU Accelerated Partitioning}
 
-The main bottlenecks of the orb algorithm are now the data transfer between the CPU and GPU and the partitioning of the data. Both problems can be resolved by partitioning the array on the GPU directly thus also removing the need to transfer the data back and forth between the CPU and the GPU.
+We have sucessfully implemented a version with a GPU accelerated Count Left. Since the particle is still partitioned on the CPU, the particle data needs to be copied to GPU each time we expand the SPTDS by another level. As we use the Make Axis service to compress the axes into a single array, we only need to copy $N$ elements, but we need to do so $\lceil \log_2 d \rceil$ times. 
+If we partition the particles on the GPU, the data needs to be copied to the GPU only once, but in this case all three coordinates need to be copied, thus $
+N \times 3$. Nevertheless this corresponds a fractional of the total data transfer: $\frac{3}{\lceil \log_2 d \rceil \times}$. 
 
-We describe measurements which were done using the reduction in CUDA, we mention how the reduction cannot necessarily be improved a lot and that the data transfer between the GPU and CPU is the main bottleneck now. We mention how building the tree on the does not make a lot of sense. We explain why instead we focus our efforts to implement a GPU reshuffling method, which can improve runtime by reducing the reshuffling costs and also remove CPU GPU transfers between invocations of the binary cut algorithm altogether. 
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+			\begin{axis}[
+				xmode=log,
+				ymode=log,
+				log basis x={2},
+				log basis y={2},
+				xlabel={d},
+				ylabel={N Bytes},
+				%x filter/.code=\pgfmathparse{#1 + 6.90775527898214},
+				xmin = 1, xmax = 4096, ymin= 1, ymax=100,
+				legend style={at={(0.05,1.2)},anchor=west}]
+				
+
+				\addplot+[name path = A, domain = 1:4096, mark=none] {
+					3 * 4
+				};
+			
+				\addlegendentryexpanded{GPU Count and Partition};
+			
+				\addplot+[name path = A, domain = 1:4096, mark=none] {
+					ln(\x) / ln(2) * 4
+				};	
+				
+				\addlegendentryexpanded{GPU Count only};
+
+				
+			\end{axis}
+		\end{tikzpicture}
+		\caption{Data transferred with and without GPU partitioning}
+		\label{fig:transfer}
+	\end{center}
+\end{figure}
+
+Its not clear if the partition kernel itself is also faster or even slower than a CPU variant, as the problem is not an ideal case of a GPU program. Most implementation require many control statements and additional data storage as doing an in place partitioning on the GPU is not possible.
 
 \subsubsection{Schedule}
+
+In the adapted schedule \ref{fig:orbgpu3} we can move the Copy Particles To GPU service out of the main loop, other than that the schedule remains the same. 
 
 \begin{figure}[H]
 	\begin{center}
@@ -2449,37 +2489,11 @@ We describe measurements which were done using the reduction in CUDA, we mention
 	\label{fig:orbgpup3}
 \end{figure}
 
-We add a timeline which is based on measurements with a CUDA enhanced binary cut algorithm. 
 
-
-\begin{figure}[H]
-	\begin{center}
-		\begin{tikzpicture}
-			% draw horizontal line   
-			\draw[thick, -Triangle] (0,0) -- (\textwidth,0) node[font=\scriptsize,below left=3pt and -8pt]{t};
-			\draw[darkgray, line width=4pt] 
-			(0.5,.5) -- +(1,0);
-			
-			\draw[red, line width=4pt] 
-			(1.5,1.0) -- +(3,0);
-			
-			\draw[green, line width=4pt] 
-			(4.5,1.5) -- +(3,0);
-			
-		\end{tikzpicture}
-	\end{center}
-	\caption{timeline}
-	\label{u}
-\end{figure}
+\subsubsection{Kernel Code}
 
 The partitioning algorithm is a widely used concept and there are various implementations used in different variants of the quick-sort algorithm. The overall design of the implementation is guided by \TODO{Insert ref} and the scan is taken from GPU Gems \TODO{Insert ref}. The main and probably only disadvantage of partitioning the particle array on the GPU, is that it cannot be done in place, thus we need another temporary array allocated on the GPU memory which further restricts the total number of particles. Furthermore we need to store the permutations, because we need to apply them to the other axes as well. We could as well simply perform all permutations from the same kernel at the same time, but this would require 3 temporary arrays, thus reducing the total number of particles by a factor of 2. The solution with the partition array and a single temporary array only results in a reduction of the particles by a factor of $\frac{5}{3}$. 	
 
-\begin{itemize}
-	\item As we increase the number of cells, we make more calls to the reduction kernel 
-	
-\end{itemize}
-
-\subsubsection{Code}
 
 \begin{figure}[H]
 	
@@ -2687,7 +2701,7 @@ AMD EPYC 7702 64-Core Processor, Tesla T4.
 \subsection{Comparison to Theoretical Model}
 
 
-\subsection{Conclusion}
+\section{Conclusion}
 
 
 % Use for reduction explanation https://texample.net/tikz/examples/database-decimation-process/
