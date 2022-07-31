@@ -2299,10 +2299,13 @@ We execute the reduction kernel once for each cell, where we distribute the part
 
 \subsection{Improved GPU Accelerated Count Left}
 
-To solve the degrading performance problem we make some changes to the kernel and the overall schedule. The main idea is to prepare all the necessary data for each of the blocks, meaning each block knows which slice of the particles data is has to iterate over and the cut position which was chosen for the cell owning the range of particles. 
-We will explain the improved version using an example: Let us consider $cell_2$ with a volume that encompasses particles in the range 0 - 6144. $cell_3$ encompasses particles in the range 6144 - 12288. Considering a blocksize of 256 threads and a number of elements per thread of 16, each block processes $256 * 16 = 4096$ elements. In this case we reserve two blocks for each cell, where the first block processes elements 0 - 4096, the second one 4096 - 6144, the third 6144 - 10240 and finally the last block processes 10240 - 12288. This ensures that each block only iterates over the particles owned by a single cell, and no further control statements are necessary inside the kernel. There might be some kernels with a very low workload, in the worst case a kernel only processes a single element, but in the average case the performance penalty is minor. We observe a slight reduction in performance and cl	
+To solve the degrading performance problem we make some changes to the kernel and the overall schedule. The main idea is to prepare the necessary data for all cells in advance, effectively reducing the overall number of necessary kernel calls to $\lceil \log_2 d \rceil $ instead of $2 \times d$. Each block is provided with information concerning the start and end index of the cells particles, the cut position as well as an index of the cell. 
+
+We will explain the improved version using a simple example: Let us consider $cell_2$ with a volume that encompasses particles in the range 0 - 10240. $cell_3$ encompasses particles in the range 10240 - 20480. We have a blocksize of 256 threads and the elements per thread are 16, thus each block processes $256 * 16 = 4096$ elements. In this case we reserve three blocks for each cell, where the first block processes elements 0 - 4096 and the second one 4096 - 10240. By assigning more work to the second block, we make sure that there are no underworked threads, as measurements have shown a slight increase in elements per thread is better than a decrease. Furthermore we can avoid blocks where not even all the threads are occupied, because less than 256 elements are processed on the block. Consequently the third and fourth block respectively process particles 10240 to 14446 and 14446 to 20480. 
 
 \subsubsection{Schedule}
+
+Only a single change has to be made to the schedule: We introduce another service which is called GPU Copy Cell Service, which does as the name says, copying the cell information from the CPU to the GPU. Since only the cut positions change while we are iterating over the inner loop, this service can be called outside of it. The Improved GPU Count Left Service copies the cut data each time it is invoked. Other than that, the schedule remains equal. 
 
 \begin{figure}[H]
 	\begin{center}
@@ -2325,7 +2328,7 @@ We will explain the improved version using an example: Let us consider $cell_2$ 
 			
 			\communication{Copy Cells To GPU}{0}{7}{10};
 			
-			\communication{Count Left GPU}{0}{7}{9};
+			\communication{Improved Count Left GPU}{0}{7}{9};
 			
 			\process{improve \\ cut}{0}{8};
 			
@@ -2343,37 +2346,30 @@ We will explain the improved version using an example: Let us consider $cell_2$ 
 \end{figure}
 
 
-\subsubsection{Code}
+\subsubsection{Kernel Code}
+
+The kernel code as seen in listing \ref{ctlocuda} largely remains the same. New data pointers are passed along as a parameter where $g_begin$ and $g_end$ mark the begin and end of the important particle array slice, furthermore $g_cuts$ is an array of cell cuts for each block. As we prepare the data in a way, that each block only needs to operate over the particles contained within a single cell, the data can be read using the blockIdx.x (lines 20 - 22) which is a CUDA variable and provides a sequential indexing of blocks associated with the kernel. Everything else, including the subroutine $warpReduce$ remain equal. 
 
 \begin{figure}[H]
-	\begin{lstlisting}[language=c++]
+	\begin{lstlisting}[language=c++, caption=Kernel Optimized GPU Count Left, label = ctlocuda]
 template <unsigned int blockSize>
 extern __global__ void reduce(
 float * g_idata,
 unsigned int * g_begins,
 unsigned int * g_ends,
 float * g_cuts,
-unsigned int * a_index,
 unsigned int * g_odata) {
-	
 	__shared__ unsigned int s_data[blockSize];
-	__shared__ unsigned int s_index;
 	
 	unsigned int tid = threadIdx.x;
-	
-	if (tid == 0) {
-		s_index = atomicAdd(a_index, 1);
-	}
-	__syncthreads();
-	
-	const unsigned int begin = g_begins[s_index];
-	const unsigned int end = g_ends[s_index];
-	const float cut = g_cuts[s_index];
+	const unsigned int begin = g_begins[blockIdx.x];
+	const unsigned int end = g_ends[blockIdx.x];
+	const float cut = g_cuts[blockIdx.x];
 	
 	unsigned int i = begin + tid;
-	//const unsigned int gridSize = blockSize*gridDim.x;
 	s_data[tid] = 0;
 	
+	// unaligned coalesced g memory access
 	while (i < end) {
 		s_data[tid] += (g_idata[i] <= cut);
 		i += blockSize;
@@ -2400,7 +2396,7 @@ unsigned int * g_odata) {
 		warpReduce<blockSize>(s_data, tid);
 	}
 	if (tid == 0) {
-		g_odata[s_index] = s_data[0];
+		g_odata[blockIdx.x] = s_data[0];
 	}
 }
 	\end{lstlisting}
