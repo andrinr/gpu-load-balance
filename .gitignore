@@ -3,6 +3,8 @@
 *.log
 *.gz
 #*.pdf
+*.lof
+*.lot
 *.bbl
 *.blg
 *.xdp-*

@@ -1,7 +1,6 @@
 #include "partitionGPU.h"
 #include "../cell.h"
 #include <blitz/array.h>
-#include "../utils/condReduce.cuh"
 
 // Make sure that the communication structure is "trivial" so that it
 // can be moved around with "memcpy" which is required for MDL.
@@ -557,7 +556,6 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     );
 
     CUDA_CHECK(cudaStreamSynchronize,(lcl->streams(0)));
-
 
     if (pst->idSelf == 0) {
         for (int i = 0; i < nCells; ++i) {

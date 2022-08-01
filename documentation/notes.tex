@@ -100,21 +100,21 @@ In this thesis we establish upper limits for the speedup of GPU accelerated SPTD
 \section{Background}
 
 Structures occurring within astrophysical simulations can be identified in real observed data\cite{Stadel2001}. Thus the simulations can help us understand the universe. Generated datasets with similar characteristics to observed data are used to seed the simulations. Mass field distribution are approximated with a large number of particles, where each of them represents a mass. Numerical integration methods then compute gravity and apply the respective velocities to the objects for each discrete time step.
-Originally developed by Joachim Stadel during his PhD at University of Washington\cite{Stadel2001}, PKDGrav is a fully parallel N-Body code which is now maintained and improved by the ICS at UHZ \cite{ICS}. 
-PkDGrav, as well as most state of the art simulation softwares, use a space partitioning binary tree data structure (SPBTDS) to group object by spatial proximity. The root of the SPTDS stores the volume information of the entire dataset, the volume  The mutlipole expansion is then applied to all groups and the fast multipole method increases the runtime from $O(N^2)$ to $O(N)$ where $N$ is the total number of particles. \cite{Stadel2001}
+Originally developed by Joachim Stadel during his PhD at University of Washington \cite{Stadel2001}, PKDGrav is a fully parallel N-Body code which is now maintained and improved by the ICS at UHZ \cite{ICS}. 
+PkDGrav, as well as most state of the art simulation softwares, use a space partitioning binary tree data structure (SPBTDS). A space partitioning binary tree is a data structure that is used to partition a space into subspaces. Each cell (node), in the tree represents a subspace, and the children of the node represent the subspaces that are contained within the node's subspace. The mutlipole expansion is then applied to each cell of the SPBTDS and the fast multipole method increases the runtime from $O(N^2)$ to $O(N)$ where $N$ is the total number of particles. \cite{Stadel2001}
 
 
 \subsection{Fast Multipole Expansion} \label{sec:multipole}
 
 In mathematics, a multipole is a concept used to approximate the shape of a physical body. In our case the body consists of the particles contained within the volume of a cell. The multipole expansion is the mathematical series that results from this approximation. The resulting series can simplify the original body, by choosing a suitable precision.
 
-To keep force integration within a reasonable error margin, in most cases it is not necessary to compute all $n$ to $n$ interactions. Particles far away are instead grouped and summarized with a multipole expansion. A group in this context corresponds to a cell in a SPTDS.
+To keep force integration within a reasonable error margin, in most cases it is not necessary to compute all $N$ to $N$ interactions. Particles far away are instead grouped and summarized with a multipole expansion. A group in this context corresponds to a cell in a SPTDS.
 
-On a more intuitive level, one can imagine a large cluster of objects far away from planet Earth. If we wish to compute the interactions between every single object of the cluster and Earth, we will need to perform $O(n^2)$ computations. However, since the object is reasonably far away, it does not make sense to compute every interaction. Instead, we summarize the cluster into a single object and compute the gravity acting between planet Earth and the group. Consequently, objects within our own solar system would be too close to planet Earth to approximate its effects using a multipole. In such cases, it is necessary to perform all $O(n^2)$ computations. 
+On a more intuitive level, one can imagine a large cluster of objects far away from planet Earth. If we wish to compute the interactions between every single object of the cluster and Earth, we will need to perform $O(N^2)$ computations. However, since the object is reasonably far away, it does not make sense to compute every interaction. Instead, we summarize the cluster into a single object and compute the gravity acting between planet Earth and the group. Consequently, objects within our own solar system would be too close to planet Earth to approximate its effects using a multipole. In such cases, it is necessary to perform all computations. However since the cases where all computations have to be performed can be hidden with a constant, they do not affect the total runtime. 
 Note that this example does not directly translate to the simulations, as a particle is not necessarily equivalent to a planet or a star. More on that in section \ref{sec:target-data}.
 
 
-\subsubsection{Advantage of Cubic Bounding Volumes}\ref{sec:cubic}
+\subsubsection{Advantage of Cubic Bounding Volumes}\label{sec:cubic}
 
 As mentioned, when building the SPTDS with ORB, we search for a median in the axis where the cell volume is largest. It is assumed that this is the best method to build cubic shapes on all levels of the tree, as also intermediate cell volumes are leveraged by FMM. 
 
@@ -122,15 +122,15 @@ From \cite{Stadel2001}: "the opening radius of a cell is given by some constant 
 
 \subsection{ORB vs. K-d Trees}
 
-The Orthogonal Recursive Bisection method constructs a SPTDS where all resulting cells encompass subspaces similar to cubes. K-d construction methods generate SPTDS as well, but shapes of the resulting subspaces can be strongly skewed and are ill suited for FMM as explained in section \ref{sec:cubic}. Both algorithms start with a single cell and iteratively construct the SPTDS by searching for axis aligned planes cutting the volume of each leaf cell into two. From the resulting two volumes, two new cells are constructed and appended to the SPTDS. 
+The Orthogonal Recursive Bisection method constructs a SPTDS where all resulting cells represent subspaces, or volumes, similar to cubes. K-d construction methods generate SPTDS as well, but shapes of the resulting subspaces can be strongly skewed and are ill suited for FMM as explained in section \ref{sec:cubic}. Both algorithms start with a single cell and iteratively construct the SPTDS by searching for axis aligned planes cutting the volume of each leaf cell into two. From the resulting two volumes, two new cells are constructed and appended to the SPTDS. 
 
-In k-d tree construction, the axis lying orthogonal to the cut plane is chosen periodically, meaning all cells to be found on the same level of the SPTDS are cut with a plane orthogonal to the same axis. In the case of OBR, the axis where a cells volume is largest is picked to compute an optimal plane. Meaning cells on the same level of a tree can have cut planes of variable orientations. 
+In k-d tree construction, the axis lying orthogonal to the cut plane is chosen periodically, meaning all cells with an equal distance (depth) to the root of the SPTDS are cut with a plane orthogonal to the same axis. In the case of ORB, the axis where a cells volume is largest is picked to compute an an orthogonal plane. Therefore cells on with the same depth can have cut planes of variable orientations. 
 
 \subsection{Rise of the GPU}
 
-Most if not all state of the art supercomputers are hybrid, meaning each node has a CPU as well as a GPU.\cite{TOP500} GPU accelerated code can increase the speed of many computations, where in most cases CUDA is used to fully leverage the hardware. PkDGrav uses the GPU for its force computations. 
+Most if not all state of the art supercomputers are hybrid, meaning each node has a CPU as well as a GPU.\cite{TOP500} GPU accelerated code can increase the speed of many computations, where in most cases CUDA is used to fully leverage the hardware. PkDGrav, as of now only uses the GPU for its force computations. 
 
-The computational effort required in modern astrophysical N-Body simulations can be divided into three categories:
+The computational effort required in PKDGrav and most modern astrophysical N-Body simulations can be divided into three categories:
 
 \begin{enumerate}
 	\item \textbf{Global Tree Building / Load Balancing:} In supercomputers, particles are distributed equally among computing nodes to leverage node level parallelization. ORB is used to generate a well suited SPTDS for FMM on a node level.
@@ -138,15 +138,17 @@ The computational effort required in modern astrophysical N-Body simulations can
 	\item \textbf{Force Calculation and Integration:} The STPDS constructed in step 1. and 2. combined with FMM is used to compute force integration. 
 \end{enumerate}
 
-Where ates of now in PkDGrav and all other state of the art N-Body simulation in the realm of astrophysical simulations, steps (1.) and (2.) are not leveraging GPU acceleration.
+In PKDG each category is about one third of the total calculation time\cite{Stadel2001}. Making Global Tree Building (2.) and Local Tree Building (1.) subjects to possible performance improvements, as GPU acceleration is not exploited.
+
+Our main objective is to improve the runtime of astrophysical simulations, or more specifically PKDGrav. Simultaneously penalties with regards to $N$, the total number of particles, should be kept as low as possible. Simulation accuracy benefits from large $N$ and from reduced runtime as a reduced runtime can result in an increased number of time steps on the same computing resources. As GPU acceleration are low level and hardware specific details is relevant, we want to adapt and optimize the algorithms with regards to the target computer Piz Daint.
+
 
 \subsection{Related Work}
 
 
-A number of GPU accelerated k-d tree construction algorithms exists, in most cases the methods cannot be translated due to different axis choosing method. Fore example in the master thesis of Voglsam \cite{rrt} a k-d tree is computed on the GPU and used to improve ray tracing for 3D graphics. However it makes use of a binning algorithm to 
+A number of GPU accelerated k-d tree construction algorithms exists, however the methods cannot simply be translated to ORB due to different axis choosing method. Fore example in the master thesis of Voglsam \cite{rrt} a k-d tree is computed on the GPU and used to improve ray tracing for 3D graphics. However it makes use of a binning algorithm to find an optimal cut across cells of the same depth, which can be done in a single iteration. However in our the axes for cells of the same depth vary.
 
-ORB can be subdivided into the following steps:
-\TODO{LOD??}
+When we subdivide ORB, its individual components as shown below, it subroutines can be computed using fairly general algorithms, which have already been implemented and optimized for the GPU in many open source libraries. 
 
 \begin{outline}[enumerate]
 	\1 Cut cells on last level in tree
@@ -158,85 +160,15 @@ ORB can be subdivided into the following steps:
 \end{outline}
 
 Thrust by NVIDIA \cite{thrust} has an implementation of a reduction, which can be used to perform step 1.b), a binary search is equivalent to the entire step 1. and finally it exposes a partition interface. The library is very high level and does not allow us to control memory operations, which are very crucial to a performant implementation of ORB. 
-Furthermore CUB \cite{cub}, also developed by NVIDIA, exposes a more low level API of such elements but the implementation is not general enough to deal with some performance issues. As the SPTDS grows, so do the number of leaf cells and the number of cells for which a cut plane has to be found. If we initialize a kernel for each cell, the number of kernels initialized grow exponentially, resulting in kernel invocation overhead, which dominates the actual computations.
+Furthermore CUB \cite{cub}, also developed by NVIDIA, exposes a more low level API of the equivalent elements but the implementation is not general enough to deal with some critical performance issues. As the SPTDS grows, so do the number of leaf cells and the number of cells for which a cut plane has to be found at the same time. If we initialize a kernel for each cell, the number of kernels initialized grow exponentially, resulting in kernel invocation overhead, which dominates the actual computations.
 
 
-So far there exists no...
-
-Not sure how this works exactly:
-$https://github.com/johnarobinson77/KdTreeGPU$
-
-Min Max binning. Probably does not work when axes are not switched periodically.
-$https://www.cg.tuwien.ac.at/research/publications/2013/Voglsam_2013_RRT/Voglsam_2013_RRT-Thesis.pdf$
-and the paper:
-$https://jcgt.org/published/0004/01/03/paper.pdf$ Lots of GPU memory overhead.
-
-mass assignment
-
-
-
-\TODO{Write how ORB is similar to quicksort, how individual parts could be done using thrust library.}
 \newpage
-	
-Before the implementation of FMM into codes, and particularly before the era of modern accelerated computing (e.g., SIMD vectorization and GPU computing) the forces calculations (3.) dominated the computational cost. In more recent simulations, each category is about one third of the total calculation time\cite{Stadel2001}. Making Global Tree Building (2.) and Local Tree Building (1.) subjects to possible performance improvements, as GPU acceleration is not exploited. 
-
-We propose to implement Global Tree Building using CUDA to accelerate load balancing. As the same problem is very closely related to local tree building, the results may also be used to accelerate part (3.) of the simulation. 
-
-Our main objective is to improve the runtime of astrophysical simulations, or more specifically PKDGrav. Simultaneously penalties with regards to $N$, the total number of particles, should be kept as low as possible. Simulation accuracy benefits from large $N$ and from reduced runtime as a reduced runtime can result in an increased number of time steps on the same computing resources. As GPU acceleration are low level and hardware specific details is relevant, we want to adapt and optimize the algorithms with regards to the target computer Piz Daint.
 
 
 %After the SPTDS is built, we compute the multipole for all cells in the tree. This allows us to dynamically select more or less detailed functions to represent a group of particles. Depending on the distance between the particle we want to determine the forces for and the particles which exert the forces, we might choose a higher or lower multipole expansion.
 
-\subsection{Target Data and Notation}\label{sec:target-data}
-
 \begin{comment}
-The target data consists of $N$ particles where we use the following notations:
-
-constrained realization
-Gaussian random distribution, modified to match the measured power.
-
-The higher the resolution the more accurate the result.
-
-Large scales are more uniform, small scale 
-
-smallest thing you want to be able to resolve. 
-
-boxes around a giga parsec
-
-want to be able to resolve galaxies, milky way 10^12 solar masses,
-
-want to be able to resolve smaller galaxies, 10^8 for a single particle
-Imp 
-\end{comment}
-A modified random Gaussian distributed is used to generate the target dataset, where its set to fit measured constraints of the actual universe. Thus the number of particles can set dynamically. In the simulation, a single particle has a mass of $10^8$ solar masses. 
-
-
-\begin{itemize}
-	\item We define a particle as $par_i$  where $i \in \{0,...,N\}$. 
-	\item We define the space of binary numbers with a precision of $p$ as $\mathbb{B}_p$ where we have $a \in \mathbb{B}_p \Leftrightarrow a \in \{0,1\}^{p}$
-	\item We define the corner coordinates of root domain with $\vec{lower}, \vec{upper}$ where we have $\vec{lower}, \vec{upper} \in \mathbb{B}_p^3$. 
-	\item We define the coordinates of a particle $par_i$ as $\vec{x_i}$ for which holds $\{\vec{x} | \vec{lower} \leq \vec{x} \leq \vec{upper}, \vec{x} \in \mathbb{B}_p^3 \}$.
-	When refering to a single coordinate of a particle object we do so by writing $\vec{x}_{i,j}$. Finally the array of all particles positions in a single axis is denoted as $\vec{x}_{:,j}$. 
-	
-\end{itemize}
-
-It lies in the nature of the universe, that large clusters of particles are found in some places, whereas other areas may be vastly empty of any objects. This is a very crucial characterization and differentiates this dataset from many other application of FMM, where the distribution are more uniform.
-
-\begin{figure}[H]
-	\begin{center}
-		\begin{tikzpicture}
-			\randistr{10}{5}{100}
-			\draw (0,0) rectangle (10, 5);
-			\filldraw  (0,0) circle (3pt) node [anchor=west]{};
-			\node[yshift=0.3cm, xshift=-0.3cm] at (0,0) {$-\frac{b}{2}$};
-			
-			\filldraw  (10,5) circle (3pt) node [anchor=west]{};
-			\node[yshift=0.3cm, xshift=-0.3cm] at (10,5) {$\frac{b}{2}$};
-		\end{tikzpicture}
-	\end{center}
-	\caption{Uniform random distribution of 3D coordinates in cube domain projected onto a 2d plane}
-\end{figure}
-
 \subsection{Procedure Overview}
 
 When a simulation is initialized, all data is distributed randomly among the nodes. With regards to particle positions, the target data is initially unstructured, therefore we have no way distribute the particles in a better way. As we want to leverage FMM we need to compute a SPTDS across all nodes. 
@@ -363,14 +295,10 @@ Depicted below is an illustration giving a high level overview over the necessar
 		\caption{Leaf cells of data structure are distributed among nodes}
 	\end{figure}
 \end{enumerate}
-
-
-\subsection{PKDGrav}
+\end{comment}
 
 
 \newpage
-\section{Related Work}
-
 \section{Orthogonal Recursive Bisection (ORB)} \label{section:orb}
 
 
@@ -385,6 +313,58 @@ This section explains ORB, which is used to build a SPTDS with non cycling axis 
 \end{itemize}
 
 Naturally each cell has two pointers pointing to its two children, which are used to traverse the tree, parent cell pointers are not of importance but could be added as well.
+
+
+\subsection{Target Data and Notation}\label{sec:target-data}
+
+\begin{comment}
+The target data consists of $N$ particles where we use the following notations:
+
+constrained realization
+Gaussian random distribution, modified to match the measured power.
+
+The higher the resolution the more accurate the result.
+
+Large scales are more uniform, small scale 
+
+smallest thing you want to be able to resolve. 
+
+boxes around a giga parsec
+
+want to be able to resolve galaxies, milky way 10^12 solar masses,
+
+want to be able to resolve smaller galaxies, 10^8 for a single particle
+Imp 
+\end{comment}
+A modified random Gaussian distributed is used to generate the target dataset, where its set to fit measured constraints of the actual universe. Thus the number of particles can set dynamically. In the simulation, a single particle has a mass of $10^8$ solar masses. 
+
+
+\begin{itemize}
+	\item We define a particle as $par_i$  where $i \in \{0,...,N\}$. 
+	\item We define the space of binary numbers with a precision of $p$ as $\mathbb{B}_p$ where we have $a \in \mathbb{B}_p \Leftrightarrow a \in \{0,1\}^{p}$
+	\item We define the corner coordinates of root domain with $\vec{lower}, \vec{upper}$ where we have $\vec{lower}, \vec{upper} \in \mathbb{B}_p^3$. 
+	\item We define the coordinates of a particle $par_i$ as $\vec{x_i}$ for which holds $\{\vec{x} | \vec{lower} \leq \vec{x} \leq \vec{upper}, \vec{x} \in \mathbb{B}_p^3 \}$.
+	When refering to a single coordinate of a particle object we do so by writing $\vec{x}_{i,j}$. Finally the array of all particles positions in a single axis is denoted as $\vec{x}_{:,j}$. 
+	
+\end{itemize}
+
+It lies in the nature of the universe, that large clusters of particles are found in some places, whereas other areas may be vastly empty of any objects. This is a very crucial characterization and differentiates this dataset from many other application of FMM, where the distribution are more uniform.
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+			\randistr{10}{5}{100}
+			\draw (0,0) rectangle (10, 5);
+			\filldraw  (0,0) circle (3pt) node [anchor=west]{};
+			\node[yshift=0.3cm, xshift=-0.3cm] at (0,0) {$-\frac{b}{2}$};
+			
+			\filldraw  (10,5) circle (3pt) node [anchor=west]{};
+			\node[yshift=0.3cm, xshift=-0.3cm] at (10,5) {$\frac{b}{2}$};
+		\end{tikzpicture}
+	\end{center}
+	\caption{Uniform random distribution of 3D coordinates in cube domain projected onto a 2d plane}
+\end{figure}
+
 
 \subsection{Memory and Workload Balancing}\label{balancing}
 As mentioned we want to (1) improve the runtime of ORB whilst (2) at the same time keeping the number of particles $N$ as large as possible. There exists some averse effects when disregarding interactions between minimizing runtime and maximizing $N$.
@@ -2420,9 +2400,9 @@ unsigned int * g_odata) {
 
 \subsection{GPU Accelerated Partitioning}
 
-We have sucessfully implemented a version with a GPU accelerated Count Left. Since the particles are still partitioned on the CPU, the data needs to be copied to GPU each time we expand the SPTDS by another level. As we use the Make Axis service to compress the axes into a single array, we only need to copy $N$ elements, but we need to do so $\lceil \log_2 d \rceil$ times. 
+We have successfully implemented a version with a GPU accelerated Count Left. Since the particles are still partitioned on the CPU, the data needs to be copied to GPU each time we expand the SPTDS by another level. As we use the Make Axis service to compress the axes into a single array, we only need to copy $N$ elements, but we need to do so $\lceil \log_2 d \rceil$ times. 
 If we partition the particles on the GPU, the data needs to be copied only once, but in this case all three coordinates have to be copied, thus $
-N \times 3$. Nevertheless this corresponds a fraction of the total data transfer: $\frac{3}{\lceil \log_2 d \rceil \times}$. In figure \ref{fig:transfer} its observable how after d reaches $d$ the number of bytes to be transferred are less 
+N \times 3$. Nevertheless this corresponds a fraction of the total data transfer: $\frac{3}{\lceil \log_2 d \rceil \times}$. In figure \ref{fig:transfer} its observable how after d reaches $d$ the number of bytes to be transferred are less after $d$ exceeds $2^3$.
 
 
 \begin{figure}[H]
@@ -2458,9 +2438,7 @@ N \times 3$. Nevertheless this corresponds a fraction of the total data transfer
 		\caption{Data transferred with and without GPU partitioning}
 		\label{fig:transfer}
 	\end{center}
-\end{figure}
-
-Its not clear if the partition kernel itself is also faster or even slower than a CPU variant, as the problem is not an ideal case of a GPU program. Most implementation require many control statements and additional data storage as doing an in place partitioning on the GPU is not possible.
+\end{figure}.
 
 \subsubsection{Schedule}
 
@@ -2665,18 +2643,9 @@ int n) {
 \end{figure}
 
 
-
-\subsection{Integration into PKDGRAV}
-
-
-
 \newpage
 \section{Performance Analysis of ORB}\label{sec:empan}
 
-We will use two system for our performance analysis. One is the Summit supercomputer which has been described in section 3.1. The other has the following specs:
-
-
-AMD EPYC 7702 64-Core Processor, Tesla T4.
 
 
 \subsection{Methodology}
