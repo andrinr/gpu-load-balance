@@ -272,8 +272,9 @@ int master(MDL vmdl,void *vpst) {
     }
 
     for (int i = 0; i < times.size(); ++i) {
-        printf("%s: %u \n", tags[i].c_str(), times[i]);
+        printf("%s, %u \n", tags[i].c_str(), times[i]);
     }
+    printf("\n");
 
     return 0;
 }
