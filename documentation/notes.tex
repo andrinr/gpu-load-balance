@@ -1990,6 +1990,8 @@ The CUDA platform is designed to work with programming languages such as C, C++,
 
 CUDA gives us the ability to launch kernels, which are written in C with some additional CUDA specific syntax. These kernel can be run from the CPU, commonly refereed to as the host, and are then executed on the GPU, also known as the device. The device and the host have a separate memory and as seen in section \ref{sec:gmm} the transfer $I_{CG}$ rates between the GPU and CPU are generally slower, under performing $I_{C}$ and $I_G$ speeds. Therefore one of key the challenges when rewriting CPU code to GPU code is to limit data transfers between the GPU and CPU as much as possible. Furthermore we have divide our problems into subproblems, where each subproblem is then executed on a block. CUDA cannot give any guarantees considering the order of execution of these blocks, therefore we have to fundamentally rethink algorithms when porting them from CPU to GPU code, where some algorithms are more or less fitted. Generally we only think about problems which are applied on large data arrays, the less connection between the individual results exists, the easier it is to implement an GPU version of the computation. Furthermore we can assume that problems with less branching work better on the GPU due to various reasons, which we will explain in detail later. 
 
+We can access the location of a thread within a block using $threadIdx.x$ as well as the block ID among all other blocks associated with the same kernel $blockIdx.x$. Finally the number of blocks are stored in the variable $gridDim.x$. 
+
 Building a tree is therefore a rather challenging problem as there are many computations which influence another and building a tree involves a lot of branching, at least when it is done in a conventional manner.
 
 
@@ -2015,7 +2017,7 @@ Each consecutive grouping of 32 threads form a warp. All threads within a warp a
 
 \subsubsection{Memory}
 
-Each block has access to shared memory register, where the capacity of this register can be defined at runtime by the host as seen in figure \ref{cuda:call} on line 4. The maximum shared memory size depends on the hardware but usually there are 48kB per block available. There are also upper limits for the number of threads per block, usually \TODO{B or b??} around 512 to 1024. With a shared memory size of 48kb and 1024 threads we get $\frac{48000b}{1024} = 46b$ per thread. This is equivalent to a little bit more than one float per thread. However usually we do not max out the thread counts per block, leaving us with more shared memory space per thread. 
+Each block has access to shared memory register, where the capacity of this register can be defined at runtime by the host as seen in figure \ref{cuda:call} on line 4. The maximum shared memory size depends depending on the architecture ranges between 48 and 96kB. \cite{CUDAGuide} There are also upper limits for the number of threads per block which is usually between 512 and 1024. \cite{CUDAGuide} With a shared memory size of 48kb and 1024 threads per block we get $\frac{48000B}{1024} = 46B$ per thread, which is roughly equivalent to 11 32 bit precision numbers per thread. However as we usually do not max out the thread counts per block, there is more shared memory space available per thread. 
 
 Data in the shared memory exists only as long as the kernel exists and it cannot be accessed across different blocks. Race conditions do apply to shared memory, but threads in a block can be synchronized, therefore it is not safe to have writes from multiple threads on the same shared memory address. There exists a CUDA command $\_\_synchtreads()$ which allows us to synchronize all threads within a block, enabling us to control the execution order of individual statements.
 
@@ -2102,22 +2104,17 @@ As described in section \ref{sec:async}, we can leverage streams to improve the 
 
 \subsection{Memory Management}
 
-We can use several strategies in order to improve the performance of memory allocation: 
+We use several strategies in order to improve the performance of memory allocation: 
 
 \begin{enumerate}
 	\item \textbf{Pinned Memory} As the GPU cannot access the default paged memory directly, when copying memory from the host to the device, the memory must first be copied to pinned memory. This means if we use pinned memory directly with $cudaMallocHost()$, data transfers can be around twice as fast. In our implementation we use pinned memory for all data, which need to be either sent from the host to device or vice versa.
-	\item \textbf{Reuse Memory} We can avoid allocation and freeing commands altogether and instead reuse previously allocated memory whenever possible. In our implementation we allocate the memory in the very beginning, whereas we have a fixed number of particles and a fixed upper limit for the number of cells. This is true for both the CPU and GPU memory.
+	\item \textbf{Reuse Memory} We can avoid allocation and freeing commands altogether and instead reuse previously allocated memory whenever possible. In our implementation we allocate the memory in the very beginning. Since we have a fixed number of particles as well as an upper limit for the number of cells memory can be allocated when calling the initialize service. The concept is applied to both CPU and GPU memory.
 \end{enumerate}
 
 \subsection{GPU Accelerated Count Left}
 
 
-We have described a CPU implementation of the countLeftService. In this section we explain how we can port this problem to the GPU. In essence we can use a general reduction as a basis version, and adapt it to sum up up elements which fulfill a certain condition, where the condition is being smaller than a given value.
-
-Optimized reductions in CUDA are well documented and explained by the NVIDIA developer team. We make use of a reduction introduced by \TODO{Reference} and adapt it slightly to fit our needs. We will reiterate over the important optimization aspects and finally point out the specific adaptations we have made. 
-
-We split the array of particles which are contained within one cell into smaller slices, where each slice fits one block. Then the subproblems or blocks can be run independently from each other, in other words individual blocks can be executed in parallel or also serially without any conflicts or need for block level synchronization. After running the conditional summation on each slice of the array, we end up with a an array of results. These results can then be summed together on CPU using a simple iterator. Alternatively we could invoke another sum reduction kernel for this task.
-
+We have described a CPU implementation of the Count Left Service. In this section we explain how we can port this problem to the GPU. In essence we can use a general reduction as a basis version, and adapt it to sum up up elements which fulfill a certain condition, where the condition is being smaller than a given value. The code is based on the reduction as its explained in a Webinar from NVIDIA. \cite{reduction}
 
 \subsubsection{Schedule}
 
@@ -2165,26 +2162,23 @@ The tree building loop is then repeated or if the desired size of the SPTDS is r
 
 \subsubsection{Service}
 
-The GPU version of the Count Left Service invokes the reduction kernel exactly once for every leaf cell of the current SPTDS. Meaning on level 0 of the tree there is only one kernel per thread being executed, when proceeding to further levels, the number of kernels is equivalent to $2^{level}$. 
-The number of blocks can be determined by the number of particles in this cell $n_{cell}$ divided by the number of threads per block which is set to 256 and finally we divide this further by the number of elements per thread $r$. 
+The GPU version of the Count Left Service invokes the reduction kernel exactly once for every leaf cell of the current SPTDS. Meaning on level 0 of the tree there is only one kernel per thread being executed, when proceeding to further levels, the number of kernels is equivalent to $2^{depth}$. 
+The number of blocks can be determined by the number of particles in this cell $n_{cell}$ divided by the number of threads per block which is generally set to 256 and finally we divide this further by the number of elements per thread. 
 
-Since we can pass all the relevant information regarding a cell as input parameters to the cell, there is no need to copy any additional data from the CPU to the GPU. We only need to copy back the results from the GPU to the GPU.
+Since we can pass all the relevant information regarding a cell as input parameters to the cell, there is no need to copy any additional data from the CPU to the GPU. We only need to copy back the results from the GPU to the GPU after the kernel has finished.
 
 \subsubsection{Kernel Code}\label{sec:countleftcode}
-The actual kernel code is depicted in figure \ref{cuda:reduction}. The input parameters of the reduction kernel (line 13-16), the input data, which is in sequential order the particles, the output array, which is the results of the kernel, the cut position and finally the total number of elements contained within the cell. 
-We will 
-\begin{itemize}
-	\item \textbf{Leverage Shared Memory} 
-	In the code on line 17 we invocate the shared memory, where is equivalent to the block size, which corresponds to a single float per thread. In a next step (lines 24-27) we apply our condition and copy the results to shared memory. This allows us to work exclusively with shared memory, reducing the amount of costly accesses performed on global memory.
-	
-	\item \textbf{Increase Thread Occupancy} There exists an optimum when considering the number of operation performed by a single thread. In order to adapt the number of ops dynamically, we iterate over a certain number of elements in the global memory, as seen in lines 24-27. The input parameter n defines the total number of particles. Therefore if we reduce the total number of blocks by a factor of $r$, the while loop will iterate over $r$ elements. In our case we set $r$ to 16 as more or less items per thread will result in a lower performance.
-	
-	\item \textbf{Meta Programming} The reduction is optimized by using a template, which indicates the total number of thread per block, which is equivalent to the blockSize. Since the template is evaluated at compile time, all the if statements taking blockSize as a parameter in figure do not cause any performance loss. In fact, because we are able to unroll loops, which would be evaluated at runtime, we increase the performance of the code. 
-	
-	\item \textbf{Avoiding Warp Divergence} Each time we we have an control statement in the code, we introduce a divergence. On the GPU these divergences become especially bad when they are introduced inside a warp. This means that any of the threads of the 32 threads in a warp, have to execute a different code than the rest. For this reason, the $warpReduce$ method as on line 2-9 is introduced. We can see on line 32 in figure \ref{cuda:reduction} that this method is only executed when we reach 32 elements in the shared memory, which remain to be added together. Inside the warp reduce method, we again encounter an unrolled loop, but in this case we have no if statements that could generate a divergence. The if statements which are present, are as mentioned, evaluated at compile time only. Inside a warp we are also not dependent on synchronization, thus the thread synchronization call can be omitted as well. Note that this implementation will perform many unnecessary operations, but this does not affect the performance negatively.
-	
-\end{itemize}
+The actual kernel code is depicted in listing \ref{cuda:reduction}. The input parameters of the reduction kernel (line 13-16) are in order: the input data, which is in sequential order the particles, the output array, where the results of the kernel is stored, the position of the cut plane and finally the total number of elements contained within the cell. Note that since we make use of the Make Axis Service, there is no need to know to which axis the orthogonal cut plane is searched for. 
 
+In a first step on lines 18-20 each thread ID $tid$ is associated with an index in the global memory of input data. Furthermore on line 22-23 the shared data is initialized and set to zero. Its size is equivalent to the block size, the total number of thread per block. Meaning we can store a single float per thread. On lines 25-28 the thread iterates over all elements which it is associated to and copies the results of a compare to shared memory. This allows us to work exclusively with shared memory instead of global memory, reducing the amount of costly memory accesses.
+
+There exists an optimum in terms of number of operation performed by a single thread. In order to adapt the number of ops dynamically, the while loop ensures that each thread iterates over a certain number of elements as seen in lines 25-28. The input parameter $n$ defines the total number of particles. Therefore if we reduce the total number of blocks by a factor of $r$, the while loop will iterate over $r$ elements. Inside the while loop on line 27 the index $i$ is incremented by $gridSize$ in each iteration. The grid size is equivalent to the total number of threads associated with the kernel. Therefore when launching the kernel, the number of blocks can be divided by $r$ which then results in $r$ iterations performed in the while loop. In our case we set $r$ to 16 as more or less items per thread will result in a lower performance.
+
+The rest of the kernel code performs the actual reduction, where in each step two elements from the shared memory are summed together. Given a block size of 256, after line 37 exactly 256 sums are stored in shared memory. In a next step as seen on line 37 (lines 31-36 are not relevant as the size is smaller than 512) the left half threads in the block add their value together with the values stored in a position offset by 128. This step reduces the total number of elements to be considered to 128, and the step can be repeated as seen on lines 42 to 46. 
+
+The reduction is optimized by using a template, which indicates the total number of thread per block, which is equivalent to the blockSize. Since the template is evaluated at compile time, all the if statements taking blockSize as a parameter in figure do not cause any performance loss. In fact, because  the reduction loops are unrolled (31-52) the the performance of the kernel is increased. 
+
+Each time there is a control statement involving non template arguments, a branch divergence is introduced. On the GPU these divergences become problematic bad when they are introduced inside a warp. Meaning if any of the 32 within a warp execute a different code from the other threads, the warp cannot function optimally anymore. For this reason, the $warpReduce$ method as seen on line 2-9 is introduced. This method is only executed when there are 64 elements in shared memory which are still to be summed, which requires only 32 threads as every thread in each iteration sums two elements together. Inside the warp reduce method, there are more unrolled loops continuing the same patterns as described above. However in this case there are no control statements that could introduce a warp divergence, which means there are computations performed which are not actually necessary, however as the computations inside a warp are executed in parallel anyways, this comes with no performance penalties. Inside a warp there is no need for synchronization as all threads are executed in parallel. 
 
 \begin{comment}
 \newcommand{\kernel}[3]{
@@ -2249,11 +2243,11 @@ extern __global__ void reduce(
 	 unsigned int*g_odata, 
 	 float cut, 
 	 int n) {
-	__shared__ int sdata[blockSize];
-	
 	unsigned int tid = threadIdx.x;
 	unsigned int i = blockIdx.x*(blockSize) + threadIdx.x;
 	unsigned int gridSize = blockSize*gridDim.x;
+	
+	__shared__ int sdata[blockSize];
 	sdata[tid] = 0;
 	
 	while (i < n) {
@@ -2402,7 +2396,7 @@ unsigned int * g_odata) {
 
 \subsection{GPU Accelerated Partitioning}
 
-We have successfully implemented a version with a GPU accelerated Count Left. Since the particles are still partitioned on the CPU, the data needs to be copied to GPU each time we expand the SPTDS by another level. As we use the Make Axis service to compress the axes into a single array, we only need to copy $N$ elements, but we need to do so $\lceil \log_2 d \rceil$ times. 
+We have successfully implemented a version with a GPU accelerated Count Left. Since the particles are still partitioned on the CPU, the data needs to be copied to GPU each time we expand the SPTDS by another . As we use the Make Axis service to compress the axes into a single array, we only need to copy $N$ elements, but we need to do so $\lceil \log_2 d \rceil$ times. 
 If we partition the particles on the GPU, the data needs to be copied only once, but in this case all three coordinates have to be copied, thus $
 N \times 3$. Nevertheless this corresponds a fraction of the total data transfer: $\frac{3}{\lceil \log_2 d \rceil \times}$. In figure \ref{fig:transfer} its observable how after d reaches $d$ the number of bytes to be transferred are less after $d$ exceeds $2^3$.
 

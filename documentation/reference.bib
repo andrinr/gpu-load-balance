@@ -93,7 +93,7 @@
 }
 
 @misc{ICS,
-	title = {{Software}},
+	title = {{ICS Software}},
 	year = {2022},
 	month = aug,
 	publisher = {University of Zurich},
@@ -102,7 +102,7 @@
 }
 
 @misc{TOP500,
-	title = {{June 2022 {$\vert$} TOP500}},
+	title = {{TOP500}},
 	year = {2022},
 	month = aug,
 	note = {[Online; accessed 1. Aug. 2022]},
@@ -153,6 +153,16 @@
 	year={2013}
 }
 
+@misc{reduction,
+	title={Optimizing Parallel Reduction in CUDA},
+	author={Mark Harris},
+	publisher={NVidia},
+	year = {2022},
+	month = aug,
+	note = {[Online; accessed 1. Aug. 2022]},
+	url = {https://developer.download.nvidia.com/assets/cuda/files/reduction.pdf}
+	}
+
 @book{algorithms,
 	title={Introduction to algorithms},
 	author={Cormen, Thomas H and Leiserson, Charles E and Rivest, Ronald L and Stein, Clifford},
@@ -160,9 +170,19 @@
 	publisher={MIT press}
 }
 
-@misc{cub,
-	title = {{CUB: Main Page}},
+@misc{CUDAGuide,
+	title = {{CUDA C++ Programming Guide}},
 	year = {2022},
+	month = jul,
+	publisher={NVIDIA},
+	note = {[Online; accessed 2. Aug. 2022]},
+	url = {https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#shared-memory-7-x}
+}
+
+@misc{cub,
+	title = {{CUB}},
+	year = {2022},
+	publisher={NVIDIA},
 	month = may,
 	note = {[Online; accessed 28. Jul. 2022]},
 	url = {https://nvlabs.github.io/cub}
@@ -172,44 +192,18 @@
 	title = {{Thrust}},
 	year = {2022},
 	month = may,
+	publisher={NVIDIA},
 	note = {[Online; accessed 28. Jul. 2022]},
 	url = {https://docs.nvidia.com/cuda/thrust/index.html}
 }
 
 @mastersthesis{rrt,
-	title =      "Real-time Ray Tracing on the GPU - Ray Tracing using CUDA
-	and kD-Trees",
-	author =     "G\"{u}nther Voglsam",
-	year =       "2013",
-	abstract =   "In computer graphics, ray tracing is a well-known image
-	generation algorithm which exists since the late 1970s. Ray
-	tracing is typically known as an offline algorithm, which
-	means that the image generation process takes several
-	seconds to minutes or even hours or days.  In this thesis I
-	present a ray tracer which runs in real-time. Real-time in
-	terms of computer graphics means that 60 or more images per
-	second (frames per second, FPS) are created. To achieve such
-	frame rates, the ray tracer runs completely on the graphics
-	card (GPU). This is possible by making use of Nvidia’s
-	CUDA -API. With CUDA, it is possible to program the
-	processor of a graphics card similar to a processor of a
-	CPU. This way, the computational power of a graphics card
-	can be fully utilized. A crucial part of any ray tracer is
-	the acceleration data structure (ADS) used. The ADS is
-	needed to efficiently search in geometric space. In this
-	thesis, two variants of so called kD-Trees have been
-	implemented. A kD-Tree is a binary tree, which divides at
-	each node a given geometric space into two halves using an
-	axis aligned splitting plane. Furthermore, a CUDA library
-	for the rendering engine Aardvark, which is the in-house
-	rendering engine at the VRVis Research Center, was developed
-	to access CUDA functionality from within Aardvark in an easy
-	and convenient way.  The ray tracer is part of a current
-	software project called “HILITE” at the VRVis Research
-	Center.",
+	title = {Real-time Ray Tracing on the GPU - Ray Tracing using CUDA
+	and kD-Trees},
+	author =     {G\"{u}nther Voglsam},
+	year =       {2013},
 	month =      apr,
-	address =    "Favoritenstrasse 9-11/E193-02, A-1040 Vienna, Austria",
-	school =     "Institute of Computer Graphics and Algorithms, Vienna
-	University of Technology ",
-	URL =        "https://www.cg.tuwien.ac.at/research/publications/2013/Voglsam_2013_RRT/",
+	school =     {Institute of Computer Graphics and Algorithms, Vienna
+	University of Technology},
+	URL =        {https://www.cg.tuwien.ac.at/research/publications/2013/Voglsam_2013_RRT/},
 }
