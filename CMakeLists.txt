@@ -69,7 +69,6 @@ endif()
 
 add_executable(
         orbit
-        src/utils/condReduce.cu
         src/orbit.cpp
         src/services/setadd.cpp
         src/services/TraversePST.cpp
@@ -85,7 +84,7 @@ add_executable(
         src/services/finalize.cu
         src/services/makeAxis.cpp
         src/constants.h
-        src/data/tipsy.h)
+        src/data/tipsy.h src/tests/partitionGPUTest.cpp src/tests/partitionGPUTest.h src/tests/catch2.cpp src/tests/catch2.h)
 
 set(SOURCE_FILES
         src/constants.h

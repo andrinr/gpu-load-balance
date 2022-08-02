@@ -1,18 +1,17 @@
 # Orthogonal Recursive Bisection on the GPU for Accelerated Load Balancing in Large N-Body Simulations
 
-Bachelor Thesis of Andrin Rehmann
+Bachelor Thesis of Andrin Rehmann @UZH 2022. Work in progress. 
 
-Supervised by Douglas Potter and Micheal Böhlen
+Supervised by Douglas Potter and Micheal Böhlen.
 
-Head to [/documentation](https://github.com/andrinr/gpu-load-balance/tree/main/documentation) for the writeup.
+Read the [/documentation](https://github.com/andrinr/gpu-load-balance/tree/main/documentation).
 
 ## Get started
 
-1. Clone PKDGRAV3 from https://bitbucket.org/dpotter/pkdgrav3/ and make sure its prerequisites are met.
-2. Clone this repo and ``cd`` into its root directory
-3. Link mdl2 and blitz from the PKDGRAV repo using ``ln -s /path/to/mdl2`` ``ln -s /path/to/blitz``
+1. Clone this repo and ``cd`` into its root directory
+2. Link mdl2 and blitz from the PKDGRAV repo using ``ln -s /path/to/mdl2`` ``ln -s /path/to/blitz``
 
-### Compile for execution
+### Compile
 1. ``mkdir release && cd release``
 3. ``cmake ..``
 4. `` cmake --build .``
@@ -31,19 +30,11 @@ Head to [/documentation](https://github.com/andrinr/gpu-load-balance/tree/main/d
 or
 ``cuda-gdb ./orbit``
 
-### CUDA Profile
-
 
 ## Automized performance analysis
 
 todo
 
 ## Open questions
--ssh daint
-arehmann@ela.cscs.ch's password:
-Password:
-Password:
-Password:
-andrin@daint.cscs.ch's password:
-Received disconnect from UNKNOWN port 65535:2: Too many authentication failures
-Disconnected from UNKNOWN port 65535
+
+-

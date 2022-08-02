@@ -1,7 +1,6 @@
 #include "countLeftGPUAxis.h"
 #include <blitz/array.h>
 #include <array>
-#include "../utils/condReduce.cuh"
 
 // Make sure that the communication structure is "trivial" so that it
 // can be moved around with "memcpy" which is required for MDL.
