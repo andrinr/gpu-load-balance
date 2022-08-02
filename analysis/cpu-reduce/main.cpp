@@ -24,7 +24,6 @@ int sum(float * particles, int n, int k) {
 int main(int argc, char** argv) {
     
     int n = 1 << strtol(argv[1], nullptr, 0);;
-    std::cout << "Performing measurements " << n << "\n";
 
     float * particles = (float *) malloc(n * sizeof(float));
 
@@ -43,7 +42,7 @@ int main(int argc, char** argv) {
 
     auto end = std::chrono::high_resolution_clock::now();
 
-    std::cout << "cost in microseconds with c style pointer iteration " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << "\n";
+    printf("%u %u \n", nThreads,  std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
 
     free(particles);
 
