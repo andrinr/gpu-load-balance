@@ -28,7 +28,7 @@ int master(MDL vmdl,void *vpst) {
     }
 
     auto pst = reinterpret_cast<PST*>(vpst);
-    printf("Launched with %d threads\n",mdl->Threads());
+    //printf("Launched with %d threads\n",mdl->Threads());
     // Build the PST tree structure
     ServiceSetAdd::input inAdd(mdl->Threads());
     mdl->RunService(PST_SETADD,sizeof(inAdd),&inAdd);
@@ -38,25 +38,25 @@ int master(MDL vmdl,void *vpst) {
     static const int N = 1 << strtol(mdl->argv[1], nullptr, 0);;
     static const int d = 1 << strtol(mdl->argv[2], nullptr, 0);;
 
-    printf("N = %d, d = %d\n",N,d);
+    //printf("N = %d, d = %d\n",N,d);
     float lower[3] = {-0.5, -0.5, -0.5};
     float upper[3] = {0.5, 0.5, 0.5};
 
     META_PARAMS params;
 
     if (mdl->argc <= 3 or strtol(mdl->argv[3], nullptr, 0) == 0) {
-        printf("disabled all opt \n");
+        //printf("disabled all opt \n");
         params.GPU_COUNT = false;
         params.GPU_PARTITION = false;
         params.FAST_MEDIAN = false;
     } else if (strtol(mdl->argv[3], nullptr, 0) == 1) {
-        printf("enable cpu count \n");
+        //printf("enable cpu count \n");
         params.GPU_COUNT = true;
         params.GPU_PARTITION = false;
         params.FAST_MEDIAN = false;
     }
     else if (strtol(mdl->argv[3], nullptr, 0) == 2){
-        printf("enable cpu count, part \n");
+        //printf("enable cpu count, part \n");
         params.GPU_COUNT = true;
         params.GPU_PARTITION = true;
         params.FAST_MEDIAN = false;
@@ -180,7 +180,7 @@ int master(MDL vmdl,void *vpst) {
 
             for (int i = 0; i < nCells; ++i) {
                 if (cells(i).foundCut) continue;
-                printf(
+                /*printf(
                         "counted left: %u, of %u. cut %f, axis %d, level %u, cell %u \n",
                         oCountsLeft[i],
                         oCounts[i] / 2,
@@ -188,7 +188,7 @@ int master(MDL vmdl,void *vpst) {
                         cells(i).cutAxis,
                         l,
                         cells(i).id
-                        );
+                        );*/
                 //CellHelpers::log(cells(i));
 
                 float ratio = ceil(cells(i).nLeafCells / 2.0) / cells(i).nLeafCells;
