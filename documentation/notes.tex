@@ -1388,9 +1388,8 @@ If we additionally set the compile flag -march=native we end up with the instruc
 
 We can identify $vmovups$, $vcomplpts$ and $vpsubd$ which are AVX commands. Since they are using the ymm instead of the xmm registers, we know these are AVX2 and not AVX commands.
 
-\TODO{Fix, Redo this part on daint}
-The following test results were achieved from a Intel(R) Core(TM) i9-10885H CPU @ 2.40GHz
-processor. We perform the conditional reduction on  $2^{27}$ particles. The reduction takes 244420 microseconds. This means we have a throughput of $2^{27} / 10^{12} * 10^6 / 24420 = 5.49 gflops$. This of course does not lie anywhere near the theoretical maximum, which even for a single processor ($np = 1$) is $2.4 * 8 * 2 * 1 / 1000 = 38.4 tflops.$. This is a strong indication, that already with a single processor solutions, we are in the realm of bandwidth limited algorithms. This effect of course, would become even stronger when including parallelism.
+\Q{Look at this with doug}
+The following results were obtained on $2^{27}$ with a thread count of 16 on Piz Daint. The reduction takes 72010 microseconds. This means we have a throughput of $2^{27} / 10^{9} * 10^6 / 72010 = 1.8 gflops$. This of course does not lie anywhere near the theoretical maximum, which even for a single processor ($np = 1$) is $3.8 * 8 * 2 * 1 * 16 = 972.8 gflops.$. This is a strong indication, that already with a single processor solutions, we are in the realm of bandwidth limited algorithms. This effect of course, would become even stronger when including parallelism.
 
 
 \subsection{Runtime Estimates}
