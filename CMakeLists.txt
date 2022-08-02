@@ -54,18 +54,6 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 #set(CMAKE_C_FLAGS -DBZ_DEBUG)
-#add_executable(
-#     CMAKE_C_FLAGS   glb
-#        src/glb.cpp
-#        src/orb.cpp
-#        src/comm/MPIMessaging.cpp
-#        src/services/countService.cpp
-#        src/services/countLeftService.cpp
-#        src/services/localReshuffleService.cpp
-#        src/services/buildTreeService.cpp)
-#        analysis/cpu-reduce.cu/main.cpp)
-#set_target_properties(glb PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-#target_link_libraries(glb ${MPI_LIBRARIES} blitz)
 
 add_executable(
         orbit
@@ -82,9 +70,7 @@ add_executable(
         src/services/partition.cpp
         src/services/partitionGPU.cu
         src/services/finalize.cu
-        src/services/makeAxis.cpp
-        src/constants.h
-        src/data/tipsy.h src/tests/partitionGPUTest.cpp src/tests/partitionGPUTest.h src/tests/catch2.cpp src/tests/catch2.h)
+        src/services/makeAxis.cpp)
 
 set(SOURCE_FILES
         src/constants.h

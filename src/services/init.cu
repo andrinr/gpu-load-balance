@@ -26,9 +26,6 @@ float xorshf96(void) {//period 2^96-1
 }
 
 int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
-
-    printf("ServiceInit invoked on thread %d\n",pst->idSelf);
-
     auto lcl = pst->lcl;
     ServiceInit::input in = *static_cast<input *>(vin);
 
@@ -70,8 +67,8 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
         lcl->particlesT.reference(particlesT);
     }
     else if (in.params.GPU_COUNT and not in.params.GPU_PARTITION) {
-        float * particlesTData = (float *)malloc(N * sizeof(float ));
-        CUDA_CHECK(cudaMallocHost, ((void**)&particlesTData, N * sizeof (float )));
+        float * particlesTData = (float *)malloc(in.nParticles * sizeof(float ));
+        CUDA_CHECK(cudaMallocHost, ((void**)&particlesTData, in.nParticles * sizeof (float )));
         auto particlesT = blitz::Array<float, 1>(
                 particlesTData,
                 in.nParticles,
@@ -86,9 +83,9 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
         int nBlocks;
 
         if (not in.params.GPU_PARTITION) {
-            nBlocks = (int) ceil((float) in.nParticles / (N_THREADS * ELEMENTS_PER_THREAD)) + d;
+            nBlocks = (int) ceil((float) in.nParticles / (N_THREADS * ELEMENTS_PER_THREAD)) + MAX_CELLS;
         } else {
-            nBlocks = (int) ceil((float) in.nParticles / (N_THREADS * 2)) + d;
+            nBlocks = (int) ceil((float) in.nParticles / (N_THREADS * 2)) + MAX_CELLS;
 
             CUDA_CHECK(cudaMalloc,(&lcl->d_permutations, sizeof (unsigned int) * in.nParticles));
             CUDA_CHECK(cudaMalloc,(&lcl->d_particlesX, sizeof (float ) * in.nParticles));
@@ -138,8 +135,6 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
         }
         lcl->streams.reference(streams);
     }
-
-    printf("ServiceInit finished on thread %d\n",pst->idSelf);
 
     return 0;
 }

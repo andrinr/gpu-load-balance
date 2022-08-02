@@ -7,10 +7,8 @@
 
 static const int N_THREADS = 256;
 static const int ELEMENTS_PER_THREAD = 16;
-static const int N = 1 << 13;
-static const int d = 1 << 5;
-static const int MAX_CELLS = d * 2;
 static const int N_STREAMS = 1;
+static const int MAX_CELLS = 8096;
 
 struct META_PARAMS {
     bool GPU_COUNT;

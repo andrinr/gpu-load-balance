@@ -509,6 +509,7 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
                 lcl->cellToRangeMap(cell.id, 1);
     }
 
+
     blitz::Array<float, 1> x = lcl->particles(blitz::Range::all(), 0);
     blitz::Array<float, 1> y = lcl->particles(blitz::Range::all(), 1);
     blitz::Array<float, 1> z = lcl->particles(blitz::Range::all(), 2);

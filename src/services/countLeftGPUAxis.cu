@@ -85,7 +85,7 @@ int ServiceCountLeftGPUAxis::Service(PST pst,void *vin,int nIn,void *vout, int n
         unsigned int endInd =  pst->lcl->cellToRangeMap(cell.id, 1);
         unsigned int n = endInd - beginInd;
 
-        unsigned int nBlocksPerCell = (int) floor((float) n / (N_THREADS * ELEMENTS_PER_THREAD));
+        unsigned int nBlocksPerCell = max((int) floor((float) n / (N_THREADS * ELEMENTS_PER_THREAD)),1);
 
         int begin = beginInd;
         for (int i = 0; i < nBlocksPerCell; ++i) {

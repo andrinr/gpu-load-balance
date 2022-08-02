@@ -19,8 +19,6 @@ int ServiceCopyCells::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     int nBlocks = 0;
     int blockPtr = 0;
 
-    printf("nCells: %d\n", nCells);
-
     for (int cellPtrOffset = 0; cellPtrOffset < nCells; ++cellPtrOffset) {
 
         auto cell = static_cast<Cell>(*(in + cellPtrOffset));

@@ -19,7 +19,14 @@
 #include "constants.h"
 
 int master(MDL vmdl,void *vpst) {
+
     auto mdl = static_cast<mdl::mdlClass *>(vmdl);
+
+    if (mdl->argc < 3) {
+        printf("Usage: %s <N> <d>\n",mdl->argv[0]);
+        return 1;
+    }
+
     auto pst = reinterpret_cast<PST*>(vpst);
     printf("Launched with %d threads\n",mdl->Threads());
     // Build the PST tree structure
@@ -28,42 +35,66 @@ int master(MDL vmdl,void *vpst) {
 
     //mdl->argc
     //mdl->argv
+    static const int N = 1 << strtol(mdl->argv[1], nullptr, 0);;
+    static const int d = 1 << strtol(mdl->argv[2], nullptr, 0);;
 
+    printf("N = %d, d = %d\n",N,d);
     float lower[3] = {-0.5, -0.5, -0.5};
     float upper[3] = {0.5, 0.5, 0.5};
 
-    META_PARAMS params{
-            true,
-            true,
-            false,
-    };
+    META_PARAMS params;
+
+    if (mdl->argc <= 3 or strtol(mdl->argv[3], nullptr, 0) == 0) {
+        printf("disabled all opt \n");
+        params.GPU_COUNT = false;
+        params.GPU_PARTITION = false;
+        params.FAST_MEDIAN = false;
+    } else if (strtol(mdl->argv[3], nullptr, 0) == 1) {
+        printf("enable cpu count \n");
+        params.GPU_COUNT = true;
+        params.GPU_PARTITION = false;
+        params.FAST_MEDIAN = false;
+    }
+    else if (strtol(mdl->argv[3], nullptr, 0) == 2){
+        printf("enable cpu count, part \n");
+        params.GPU_COUNT = true;
+        params.GPU_PARTITION = true;
+        params.FAST_MEDIAN = false;
+    }
+
+    std::vector<int> times;
+    std::vector<std::string> tags;
+    auto start = std::chrono::high_resolution_clock::now();
+    auto end = std::chrono::high_resolution_clock::now();
 
     // user code
     Cell root(0, d, lower, upper);
     root.cutAxis = 0;
     root.setCutMargin();
 
-    root.log();
-
     // root cell is at index 1
     blitz::Array<Cell, 1> cellHeap(root.getTotalNumberOfCells());
 
     cellHeap(0) = root;
 
-    ServiceInit::input iInit {N/mdl->Threads(), params};
+    ServiceInit::input iInit {N/mdl->Threads(), d, params};
     ServiceInit::output oInit[1];
     mdl->RunService(PST_INIT, sizeof (ServiceInit::input), &iInit, oInit);
 
     // Only copy once
     if (params.GPU_PARTITION) {
+        start = std::chrono::high_resolution_clock::now();
         ServiceCopyParticles::input iCopy {params};
         ServiceCopyParticles::output oCopy[1];
         mdl->RunService(PST_COPYPARTICLES, sizeof (ServiceCopyParticles::input), &iCopy, oCopy);
+        end = std::chrono::high_resolution_clock::now();
+        times.push_back(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
+        tags.push_back("cp");
     }
+
 
     unsigned int oCounts[MAX_CELLS];
     unsigned int oCountsLeft[MAX_CELLS];
-
 
     for (int l = 1; l < root.getNLevels(); ++l) {
 
@@ -77,17 +108,25 @@ int master(MDL vmdl,void *vpst) {
         ServiceCount::input *iCells = cells.data();
 
         if (not params.GPU_PARTITION) {
+            start = std::chrono::high_resolution_clock::now();
             ServiceMakeAxis::output oSwaps[1];
             mdl->RunService(PST_MAKEAXIS, nCells * sizeof(ServicePartition::input), iCells, oSwaps);
+            end = std::chrono::high_resolution_clock::now();
+            times.push_back(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
+            tags.push_back("ma");
         }
 
         mdl->RunService(PST_COUNT, nCells * sizeof(ServiceCount::input), iCells, oCounts);
 
         // Copy with each iteration as partition is done on CPU
         if (params.GPU_COUNT && not params.GPU_PARTITION) {
+            start = std::chrono::high_resolution_clock::now();
             ServiceCopyParticles::input iCopy {params};
             ServiceCopyParticles::output oCopy[1];
             mdl->RunService(PST_COPYPARTICLES, sizeof (ServiceCopyParticles::input), &iCopy, oCopy);
+            end = std::chrono::high_resolution_clock::now();
+            times.push_back(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
+            tags.push_back("cpa");
         }
 
         if (params.GPU_COUNT) {
@@ -105,25 +144,38 @@ int master(MDL vmdl,void *vpst) {
             foundAll = true;
 
             if (params.GPU_PARTITION) {
+                start = std::chrono::high_resolution_clock::now();
                 mdl->RunService(
                 PST_COUNTLEFTGPU,
                 nCells * sizeof(ServiceCountLeftGPU::input),
                 iCells,
                 oCountsLeft);
+                end = std::chrono::high_resolution_clock::now();
+                times.push_back(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
+                tags.push_back("ctlg");
             }
             else if (params.GPU_COUNT) {
+                start = std::chrono::high_resolution_clock::now();
                 mdl->RunService(
                 PST_COUNTLEFTAXISGPU,
                 nCells * sizeof(ServiceCountLeftGPUAxis::input),
                 iCells,
                 oCountsLeft);
+                end = std::chrono::high_resolution_clock::now();
+                times.push_back(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
+                tags.push_back("ctlg");
             }
             else {
+                start = std::chrono::high_resolution_clock::now();
                 mdl->RunService(
                 PST_COUNTLEFT,
                 nCells * sizeof(ServiceCountLeft::input),
                 iCells,
                 oCountsLeft);
+                end = std::chrono::high_resolution_clock::now();
+                times.push_back(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
+                tags.push_back("ctl");
+
             }
 
             for (int i = 0; i < nCells; ++i) {
@@ -188,20 +240,28 @@ int master(MDL vmdl,void *vpst) {
         }
 
         if (params.GPU_PARTITION) {
+            start = std::chrono::high_resolution_clock::now();
             ServicePartitionGPU::output oPartition[1];
             mdl->RunService(
                     PST_PARTITIONGPU,
                     nCells * sizeof(ServicePartitionGPU::input),
                     iCells,
                     oPartition);
+            end = std::chrono::high_resolution_clock::now();
+            times.push_back(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
+            tags.push_back("partg");
         }
         else {
+            start = std::chrono::high_resolution_clock::now();
             ServicePartition::output oPartition[1];
             mdl->RunService(
                     PST_PARTITION,
                     nCells * sizeof(ServicePartition::input),
                     iCells,
                     oPartition);
+            end = std::chrono::high_resolution_clock::now();
+            times.push_back(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
+            tags.push_back("part");
         }
     }
 
@@ -209,6 +269,10 @@ int master(MDL vmdl,void *vpst) {
         ServiceFinalize::input iFree {params};
         ServiceFinalize::output oFree[1];
         mdl->RunService(PST_FINALIZE, sizeof (ServiceFinalize::input), &iFree, oFree);
+    }
+
+    for (int i = 0; i < times.size(); ++i) {
+        printf("%s: %u \n", tags[i].c_str(), times[i]);
     }
 
     return 0;
@@ -246,5 +310,6 @@ int main(int argc,char **argv) {
     // This will run "worker_init" on every thread on every node. The worker init must register services and will return
     // a new "PST" object. The "master" function is then called on thread 0. When the "master" function returns, then
     // the "worker_done" routine is called on every thread.
+
     return mdlLaunch(argc,argv,master,worker_init,worker_done);
 }

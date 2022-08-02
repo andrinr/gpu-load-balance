@@ -23,11 +23,11 @@ int sum(float * particles, int n, int k) {
 
 int main(int argc, char** argv) {
     
-    int n = 1 << strtol(argv[1], nullptr, 0);;
+    int n = 1 << strtol(argv[1], nullptr, 0);
 
     float * particles = (float *) malloc(n * sizeof(float));
 
-    int nThreads = strtol(argv[2], nullptr, 0);;
+    int nThreads = strtol(argv[2], nullptr, 0);
     std::vector<std::thread> threads;
 
     auto start = std::chrono::high_resolution_clock::now();
