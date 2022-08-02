@@ -18,8 +18,6 @@ int sum(float * particles, int n, int k) {
     // We use pointers to iterate over the particles
     for(auto p= startPtr; p<endPtr; ++p) nLeft += *p < cut;
 
-
-
     return nLeft;
 }
 
@@ -28,7 +26,7 @@ int main(int argc, char** argv) {
     int n = 1 << strtol(argv[1], nullptr, 0);;
     std::cout << "Performing measurements " << n << "\n";
 
-    float particles[n];
+    float * particles = (float *) malloc(n * sizeof(float));
 
     int nThreads = strtol(argv[2], nullptr, 0);;
     std::vector<std::thread> threads;
@@ -47,6 +45,7 @@ int main(int argc, char** argv) {
 
     std::cout << "cost in microseconds with c style pointer iteration " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << "\n";
 
+    free(particles);
 
     return 0;
 }
