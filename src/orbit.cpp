@@ -64,6 +64,7 @@ int master(MDL vmdl,void *vpst) {
 
     std::vector<int> times;
     std::vector<std::string> tags;
+
     auto start = std::chrono::high_resolution_clock::now();
     auto end = std::chrono::high_resolution_clock::now();
 
@@ -81,6 +82,7 @@ int master(MDL vmdl,void *vpst) {
     ServiceInit::output oInit[1];
     mdl->RunService(PST_INIT, sizeof (ServiceInit::input), &iInit, oInit);
 
+    auto totalStart = std::chrono::high_resolution_clock::now();
     // Only copy once
     if (params.GPU_PARTITION) {
         start = std::chrono::high_resolution_clock::now();
@@ -264,6 +266,10 @@ int master(MDL vmdl,void *vpst) {
             tags.push_back("part");
         }
     }
+
+    end = std::chrono::high_resolution_clock::now();
+    times.push_back(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
+    tags.push_back("total");
 
     if (params.GPU_COUNT){
         ServiceFinalize::input iFree {params};

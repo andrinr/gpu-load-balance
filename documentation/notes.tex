@@ -1740,16 +1740,26 @@ We can derive the following constraints given the number of leaf cells $d$.
 In the example tree depicted in figure \ref{fig:extree} we indeed observe that the depth corresponds to: $\lceil log_2(d) \rceil = 2$, the number of leaves on the second last level is  $2^{2} - 3 = 1$ and the number of leaves on the last level are $2 \times 3 - 2^{2} = 2$. Finally the total number of cells is $2\times 3 - 1 = 5$.
 
 \subsubsection{Class}
-The cell class consists of the following variables:
+Among the fields in the cell are the following variables:
 
 \begin{itemize}
 	\item $id$: Unique identification of the cell instance. Corresponds to its index in the heap array plus one. The plus one comes from the different indexing for heap constraints, where we start with 1, and the classic array indexing starting with 0. It can be used to compute  indices of both child cells and parent cells using the above shown formulas.
 	\item $nLeafCells$: Equivalent to  $d_{cell}$ and depicts the number of leaf cells to be found in all of its successors. Its used when building the tree, to track weather a cell needs to be split or not. 
 	\item $lower$: 3D point coordinate representing the lower boundary corner of the 3D volume $V_{cell}$ which is encompassed by this cells.
 	\item $upper$: Represents the upper boundary corner of the volume.	
-	\item $cutAxis$: Stores the axis where the cut plane is to be searched for. 
-	\TODO{LOD??}
+	\item $cutAxis$: Axis where the cell is to be cut. 
 \end{itemize}
+
+To support and simplify common operations, a further abstraction layer is given with the following functions:
+
+
+\begin{itemize}
+	\item $setCutAxis()$: Evaluates the proper $cutAxis$ given the $upper$ and $lower$ variables.
+	\item $cut()$: Cuts the cell and returns two new cells. 
+	\item $lower$: 3D point coordinate representing the lower boundary corner of the 3D volume $V_{cell}$ which is encompassed by this cells.
+	\item $getLeftChildId()$: Returns the ID of the left child cell, meaning its volume is in the cut axis smaller than the cut plane. 
+	\item $getRightChildId()$: The equivalent for the right child. 
+\end{itemize} 
 
 \subsection{Mapping Cells to Particles}
 
