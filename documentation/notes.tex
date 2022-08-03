@@ -86,7 +86,7 @@
 \section{Introduction}
 
 
-The N-Body technique has been used for decades to simulate the Universe to compare theory with observations. It uses "particles" to represent objects of a certain mass and computes the forces by applying the gravity equation. As the forces operate over infinite distance it is necessary to consider all pair-wise interactions, making a naive implementation $\mathcal{O}(n^2)$. Clearly this does not scale with large particle counts.
+The N-Body technique has been used for decades to simulate the Universe to compare theory with observations. It uses "particles" to represent objects of a certain mass and computes the forces by applying the gravity equation. As the forces operate over infinite distance it is necessary to consider all pair-wise interactions, making a naive implementation $\mathcal{O}(n^2)$. This does not scale with large particle counts.
 
 A common solution is to partition the space, in which the particles are contained, into a set of subspaces, also called cells. These cells are then stored in a space partitioning tree data structure (SPTDS) in order to speed up the simulation with the Fast Multipole Method (FMM) to $O(n)$. 
 Building the data structure uses a significant percentage of the overall simulation time. As of now this was usually done on the CPU, not leveraging GPU acceleration. 
@@ -97,7 +97,7 @@ In this thesis we establish upper limits for the speedup of GPU accelerated SPTD
 \newpage
 \section{Background}
 
-Structures occurring within astrophysical simulations can be identified in real observed data\cite{Stadel2001}. Thus the simulations can help us understand the universe. Generated datasets with similar characteristics to reality are used to seed the simulations. Mass field distribution are approximated with a large number of particles, where each of them represents a mass point. Numerical integration methods then compute gravity and apply the respective velocities to the objects for each discrete time step.
+Structures occurring within astrophysical simulations can be identified in real observed data\cite{Stadel2001}. Thus the simulations can help us understand the universe. Generated datasets with similar distributions to reality are used to seed the simulations. Mass field distribution are approximated with a large number of particles, where each of them represents a mass point. Numerical integration methods then compute the gravitational forces on each object.
 Originally developed by Joachim Stadel during his PhD at University of Washington \cite{Stadel2001}, PKDGrav is a fully parallel N-Body code which is now maintained and improved by the ICS at UHZ \cite{ICS}. 
 PkDGrav, as well as most state of the art simulation softwares, use a space partitioning tree data structure (SPTDS), which is used to partition a space into subspaces. Each cell (node), in the tree represents a subspace, and the children of the node represent the subspaces that are contained within the node's subspace. The mutlipole expansion is then applied to each cell of the SPTDS and the fast multipole method increases the runtime from $O(N^2)$ to $O(N)$ where $N$ is the total number of particles. \cite{Stadel2001}
 
@@ -108,7 +108,7 @@ In mathematics, a multipole is a concept used to approximate the shape of a phys
 
 To keep force integration within a reasonable error margin, in most cases it is not necessary to compute all $N$ to $N$ interactions. Particles far away are instead considered only as a part of the volume of the corresponding cell in the SPTDS and summarized with a multipole expansion. 
 
-On a more intuitive level, one can imagine a large cluster of objects far away from planet Earth. If we wish to compute the interactions between every single object of the cluster and Earth, we will need to perform $O(N^2)$ computations. However, since the object is reasonably far away, it does not make sense to compute every interaction. Instead, we summarize the cluster into a single object and compute the gravity acting between planet Earth and the group. Consequently, objects within our own solar system would be too close to planet Earth to approximate its effects using a multipole. In such cases, it is necessary to perform all computations. However this can be hidden with a constant and they do not affect the total runtime. 
+On a more intuitive level, one can imagine a large cluster of objects far away from planet Earth. If we wish to compute the interactions between every single object of the cluster and Earth, we will need to perform $O(N^2)$ computations. However, since the object is reasonably far away, it does not make sense to compute every interaction. Instead, we summarize the cluster into a single object and compute the gravity acting between planet Earth and the group. Consequently, objects within our own solar system would be too close to planet Earth to approximate its effects using a multipole. In such cases, it is necessary to perform all computations, however they can be hidden within a constant and do not affect the total runtime. 
 Note that this example does not directly translate to the simulations, as a particle is not equivalent to a planet or a star. More on that in section \ref{sec:target-data}.
 
 
@@ -120,7 +120,7 @@ From \cite{Stadel2001}: "the opening radius of a cell is given by some constant 
 
 The Orthogonal Recursive Bisection method constructs a SPTDS where all resulting cells represent subspaces, or volumes, similar to cubes. K-d construction methods generate SPTDS as well, but shapes of the resulting subspaces can be strongly skewed and are thus ill suited for FMM. Both algorithms start with a single cell and iteratively construct the SPTDS by searching for axis aligned planes cutting the volume of each leaf cell of the current SPTDS into two. From the resulting two volumes, two new cells are generated and appended to the SPTDS. 
 
-In k-d tree construction, the axis lying orthogonal to the cut plane is chosen periodically, meaning all cells with an equal distance (depth) to the root of the SPTDS are cut with planes orthogonal to the same axis. In the case of ORB, the axis where a cells volume is largest is picked to compute an an orthogonal plane. Therefore cells with the same depth can have cut planes of variable orientations. 
+In k-d tree construction, the axis lying orthogonal to the cut plane is chosen periodically, meaning all cells with an equal distance (depth) to the root of the SPTDS are cut with planes orthogonal to the same axis. In the case of ORB, the axis where a cells volume is largest is picked to compute an orthogonal plane. Therefore cells with the same depth can have cut planes of variable orientations. 
 
 \subsection{Rise of the GPU}
 
@@ -136,7 +136,7 @@ The computational effort required in PKDGrav and most modern astrophysical N-Bod
 
 In PKDG each category is about one third of the total calculation time\cite{Stadel2001}. Making Global (1.) and Local Tree Building (2.) subjects to possible performance improvements, as GPU acceleration is as of now only exploited in Force Calculation and Integration(3.).
 
-Our main objective is to improve the runtime of astrophysical simulations, or more specifically PKDGrav. Simultaneously penalties with regards to $N$, the total number of particles, should be kept as low as possible. Simulation accuracy benefits from large $N$ as well as an increased number of time steps. As GPU acceleration are low level and hardware specific details is relevant, we want to adapt and optimize the algorithms with regards to the target computer Piz Daint.
+Our main objective is to improve the runtime of astrophysical simulations, or more specifically PKDGrav. Simultaneously penalties with regards to $N$, the total number of particles, should be kept as low as possible. Simulation accuracy benefits from large $N$ as well as an increased number of time steps. As GPU accelerations act on a low level, hardware specific details are relevant. We want do adapt and optimize the algorithms with regards to the target computer Piz Daint.
 
 
 \subsection{Related Work}
@@ -155,8 +155,8 @@ When we subdivide ORB into its individual components as shown below, some subrou
 	\1 Repeat till desired depth was reached
 \end{outline}
 
-Thrust by NVIDIA \cite{thrust} has an implementation of a reduction, which can be used to perform step 1.b), a binary search is equivalent to the entire step 1. and finally it also exposes a partition interface. The library is very high level and does not allow us to control memory operations, which are very crucial to a highly efficient implementation of ORB. 
-Furthermore CUB \cite{cub}, also developed by NVIDIA, exposes a more low level API of the equivalent elements but the implementation is not general enough to deal with some critical performance issues. As the SPTDS grows, so do the number of leaf cells and thus the number of cells for which a cut plane has to be found in the same iteration. If we initialize a kernel for each cell, the number of kernels initialized grow exponentially, resulting in kernel invocation overheads dominating the actual computational costs.
+Thrust by \textit{NVIDIA} \cite{thrust} has an implementation of a reduction, which can be used to perform step 1.b), a binary search is equivalent to the entire step 1. and finally it also exposes a partition interface. The library is very high level and does not allow us to control memory operations, which are very crucial to a highly efficient implementation of ORB. 
+Furthermore CUB \cite{cub}, also developed by \textit{NVIDIA}, exposes a more low level API of the equivalent elements but the implementation is not general enough to deal with some critical performance issues. As the SPTDS grows, so do the number of leaf cells and thus the number of cells for which a cut plane has to be found in the same iteration. If we initialize a kernel for each cell, the number of kernels initialized grow exponentially, resulting in kernel invocation overheads dominating the actual computational costs.
 
 
 \newpage
@@ -846,7 +846,7 @@ The main goal of this thesis, is to improve the runtime of the ORB algorithm by 
 
 For a consistent terminology of a computer, we briefly establish a general computing model, which can be applied to most modern high performance systems. We are looking at a single node and its hardware components, a supercomputer may have thousands of these computers linked together where different bandwidth are seen between individual nodes.
 
-Both the CPU and the GPU have their own memory which are connected by a data link, where the the connections are bound by the memory bandwidths. We name the capacity of the CPU memory bandwidth $B_{CPU}$ and the GPU memory bandwidth $B_{GPU}$. There is a separate data link between the CPU and the GPU memory, which is commonly referred to as PCI express or NVLink (for modern NVidia GPU`s, in our model we use the term $I_{GC}$. In systems with multiple CPU there is a link between the individual CPU's which we denote as $I_{CC}$. Finally we call the link between GPUs as $I_{GG}$.
+Both the CPU and the GPU have their own memory which are connected by a data link, where the the connections are bound by the memory bandwidths. We name the capacity of the CPU memory bandwidth $B_{CPU}$ and the GPU memory bandwidth $B_{GPU}$. There is a separate data link between the CPU and the GPU memory, which is commonly referred to as PCI express or NVLink (for modern \textit{NVIDIA} GPU`s, in our model we use the term $I_{GC}$. In systems with multiple CPU there is a link between the individual CPU's which we denote as $I_{CC}$. Finally we call the link between GPUs as $I_{GG}$.
 
 \begin{figure}[H]
 	\begin{center}
@@ -1035,7 +1035,7 @@ For Piz Daint, Summit and Eiger we have collected all relevant hardware metrics 
 			Architexture & Haswell & POWER9 & AMD Infinity Architecture \\
 			SIMD & AVX2 & ? & AVX2 \\ 
 			\# GPUs & 1 & 6 & 0 \\
-			GPU Model & NVIDIA P100 \cite{TESLAP100} & NVIDIA V100s \cite{NVIDIAV100} & - \\
+			GPU Model & NVIDIA P100 \cite{TESLAP100} &NVIDIA V100s \cite{NVIDIA} & - \\
 			GPU Mem. Cap. & 16 GB & 16 GB $\times$ 6 & -\\
 			$B_G$ & 732 GB/s & 900 GB/s $\times$ 6 & -\\
 			$I_{GC}$ & 32 GB/s & 50 GB/s $\times$ 6 & -\\
@@ -1069,7 +1069,7 @@ We define in equation \ref{eq:avx}, a function to estimate the number of gigaflo
 \label{eq:avx}
 \end{center}
 
-Since we have peak flops benchmarks available for the NVIDIA P100 and V100s we do not need to make any estimations on the GPU side.
+Since we have peak flops benchmarks available for the \textit{NVIDIA} P100 and V100s we do not need to make any estimations on the GPU side.
 
 \subsubsection{Estimating Arithmetic Intensity}
 
@@ -1983,7 +1983,7 @@ The Master schedules all other processors but also performs tasks by itself. The
 \newpage
 \section{GPU Implementation}\label{sec:gpuimpl}
 
-CUDA is a parallel computing platform and programming model invented by Nvidia. It allows software developers and programmers to use a CUDA-enabled graphics processing unit (GPU) for general purpose processing.
+CUDA is a parallel computing platform and programming model invented by \textit{NVIDIA}. It allows software developers and programmers to use a CUDA-enabled graphics processing unit (GPU) for general purpose processing.
 The CUDA platform is designed to work with programming languages such as C, C++, and Fortran and gives direct access to the GPU's virtual instruction set and parallel computational elements.
 
 \subsection{Relevant CUDA Concepts}
@@ -2114,7 +2114,7 @@ We use several strategies in order to improve the performance of memory allocati
 \subsection{GPU Accelerated Count Left}
 
 
-We have described a CPU implementation of the Count Left Service. In this section we explain how we can port this problem to the GPU. In essence we can use a general reduction as a basis version, and adapt it to sum up up elements which fulfill a certain condition, where the condition is being smaller than a given value. The code is based on the reduction as its explained in a Webinar from NVIDIA. \cite{reduction}
+We have described a CPU implementation of the Count Left Service. In this section we explain how we can port this problem to the GPU. In essence we can use a general reduction as a basis version, and adapt it to sum up up elements which fulfill a certain condition, where the condition is being smaller than a given value. The code is based on the reduction as its explained in a Webinar from \textit{NVIDIA}. \cite{reduction}
 
 \subsubsection{Schedule}
 
