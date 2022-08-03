@@ -1,6 +1,7 @@
 #include "partitionGPU.h"
 #include "../cell.h"
 #include <blitz/array.h>
+#include <stdio.h>
 
 // Make sure that the communication structure is "trivial" so that it
 // can be moved around with "memcpy" which is required for MDL.
@@ -69,7 +70,8 @@ __global__ void partition(
         float * g_particlesY,
         float * g_particlesZ,
         float * g_odata,
-        unsigned int * g_permutations) {
+        unsigned int * g_permutations,
+        bool p) {
 
     __shared__ unsigned int s_lessEquals[blockSize * 2];
     __shared__ unsigned int s_greater[blockSize * 2];
@@ -103,7 +105,7 @@ __global__ void partition(
     l_i += bankOffsetI;
     l_j += bankOffsetJ;
 
-    bool slow = true;
+    bool slow = true; //end - begin < n;
     if (slow) {
         l_i = 2 * tid;
         l_j = 2 * tid + 1;
@@ -112,7 +114,7 @@ __global__ void partition(
     }
 
     bool f1, f2;
-    if (not slow or l_i < end) {
+    if (not slow or g_i < end) {
         if (axis == 0) {
             f1 = g_particlesX[g_i] <= cut;
             f2 = not f1;
@@ -137,7 +139,7 @@ __global__ void partition(
     }
 
     bool f3, f4;
-    if (not slow or l_j < end) {
+    if (not slow or g_j < end) {
         if (axis == 0) {
             f3 = g_particlesX[g_j] <= cut;
             f4 = not f3;
@@ -175,6 +177,19 @@ __global__ void partition(
         // exclusive scan does not include the last element
         s_offsetLessEquals = atomicAdd(&g_offsetLessEquals[cellIndex], s_lessEquals[blockSize * 2 - 1] + f3);
         s_offsetGreater = atomicAdd(&g_offsetGreater[cellIndex], s_greater[blockSize * 2 - 1] + f4);
+
+        if (p) {
+            printf("%d %d %d %d %d %d %d %f\n",
+                   blockIdx.x,
+                   blockSize,
+                   cellIndex,
+                   nLeft,
+                   begin,
+                   end,
+                   axis,
+                   cut);
+
+        }
     }
 
     __syncthreads();
@@ -186,7 +201,7 @@ __global__ void partition(
     unsigned int indexB = cellBegin + (s_lessEquals[l_j] + s_offsetLessEquals) * f3 +
                           (s_greater[l_j] + s_offsetGreater + nLeft) * f4;
 
-    if (not slow or l_i < end) {
+    if (not slow or g_i < end) {
         if (axis == 0) {
             g_odata[indexA] = g_particlesX[g_i];
         }
@@ -200,7 +215,7 @@ __global__ void partition(
         g_permutations[g_i] = indexA;
     }
 
-    if (not slow or l_j < end) {
+    if (not slow or g_j < end) {
         if (axis == 0) {
             g_odata[indexB] = g_particlesX[g_j];
         }
@@ -371,6 +386,7 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
     CUDA_CHECK(cudaMemset, (lcl->d_offsetLeq, 0, sizeof(unsigned int) * nCells));
     CUDA_CHECK(cudaMemset, (lcl->d_offsetG, 0, sizeof(unsigned int) * nCells));
 
+    bool p = pst->idSelf == 0;
     partition<N_THREADS><<<
         nBlocks,
         N_THREADS,
@@ -390,7 +406,8 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
             lcl->d_particlesY,
             lcl->d_particlesZ,
             lcl->d_particlesT,
-            lcl->d_permutations
+            lcl->d_permutations,
+            p
     );
 
     // Temporary back to primary
@@ -558,19 +575,23 @@ int ServicePartitionGPU::Service(PST pst,void *vin,int nIn,void *vout, int nOut)
 
     CUDA_CHECK(cudaStreamSynchronize,(lcl->streams(0)));
 
-    if (pst->idSelf == 0) {
-        for (int i = 0; i < nCells; ++i) {
-            printf("%i: %i %i\n", i, offsetLeq[i], offsetG[i]);
-        };
-        printf("\n---------------\n\n");
-    }
+    std::vector<int> should;
+    std::vector<int> is;
 
     if (pst->idSelf == 0) {
         for (int i = 0; i < x.rows(); i++) {
             printf("%i: x %f y %f z %f  \n", i, x(i), y(i), z(i));
         }
         printf("\n---------------\n\n");
+    }
 
+    if (pst->idSelf == 0) {
+        for (int i = 0; i < nCells; ++i) {
+            auto cell = static_cast<Cell>(*(in + i));
+            printf("%i: %i %i\n", i, offsetLeq[i], offsetG[i]);
+            printf("%i: %i %i\n", i, lcl->cellToRangeMap(cell.id, 0), lcl->cellToRangeMap(cell.id, 1));
+        };
+        printf("\n---------------\n\n");
     }
 
     return 0;
