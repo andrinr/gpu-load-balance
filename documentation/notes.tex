@@ -1834,7 +1834,7 @@ Counting the total number of particles for each cell is trivial with the $cellTo
 
 \subsubsection{Partition}
 
-The Partitioning Service is a direct implementation of the hoare partition and can be seen in \ref{partition} on lines 1-29. Interesting about the code bit are lines 31 to 37 where the CellToRange map is updated for the pair of children of the divided cell \TODO{extend}
+The Partitioning Service is a direct implementation of the hoare partition as seen in listing \ref{partition}. Again the service receives a buffer with a given number of cells, which are then iterated over using the outer for loop. Each cell from the buffer is then being casted to the proper struct (line 2). Using the id of the cell, we can the access the start and end indices of the corresponding particles stored in local storage (lines 4-5). Lines 7-37 search for pairs located on the wrong side of the cut and then swap them using a simple $swap()$ helper function. $i$ has to be initialized using $beginInd -1$ as the $i++$ operation happens before a read on the array (line 15). For the same reason $j$ is initialized to $endInd$ and not $endInd -1$. Then the while loop terminates, $i$ points to the first index in the array where the value is greater than the cut, therefore we can update the $cellToRangeMap$ with $i$, as for the left child cell the start remains equal but the end is now $i$ and for the right child cell its vice versa. 
 
 \begin{figure}[H] 
 	\begin{lstlisting}[language=c++, caption=Partition Service, label=partition]
