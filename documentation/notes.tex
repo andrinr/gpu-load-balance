@@ -2444,7 +2444,7 @@ N \times 3$. Nevertheless this corresponds a fraction of the total data transfer
 
 A GPU partitioning algorithm was first proposed by Cederman \cite{GPUQ} and later refined by Manca \cite{CUDAQ} where atomic operations are leveraged to improve the runtime of the algorithm. Our version is built around the concepts introduced by Manca. 
 
-Early results have shown partitioning the data on the GPU is not really faster than the CPU version and the number of particles which can be stored on the GPU memory is reduced by $\frac{5}{3}$. This is caused by required additional temporary arrays for memory swaps on the GPU. Furthermore there was not enough time to fully optimize and track down all issues with the code, therefore we do not describe the full kernel code and instead limit ourselves to lay the ground work for subsequent work. 
+Early results have shown partitioning the data on the GPU is not really faster than the CPU version where the CPU version is not even implemented in a optimal manner and finally the number of particles which can be stored on the GPU memory is reduced by $\frac{5}{3}$. This is caused by required additional temporary arrays for memory swaps on the GPU. Furthermore there was not enough time to fully optimize and track down all issues with the code, therefore we do not describe the full kernel code and instead limit ourselves to lay the ground work for subsequent work. 
 
 \subsubsection{Schedule}
 
@@ -2503,15 +2503,9 @@ As of now only a single axis is partitioned, but the same needs to be done for t
 \subsubsection{Partitioning Multiple cells}
 
 We apply the same method as introduced in section \ref{imprctl} to ensure only a single kernel has to be launched for all the cells. 
+Each block is assigned a cell, where all relevant information about the cell is stored in an array in global memory which can be read using the index $blockIdx.x$. The variables $leq$ and $g$ are replaced by array of the same length as there are cells to partitioned. Therefore all the blocks assigned to a single cell can perform the atomic operations on the same variable. 
+Finally when output 
 
-In a first step each thread loads the particle coordinate of the matching axis into the shared memory register. 
-
-shared memory of each block in a primary step. This can be achieved by copying all data from global to shared memory and then performing two scans over the elements. 
-Initiall we scan the elements smaller than the cut, secondly we perform a scan of the elements which are larger. The results of scanning the elements smaller than the cut can directly be considered as index positions in the block sized subproblem. Equally each of the scan results of the elements larger than the cut, plus the total 
-
-The problem with partitioning the array on the GPU is that it reduces the number of particles which can be stored in GPU memory by $\frac{5}{3}$. Lets us consider we want to partition all particles ranging from 0 to $N$ along the x axis with a cut plane positioned at 0. In a first step we compute 	
-
-The partitioning algorithm is a widely used concept and there are various implementations used in different variants of the quick-sort algorithm. The overall design of the implementation is guided by \TODO{Insert ref} and the scan is taken from GPU Gems \TODO{Insert ref}. The main and probably only disadvantage of partitioning the particle array on the GPU, is that it cannot be done in place, thus we need another temporary array allocated on the GPU memory which further restricts the total number of particles. Furthermore we need to store the permutations, because we need to apply them to the other axes as well. We could as well simply perform all permutations from the same kernel at the same time, but this would require 3 temporary arrays, thus reducing the total number of particles by a factor of 2. The solution with the partition array and a single temporary array only results in a reduction of the particles by a factor of $\frac{5}{3}$. 	
 
 
 
