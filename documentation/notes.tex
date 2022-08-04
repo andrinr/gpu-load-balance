@@ -2523,44 +2523,18 @@ The partitioning algorithm is a widely used concept and there are various implem
 \newpage
 \section{Performance Analysis of ORB}\label{sec:empan}
 
-
-
-\subsection{Methodology}
+All measurements where performed on Piz Daint where the performance of system can be read from table \ref{fig:datapoints}. The supercomputer uses a slurm workload manager. Simple job script can be executed using $sbatch$. In our case we used a meta script which has the function of generating the actual job scripts for the desired parameters. 
 
 \subsection{Results}
 
 
-\begin{comment}
-	\begin{figure}[H]
-		\begin{center}
-			\begin{tikzpicture}
-				\begin{axis}[
-					height=10cm,width=13cm, 
-					title={Measured Performance with $d = 1024$},
-					xlabel={Particle Count},
-					ylabel={Execution Time (ms)},
-					]
-					
-					\foreach \i in {0,...,3}{
-						\pgfmathsetmacro\suffix{int(pow(2,\i))};
-						
-						\addplot +[] 
-						table [col sep=comma, x=N, y=time] 
-						{../../code/out/measurements\suffix.csv};
-						
-						\addlegendentryexpanded{\# $\suffix$};
-						
-					}	
-				\end{axis}
-			\end{tikzpicture}
-		\end{center}
-	\end{figure}
-\end{comment}
+\subsubsection{Weak Scaling}
 
+\subsubsection{Strong Scaling}
 
 \subsection{Comparison to Theoretical Model}
 
-
+\newpage
 \section{Conclusion}
 
 
