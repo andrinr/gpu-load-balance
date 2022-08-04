@@ -35,8 +35,8 @@ int master(MDL vmdl,void *vpst) {
 
     //mdl->argc
     //mdl->argv
-    static const int pN = strtol(mdl->argv[1],NULL);
-    static const int pd = strtol(mdl->argv[2],NULL);
+    static const int pN = strtol(mdl->argv[1],NULL,0);
+    static const int pd = strtol(mdl->argv[2],NULL,0);
     static const int N = 1 << pN;
     static const int d = 1 << pd;
 
@@ -107,12 +107,12 @@ int master(MDL vmdl,void *vpst) {
                root.getNCellsOnLastLevel(),
                 (int) std::pow(2, l)) - 2;
 
-        printf("Level %d: %d - %d\n", l, a, b);
+        //printf("Level %d: %d - %d\n", l, a, b);
         int nCells = b - a + 1;
         blitz::Array<Cell, 1> cells = cellHeap(blitz::Range(a, b));
         ServiceCount::input *iCells = cells.data();
 
-        printf("Making axis\n");
+        //printf("Making axis\n");
         if (not params.GPU_PARTITION) {
             start = std::chrono::high_resolution_clock::now();
             ServiceMakeAxis::output oSwaps[1];
@@ -122,28 +122,24 @@ int master(MDL vmdl,void *vpst) {
             tags.push_back("ma");
         }
 
-        for (int i = 0; i < nCells; ++i) {
-            cells(i).log();
-        }
-
-        printf("Counting %d cells\n", nCells);
+        //printf("Counting %d cells\n", nCells);
         mdl->RunService(PST_COUNT, nCells * sizeof(ServiceCount::input), iCells, oCounts);
-        printf("Counted %d cells\n", nCells);
+        //printf("Counted %d cells\n", nCells);
 
         // Copy with each iteration as partition is done on CPU
         if (params.GPU_COUNT && not params.GPU_PARTITION) {
-            printf("Copying particles\n");
+            //printf("Copying particles\n");
             start = std::chrono::high_resolution_clock::now();
             ServiceCopyParticles::input iCopy {params};
             ServiceCopyParticles::output oCopy[1];
             mdl->RunService(PST_COPYPARTICLES, sizeof (ServiceCopyParticles::input), &iCopy, oCopy);
-            printf("Copied particles\n");
+            //printf("Copied particles\n");
             end = std::chrono::high_resolution_clock::now();
             times.push_back(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
             tags.push_back("cpa");
         }
 
-        printf("Copying %d cells\n", nCells);
+        //printf("Copying %d cells\n", nCells);
         if (params.GPU_COUNT) {
             ServiceCopyCells::output oCopy[1];
             mdl->RunService(PST_COPYCELLS, nCells * sizeof (ServiceCopyCells::input), iCells, oCopy);
@@ -201,7 +197,7 @@ int master(MDL vmdl,void *vpst) {
 
             for (int i = 0; i < nCells; ++i) {
                 if (cells(i).foundCut) continue;
-                printf(
+                /*printf(
                         "counted left: %u, of %u. cut %f, axis %d, level %u, cell %u \n",
                         oCountsLeft[i],
                         oCounts[i] / 2,
@@ -209,7 +205,7 @@ int master(MDL vmdl,void *vpst) {
                         cells(i).cutAxis,
                         l,
                         cells(i).id
-                        );
+                        );*/
                 //CellHelpers::log(cells(i));
 
                 float ratio = ceil(cells(i).nLeafCells / 2.0) / cells(i).nLeafCells;
