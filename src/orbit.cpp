@@ -120,6 +120,10 @@ int master(MDL vmdl,void *vpst) {
             tags.push_back("ma");
         }
 
+        for (int i = 0; i < nCells; ++i) {
+            cells(i).log();
+        }
+
         printf("Counting %d cells\n", nCells);
         mdl->RunService(PST_COUNT, nCells * sizeof(ServiceCount::input), iCells, oCounts);
         printf("Counted %d cells\n", nCells);
