@@ -2527,23 +2527,23 @@ The partitioning algorithm is a widely used concept and there are various implem
 
 All measurements where performed on Piz Daint where the performance of system can be read from table \ref{fig:datapoints}. The supercomputer uses a slurm workload manager. Simple job script can be executed using $sbatch$. In our case we used a meta script which has the function of generating the actual job scripts for the desired parameters. 
 
-\subsection{Results}
+\subsection{Uniform Random Distribution}
 
 In a single node direct comparison between the CPU and GPU with the Improved Count Left we get the following results:
 
 
 \begin{filecontents*}{results0.csv}
-	p, d, t
+	p, d, t, t2
 	1048576, 10, 0.04
 	4194304, 10, 0.14
 	16777216, 10, 0.61
 	67108864, 10, 2.57
 	268435456, 10, 11.15
-	1073741824, 10, 47.58
+	1073741824, 10, 47.58, 
 \end{filecontents*}
 
 \begin{filecontents*}{results1.csv}
-	p, d, t
+	p, d, t, t2
 	1048576 , 10, 0.04
 	4194304, 10, 0.10
 	16777216 , 10, 0.33
@@ -2597,17 +2597,53 @@ In a single node direct comparison between the CPU and GPU with the Improved Cou
 	\label{fig:analy}
 \end{figure}
 
-The total execution time is more than halfed. Note that this also includes the unoptimized partition part. If we plot each segment by 
 
-\begin{figure}
-	\begin{tikzpicture}
-		\pie{12867399 / partition,
-			22.97/Boston Celtics,
-			8.11/Golden State Warriors,
-			8.11/Chicago Bulls,
-			6.76/San Antonio Spurs,
-			31.07/Other Teams}
-	\end{tikzpicture}
+The total execution time is more than halfed. Note that this also includes the unoptimized partition part. If we repeat the plots but without the partition 
+
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+			
+			\begin{axis}
+				[
+				xlabel={number of particles},
+				ylabel={seconds},
+				nodes near coords,
+				xmin=1048576,
+				xmax=1073741824,
+				ymin=0,
+				ymax=64,
+				xmode=log,
+				ymode=log,
+				log basis x={2},
+				log basis y={2},
+				legend style={at={(1.05,0.6)},anchor=west}]
+				]
+				\addplot+[
+				point meta=explicit symbolic
+				] table [
+				x=p, 
+				y=t2, 
+				col sep=comma] 
+				{results0.csv};
+				\addlegendentryexpanded{CPU Only};
+				\addplot+[
+				point meta=explicit symbolic
+				] table [
+				x=p, 
+				y=t2, 
+				col sep=comma] 
+				{results1.csv};
+				\addlegendentryexpanded{GPU Count Left};
+			\end{axis}
+			
+			
+		\end{tikzpicture}
+	\end{center}
+	
+	\caption{Execution times of different strategies}
+	\label{fig:analy2}
 \end{figure}
 
 

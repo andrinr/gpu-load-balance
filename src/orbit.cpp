@@ -65,14 +65,10 @@ int master(MDL vmdl,void *vpst) {
         params.FAST_MEDIAN = false;
     }
 
-    std::vector<int> times;
-    std::vector<std::string> tags;
-
-    int totalPartitions = 0;
-    auto startTotal = std::chrono::high_resolution_clock::now();
-
-    auto start = std::chrono::high_resolution_clock::now();
-    auto end = std::chrono::high_resolution_clock::now();
+    int tPartitions = 0;
+    int tCountCopy = 0;
+    int tTotal = 0;
+    int tMakeAxis = 0;
 
     // user code
     Cell root(0, d, lower, upper);
@@ -91,13 +87,12 @@ int master(MDL vmdl,void *vpst) {
     auto totalStart = std::chrono::high_resolution_clock::now();
     // Only copy once
     if (params.GPU_PARTITION) {
-        start = std::chrono::high_resolution_clock::now();
+        auto start =  std::chrono::high_resolution_clock::now();
         ServiceCopyParticles::input iCopy {params};
         ServiceCopyParticles::output oCopy[1];
         mdl->RunService(PST_COPYPARTICLES, sizeof (ServiceCopyParticles::input), &iCopy, oCopy);
-        end = std::chrono::high_resolution_clock::now();
-        times.push_back(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
-        tags.push_back("cp");
+        auto end = std::chrono::high_resolution_clock::now();
+
     }
 
 
@@ -118,12 +113,11 @@ int master(MDL vmdl,void *vpst) {
 
         //printf("Making axis\n");
         if (not params.GPU_PARTITION) {
-            start = std::chrono::high_resolution_clock::now();
+            auto start = std::chrono::high_resolution_clock::now();
             ServiceMakeAxis::output oSwaps[1];
             mdl->RunService(PST_MAKEAXIS, nCells * sizeof(ServicePartition::input), iCells, oSwaps);
-            end = std::chrono::high_resolution_clock::now();
-            times.push_back(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
-            tags.push_back("ma");
+            auto end = std::chrono::high_resolution_clock::now();
+            tMakeAxis += std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
         }
 
         //printf("Counting %d cells\n", nCells);
@@ -133,14 +127,13 @@ int master(MDL vmdl,void *vpst) {
         // Copy with each iteration as partition is done on CPU
         if (params.GPU_COUNT && not params.GPU_PARTITION) {
             //printf("Copying particles\n");
-            start = std::chrono::high_resolution_clock::now();
+            auto start = std::chrono::high_resolution_clock::now();
             ServiceCopyParticles::input iCopy {params};
             ServiceCopyParticles::output oCopy[1];
             mdl->RunService(PST_COPYPARTICLES, sizeof (ServiceCopyParticles::input), &iCopy, oCopy);
             //printf("Copied particles\n");
-            end = std::chrono::high_resolution_clock::now();
-            times.push_back(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
-            tags.push_back("cpa");
+            auto end = std::chrono::high_resolution_clock::now();
+            tCountCopy += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
         }
 
         //printf("Copying %d cells\n", nCells);
@@ -159,7 +152,7 @@ int master(MDL vmdl,void *vpst) {
             foundAll = true;
 
             if (params.GPU_PARTITION) {
-                start = std::chrono::high_resolution_clock::now();
+                auto start = std::chrono::high_resolution_clock::now();
 
                 mdl->RunService(
                     PST_COUNTLEFTGPU,
@@ -167,12 +160,11 @@ int master(MDL vmdl,void *vpst) {
                     iCells,
                     oCountsLeft);
 
-                end = std::chrono::high_resolution_clock::now();
-                times.push_back(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
-                tags.push_back("ctlg");
+                auto end = std::chrono::high_resolution_clock::now();
+                tCountCopy += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
             }
             else if (params.GPU_COUNT) {
-                start = std::chrono::high_resolution_clock::now();
+                auto start = std::chrono::high_resolution_clock::now();
 
                 mdl->RunService(
                     PST_COUNTLEFTAXISGPU,
@@ -180,12 +172,11 @@ int master(MDL vmdl,void *vpst) {
                     iCells,
                     oCountsLeft);
 
-                end = std::chrono::high_resolution_clock::now();
-                times.push_back(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
-                tags.push_back("ctlg");
+                auto end = std::chrono::high_resolution_clock::now();
+                tCountCopy += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
             }
             else {
-                start = std::chrono::high_resolution_clock::now();
+                auto start = std::chrono::high_resolution_clock::now();
 
                 mdl->RunService(
                     PST_COUNTLEFT,
@@ -193,10 +184,8 @@ int master(MDL vmdl,void *vpst) {
                     iCells,
                     oCountsLeft);
 
-                end = std::chrono::high_resolution_clock::now();
-                times.push_back(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
-                tags.push_back("ctl");
-
+                auto end = std::chrono::high_resolution_clock::now();
+                tCountCopy += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
             }
 
             for (int i = 0; i < nCells; ++i) {
@@ -261,42 +250,30 @@ int master(MDL vmdl,void *vpst) {
         }
 
         if (params.GPU_PARTITION) {
-            start = std::chrono::high_resolution_clock::now();
+            auto start = std::chrono::high_resolution_clock::now();
             ServicePartitionGPU::output oPartition[1];
             mdl->RunService(
                     PST_PARTITIONGPU,
                     nCells * sizeof(ServicePartitionGPU::input),
                     iCells,
                     oPartition);
-            end = std::chrono::high_resolution_clock::now();
-            int time = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            times.push_back(time);
-            totalPartitions += time;
-            tags.push_back("partg");
+            auto end = std::chrono::high_resolution_clock::now();
+            tPartitions += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
         }
         else {
-            start = std::chrono::high_resolution_clock::now();
+            auto start = std::chrono::high_resolution_clock::now();
             ServicePartition::output oPartition[1];
             mdl->RunService(
                     PST_PARTITION,
                     nCells * sizeof(ServicePartition::input),
                     iCells,
                     oPartition);
-            end = std::chrono::high_resolution_clock::now();
+            auto end = std::chrono::high_resolution_clock::now();
             int time = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            totalPartitions += time;
-            times.push_back(time);
-            tags.push_back("part");
+            tPartitions += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
         }
     }
 
-    auto endTotal = std::chrono::high_resolution_clock::now();
-    int totalTime = std::chrono::duration_cast<std::chrono::microseconds>(endTotal - startTotal).count();
-    times.push_back(totalTime);
-    tags.push_back("total");
-
-    times.push_back(totalTime - totalPartitions);
-    tags.push_back("totalNP");
 
     if (params.GPU_COUNT){
         ServiceFinalize::input iFree {params};
@@ -304,10 +281,9 @@ int master(MDL vmdl,void *vpst) {
         mdl->RunService(PST_FINALIZE, sizeof (ServiceFinalize::input), &iFree, oFree);
     }
 
-    for (int i = 0; i < times.size(); ++i) {
-        printf("%s-%u-%u, %u \n", tags[i].c_str(), pN, pd, times[i]);
-    }
-    printf("\n");
+    printf("CountCopy-%u-%u, %u \n", pN, pd, tCountCopy);
+    printf("Partition-%u-%u, %u \n", pN, pd, tPartitions);
+    printf("MakeAxis-%u-%u, %u \n", pN, pd, tMakeAxis);
 
     return 0;
 }
