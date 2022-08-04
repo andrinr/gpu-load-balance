@@ -35,8 +35,10 @@ int master(MDL vmdl,void *vpst) {
 
     //mdl->argc
     //mdl->argv
-    static const int N = 1 << strtol(mdl->argv[1], nullptr, 0);;
-    static const int d = 1 << strtol(mdl->argv[2], nullptr, 0);;
+    static const int pN = strtol(mdl->argv[1],NULL);
+    static const int pd = strtol(mdl->argv[2],NULL);
+    static const int N = 1 << pN;
+    static const int d = 1 << pd;
 
     //printf("N = %d, d = %d\n",N,d);
     float lower[3] = {-0.5, -0.5, -0.5};
@@ -295,7 +297,7 @@ int master(MDL vmdl,void *vpst) {
     }
 
     for (int i = 0; i < times.size(); ++i) {
-        printf("%s, %u \n", tags[i].c_str(), times[i]);
+        printf("%s-%u-%u, %u \n", tags[i].c_str(), pN, pd, times[i]);
     }
     printf("\n");
 
