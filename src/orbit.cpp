@@ -67,6 +67,8 @@ int master(MDL vmdl,void *vpst) {
     std::vector<int> times;
     std::vector<std::string> tags;
 
+    auto startTotal = std::chrono::high_resolution_clock::now();
+
     auto start = std::chrono::high_resolution_clock::now();
     auto end = std::chrono::high_resolution_clock::now();
 
@@ -282,8 +284,8 @@ int master(MDL vmdl,void *vpst) {
         }
     }
 
-    end = std::chrono::high_resolution_clock::now();
-    times.push_back(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
+    auto endTotal = std::chrono::high_resolution_clock::now();
+    times.push_back(std::chrono::duration_cast<std::chrono::microseconds>(endTotal - startTotal).count());
     tags.push_back("total");
 
     if (params.GPU_COUNT){
