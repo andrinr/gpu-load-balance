@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <blitz/array.h>
+#include <map>
 #include "cell.h"
 #include "mdl.h"
 #include "services/count.h"
@@ -67,6 +68,7 @@ int master(MDL vmdl,void *vpst) {
     std::vector<int> times;
     std::vector<std::string> tags;
 
+    int totalPartitions = 0;
     auto startTotal = std::chrono::high_resolution_clock::now();
 
     auto start = std::chrono::high_resolution_clock::now();
@@ -267,7 +269,9 @@ int master(MDL vmdl,void *vpst) {
                     iCells,
                     oPartition);
             end = std::chrono::high_resolution_clock::now();
-            times.push_back(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
+            int time = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+            times.push_back(time);
+            totalPartitions += time;
             tags.push_back("partg");
         }
         else {
@@ -279,14 +283,20 @@ int master(MDL vmdl,void *vpst) {
                     iCells,
                     oPartition);
             end = std::chrono::high_resolution_clock::now();
-            times.push_back(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
+            int time = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+            totalPartitions += time;
+            times.push_back(time);
             tags.push_back("part");
         }
     }
 
     auto endTotal = std::chrono::high_resolution_clock::now();
-    times.push_back(std::chrono::duration_cast<std::chrono::microseconds>(endTotal - totalStart).count());
+    int totalTime = std::chrono::duration_cast<std::chrono::microseconds>(endTotal - startTotal).count();
+    times.push_back(totalTime);
     tags.push_back("total");
+
+    times.push_back(totalTime - totalPartitions);
+    tags.push_back("totalNP");
 
     if (params.GPU_COUNT){
         ServiceFinalize::input iFree {params};
