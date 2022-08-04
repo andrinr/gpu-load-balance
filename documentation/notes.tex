@@ -2527,6 +2527,59 @@ All measurements where performed on Piz Daint where the performance of system ca
 
 \subsection{Results}
 
+In a direct comparison between the CPU and GPU with the Improved Count Left we get the following results:
+
+
+\begin{filecontents*}{results0.csv}
+	p, d, t
+	20, 10, 
+	22, 10,
+	24, 10, 
+	26, 10,
+	28, 10,
+\end{filecontents*}
+
+\begin{filecontents*}{results1.csv}
+	p, d, t
+	20, 10, 
+	22, 10,
+	24, 10, 
+	26, 10,
+	28, 10,
+\end{filecontents*}
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+			
+			\begin{axis}
+				[
+				xlabel={log particles},
+				ylabel={seconds},
+				nodes near coords,
+				xmin=20,
+				xmax=30,
+				ymin=0,
+				ymax=100
+				]
+				\addplot+[
+				point meta=explicit symbolic
+				] table [
+				x=p, 
+				y=t, 
+				col sep=comma] 
+				{results0.csv};
+			\end{axis}
+			
+		\end{tikzpicture}
+			
+		\end{tikzpicture}
+	\end{center}
+	
+	\caption{Execution times of different strategies}
+	\label{fig:analy}
+\end{figure}
+
 
 \subsubsection{Weak Scaling}
 
