@@ -285,7 +285,7 @@ int master(MDL vmdl,void *vpst) {
     }
 
     auto endTotal = std::chrono::high_resolution_clock::now();
-    times.push_back(std::chrono::duration_cast<std::chrono::microseconds>(endTotal - startTotal).count());
+    times.push_back(std::chrono::duration_cast<std::chrono::microseconds>(endTotal - totalStart).count());
     tags.push_back("total");
 
     if (params.GPU_COUNT){
