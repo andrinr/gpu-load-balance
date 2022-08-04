@@ -2527,9 +2527,46 @@ The partitioning algorithm is a widely used concept and there are various implem
 
 All measurements where performed on Piz Daint where the performance of system can be read from table \ref{fig:datapoints}. The supercomputer uses a slurm workload manager. Simple job script can be executed using $sbatch$. In our case we used a meta script which has the function of generating the actual job scripts for the desired parameters. 
 
-\subsection{Uniform Random Distribution}
 
-In a single node direct comparison between the CPU and GPU with the Improved Count Left we get the following results:
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+			
+			\begin{axis}
+				[
+				 enlargelimits=0.4,
+				ybar stacked,
+				bar width=40pt,
+				nodes near coords,
+				legend style={at={(0.5,-0.20)},
+					anchor=north,legend columns=-1},
+				ylabel={seconds},
+				symbolic x coords={cpu, gpu},
+				xtick=data,
+				x tick label style={rotate=45,anchor=east}]
+				ymin=0,
+				ymax=50
+				]
+				\addplot+[ybar] plot coordinates {(cpu, 31.83) (gpu, 5.60)};
+				\addplot+[ybar] plot coordinates {(cpu, 12.83) (gpu, 12.87)};
+
+			\legend{\strut Count and Copy, \strut Partition}
+			\end{axis}
+			
+			
+		\end{tikzpicture}
+	\end{center}
+	
+	\caption{Execution times of different strategies}
+	\label{fig:analy2}
+\end{figure}
+
+In figure \ref{fig:analy2} the final measurements are plotted. The total runtime of the ORB is around 43 seconds when performed only on the CPU, for the GPU accelerated version it comes down to 18 seconds. However a large part of the execution time can be attributed to the Partitioning, where its overhead remains equal for both versions. Even the CPU Partitioning can be improved a lot and the GPU version might increase the performance even further. 
+If we subtract the time lost for the partitioning, the GPU version is about $5.6$ times faster, which is very close to the $5.25$ which were expected in the theoretical model. The total runtime is not equal to the one expected, however the theoretical model works with upper bound runtimes for the bisection method, in the method terminates at around 20 iterations. When scaling the theoretical model with this, the results look a lot closer.
+
+\subsection{Scaling}
+
+To make sure the GPU version scales good we have evaluated the total runtimes for 
 
 
 \begin{filecontents*}{results0.csv}
@@ -2569,7 +2606,7 @@ In a single node direct comparison between the CPU and GPU with the Improved Cou
 				ymode=log,
 				log basis x={2},
 				log basis y={2},
-					legend style={at={(1.05,0.6)},anchor=west}]
+				legend style={at={(1.05,0.6)},anchor=west}]
 				]
 				\addplot+[
 				point meta=explicit symbolic
@@ -2588,7 +2625,7 @@ In a single node direct comparison between the CPU and GPU with the Improved Cou
 				{results1.csv};
 				\addlegendentryexpanded{GPU Count Left};
 			\end{axis}
-	
+			
 			
 		\end{tikzpicture}
 	\end{center}
@@ -2599,57 +2636,6 @@ In a single node direct comparison between the CPU and GPU with the Improved Cou
 
 
 The total execution time is more than halfed. Note that this also includes the unoptimized partition part. If we repeat the plots but without the partition 
-
-
-\begin{figure}[H]
-	\begin{center}
-		\begin{tikzpicture}
-			
-			\begin{axis}
-				[
-				xlabel={number of particles},
-				ylabel={seconds},
-				nodes near coords,
-				xmin=1048576,
-				xmax=1073741824,
-				ymin=0,
-				ymax=64,
-				xmode=log,
-				ymode=log,
-				log basis x={2},
-				log basis y={2},
-				legend style={at={(1.05,0.6)},anchor=west}]
-				]
-				\addplot+[
-				point meta=explicit symbolic
-				] table [
-				x=p, 
-				y=t2, 
-				col sep=comma] 
-				{results0.csv};
-				\addlegendentryexpanded{CPU Only};
-				\addplot+[
-				point meta=explicit symbolic
-				] table [
-				x=p, 
-				y=t2, 
-				col sep=comma] 
-				{results1.csv};
-				\addlegendentryexpanded{GPU Count Left};
-			\end{axis}
-			
-			
-		\end{tikzpicture}
-	\end{center}
-	
-	\caption{Execution times of different strategies}
-	\label{fig:analy2}
-\end{figure}
-
-
-\subsubsection{Weak Scaling}
-
-\subsubsection{Strong Scaling}
 
 \subsection{Comparison to Theoretical Model}
 
