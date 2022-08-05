@@ -3,7 +3,7 @@ rm *.out
 rm results*
 
 # No optimizatoin
-for j in 30; do
+for j in 20 22 24 26 28 30; do
     sed -i  "s/job-name=.*$/job-name=\"orbit-0-$j\" /g" analysis.job.sh;
     sed -i "s/pParticles=.*$/pParticles=$j/g" analysis.job.sh;
     sed -i "s/pDomains=.*$/pDomains=10/g" analysis.job.sh;
@@ -15,7 +15,7 @@ done
 
 
 # No optimizatoin
-for j in 30; do
+for j in 20 22 24 26 28 30; do
     sed -i  "s/job-name=.*$/job-name=\"orbit-1-$j\" /g" analysis.job.sh;
     sed -i "s/pParticles=.*$/pParticles=$j/g" analysis.job.sh;
     sed -i "s/pDomains=.*$/pDomains=10/g" analysis.job.sh;

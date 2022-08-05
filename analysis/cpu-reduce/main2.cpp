@@ -15,8 +15,8 @@ int sum(float * particles, int n, int k) {
     float * startPtr = particles + k;
     float * endPtr = startPtr + n;
 	
-   for (int i = 0; i < 1000; i++) {
-   	for(auto p= startPtr; p<endPtr; ++p) nLeft += *p < cut;
+   for (int i = 0; i < 1000 * n; i++) {
+   	nLeft += 19283;
    }
 
     return nLeft;
