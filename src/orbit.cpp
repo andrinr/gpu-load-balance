@@ -268,7 +268,7 @@ int master(MDL vmdl,void *vpst) {
                     nCells * sizeof(ServicePartition::input),
                     iCells,
                     oPartition);
-            auto end = std::chrono::high_resolution_clock::now();
+            auto qend = std::chrono::high_resolution_clock::now();
             int time = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
             tPartitions += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
         }

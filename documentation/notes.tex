@@ -1391,7 +1391,7 @@ If we additionally set the compile flag -march=native we end up with the instruc
 We can identify $vmovups$, $vcomplpts$ and $vpsubd$ which are AVX commands. Since they are using the ymm instead of the xmm registers, we know these are AVX2 and not AVX commands.
 
 \Q{Look at this with doug}
-The following results were obtained on $2^{27}$ with a thread count of 16 on Piz Daint. The reduction takes 72010 microseconds. This means we have a throughput of $2^{30} / 10^{9} * 10^6 / 551769 = 1.8 gflops$. This of course does not lie anywhere near the theoretical maximum, which even for a single processor ($np = 1$) is $3.8 * 8 * 2 * 1 * 16 = 972.8 gflops.$. This is a strong indication, that already with a single processor solutions, we are in the realm of bandwidth limited algorithms. This effect of course, would become even stronger when including parallelism.
+The following results were obtained on $2^{27}$ with a thread count of 16 on Piz Daint. The reduction takes 2.3 milliseconds, resulting in a throughput of $2^{27} / 10^{9} * 10^3 / 2.3 = 58 gflops$. This is close to the memory bandwidth (68 GB/s) and far below the performance maximum of the CPU, which even for ($np = 1$) is $3.8 * 8 * 2 * 1 * 16 = 972.8 gflops.$. Thus we conclude that the algorithm is memory bound for the CPU and most probably memory bound for the GPU. 
 
 
 \subsection{Runtime Estimates}
@@ -1403,7 +1403,7 @@ We assume a precision $p$ of 32, which is general standard for both integers and
 \subsubsection{CPU Version}
 
 
-Whilst the number of cells increases each time a level is added, simultaneously the number of particles to be iterated over . Thus the amount of cells which are to be iterated cancels out and we end up with the size of all particles $s$ divide by the memory bandwidth $B_C$.  
+Whilst the number of cells increases each time the tree depth is increased, simultaneously the number of particles to be iterated over decreases. Thus the amount of cells which are to be iterated cancels out and we end up with the size of all particles $s$ divide by the memory bandwidth $B_C$.  
 
 
 Each time the leaf cells of the SPTDS are split into two child cells and appended to the tree, we end up with twice the number of leaf cells. Considering we want to end up with $d$ leaf cells in the end, we need to perform the cut algorithm $\lceil log_2(d) \rceil$ times for all leaf cells. 
@@ -1426,7 +1426,7 @@ $i$ cancels out from the equation and we end up with:
 	\end{equation}
 \end{center}
 
-Finally we can simplify to:
+Which can be simplified to:
 
 \begin{center}
 	\begin{equation}
@@ -1442,7 +1442,7 @@ The Equation \ref{eq:gpu} for the GPU is similar, the only difference being that
 
 \begin{center}
 	\begin{equation}
-			\lceil log(d) \rceil \times \left ( p \times \frac{s}{B_{G}} + \frac{s}{I_{GC}}  + \frac{s}{B_{C}} \right )
+			\lceil log(d) \rceil \times \left ( p \times \frac{s}{B_{G}} +\max{ ( \frac{s}{I_{GC}}  + \frac{s}{B_{C}} )} \right )
 		\label{eq:gpu}
 	\end{equation}
 \end{center}
