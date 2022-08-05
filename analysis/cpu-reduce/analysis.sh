@@ -1,8 +1,5 @@
 
-rm *.out
-rm results
-g++ -pthread -march=native main.cpp
-for j in 1 2 3 4 5 6 7; do
+for j in 2; do
     sed -i  "s/job-name=.*$/job-name=\"cpuReduce-$j\" /g" analysis.job.sh;
     declare -i pow
     pow=$((2**$j))
