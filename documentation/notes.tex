@@ -381,7 +381,7 @@ To which degree its ideal favor memory over workload balancing is difficult to a
 
 To introduce the ORB algorithm, we consider a recursive implementation of ORB as it is easier to understand than the iterative version. We define all cell properties recursively, allowing us to describe the algorithm in detail and derive the necessary constraints.
 
-As we initialize our recursion with the root cell alone, it follows that $V_{root}$ is equivalent to entire volume of the input data. $d_{cell} = d$ and $N_{root} = N$ are true per definition of $N$ and $d$. 
+As we initialize the recursion with the root cell alone, it follows that $V_{root}$ is equivalent to entire volume of the input data. $d_{cell} = d$ and $N_{root} = N$ are true per definition of $N$ and $d$. 
 When a cell is cut into two child cells, we refer to the children as $leftCell$ and $rightCell$. For any cell the following equations hold:
 
 \begin{center}
@@ -392,13 +392,13 @@ When a cell is cut into two child cells, we refer to the children as $leftCell$ 
 
 \begin{center}
 	\begin{equation}\label{eq:v}
-		V_{cell} = V_{leftCell} \cup V_{rightChild}
+		V_{cell} = V_{leftCell} \cup V_{rightCell}
 	\end{equation}
 \end{center}
 
 \begin{center}
 	\begin{equation}\label{eq:v2}
-		V_{leftCell} \cap V_{rightChild} = \emptyset
+		V_{leftCell} \cap V_{rightCell} = \emptyset
 	\end{equation}
 \end{center}
 
@@ -432,14 +432,14 @@ Finally the number of particles encompassed in $V_{leftCell}$ and $V_{rigtCell}$
 
 To simplify the visual and numeric explanation of the ORB algorithm, we assume $\forall i \in \{0,..,N\} : w(p_i) = 1$.
 
-As the cut plane, which divides $V_{leftCell}$ and $V_{rightCell}$ is axis aligned, searching for a single value $c$ is sufficient to find an ideal construction. Its is considered ideal if the number of particles where $x_{i,a} \leq c$ are equivalent to $N_{leftCell}$. 
+The cut plane, which divides $V_{leftCell}$ and $V_{rightCell}$ is axis aligned an thus orthogonal to a given axis $a$. Thus searching for a single value $c$ is sufficient to construct the plane, where $c$ is the position of the plane along the axis $a$. The plane is considered ideal if the number of particles where $x_{i,a} \leq c$ are equivalent to $N_{leftCell}$. 
 
-After a plane is found, we can divide or cut the $V_{cell}$ in two volumes, where $V_{leftCell}$ and $V_{leftCell}$ are constrained by the original $V_{cell}$ and the cut plane. As defined in equation \ref{eq:v2} the volumes do not intersect, thus $V_{leftCell}$ along axis $a$ ends at $c$, where $V_{leftCell}$ start at $c$.
+After a plane is found, we can divide or cut the $V_{cell}$ in two volumes, where $V_{leftCell}$ and $V_{rightCell}$ are constrained by the original $V_{cell}$ and the cut plane. As defined in equation \ref{eq:v2} the volumes do not intersect, thus $V_{leftCell}$ along axis $a$ ends at $c$, where $V_{rightCell}$ start at $c$.
     
   
 \subsubsection{Algorithm}
 
-Algorithm \ref{proc:orbmain} is the main routine of the orb algorithm. All the volumes are described using a lower and an upper boundary point, sufficiently describing a box, thus the only input parameters required are is $x$ storing the particles positions, $lower$, $upper$ and finally $d$.
+Algorithm \ref{proc:orbmain} as mentioned below, is the main routine of ORB. All the volumes are described using a lower and an upper boundary point, sufficiently describing a box, thus the only input parameters required is $x$ storing the particles positions, $lower$, $upper$ and finally $d$.
 If $d$ is equal to 1, this means the reduction must not be continued, as the target of a single subsequent leaf cell is already reached, since the cell itself is treated as a leaf cell. The stopping condition is formulated on lines 2-4. 
 Line 6 describes a call to a method called $maxIndex()$, which essentially compares all provided values and returns the index of the maximum values. The result $i$ provides us with the axis where the cell volume is largest. 
 $d_{leftCell}$ is computed as described in equation \ref{eq:d1} and its results is stored in a variable named $d^\prime$. All prerequisites are met to compute the actual cut with the $cut$ method which we will explain in more detail in section \ref{sec:root}. The return value stored in $cut$ is equivalent to the position of the cut plane along the cut axis. Using the $cut$ value, the array of particles is partitioned as described in \ref{sec:part} returning the $mid$ value which is the pivot index of the partitioning.
@@ -454,7 +454,8 @@ Finally we can divide the original volume into two volumes as described on lines
  		\State $\vec{size} = \vec{upper} - \vec{lower}$
  		\State $i = maxIndex(\vec{size}_0, \vec{size}_1, \vec{size}_2)$ \Comment{Get index of max value}
  		\newline
- 		\State $d^\prime = \left \lceil\frac{d}{2} \right \rceil$
+ 		\State $l = \lceil \log_2{d} \rceil$ \Comment{Depth}
+ 		\State $d^\prime = \min \{ d - 2^{l -2}, 2^{l - 1}\}$
  		
  		\State $cut = cut(x, \vec{lower}_{i}, \vec{upper}_{i}, i, \frac{d^\prime}{d} )$\Comment{Find cut plane}
  		\State $mid = partition(x, split, axis)$ \Comment{Partition particles}
@@ -637,7 +638,7 @@ Depicted in figure \ref{fig:orb1} \&  \ref{fig:orb11} is the SPTDS after initial
 	\caption{Tree with ORB at recursion depth 1}
 	\label{fig:orb22}
 \end{figure}
-A cut plane, which translates to a cut line in simplified 2D example is constructed and $cell_2$ and $cell_3$ are generated accordingly.
+A cut plane, which translates to a cut line in our simplified 2D example is constructed and $cell_2$ and $cell_3$ are generated accordingly.
 
 \ref{fig:orb2} \&  \ref{fig:orb22} Depict a SPTDS of depth 2, or two levels, where a cut plane was found dividing $V_{cell_1}$ into $V_{cell_2}$ and $V_{cell_3}$, $d_{cell_2} = 2$ and $d_{cell_3} = 1$ subsequently are calculated, meaning $cell_3$ is considered a leaf cell. Thus we can compute $N_{cell_2}$ using a simplified version of equation \ref{eq:N1} since we assume all weights are equal 1: $N_{cell_2} = \lfloor \frac{d_{cell_2}}{d_{cell_3}} * N_{cell_1} \rfloor = \lfloor \frac{2}{3}  * 7 \rfloor = 4$ subsequently $N_{cell_3} = 3$. 
 
@@ -709,7 +710,7 @@ Since we are operating on binary numbers with a limited precision, the bisection
 
 Initially an estimation for a cut is made, in this case the exact middle of the domain boundaries. Some median finding algorithms use improved guessing to speed up the process, again a method which could be leveraged in later work. 
 
-Because the maximal number of iterations is known, a loop can be used as seen in algorithm \ref{proc:cut} on line 4. A cut is then computed (line 5), which in the first iteration is the center position between left and right. We then check weather the stopping condition has already been reached (line 7-9), meaning the cut lies within $\alpha$ points of the ideal result. If it was not reached the boundaries can be improved as follows: In case there are too many elements left of the cut, we know that the cut position was chosen too far to the right and we can be sure that the ideal cut must be left of the current guess. Therefore we adjust the boundaries, in this case we set $righ$ equal to $cut$ as seen on line 13. The analog concept can be applied in the other case (line 11). 
+Because the maximal number of iterations is known, a loop can be used as seen below in algorithm \ref{proc:cut} on line 4. A cut is then computed (line 5), which in the first iteration is the center position between left and right. We then check weather the stopping condition has already been reached (line 7-9), meaning the cut lies within $\alpha$ points of the ideal result. If it was not reached the boundaries can be improved as follows: In case there are too many elements left of the cut, we know that the cut position was chosen too far to the right and we can be sure that the ideal cut must be left of the current guess. Therefore we adjust the boundaries, in this case we set $righ$ equal to $cut$ as seen on line 13. The analog concept can be applied in the other case (line 11). 
 
 \begin{algorithm}[H]
 		\begin{algorithmic}[1]
@@ -755,9 +756,7 @@ Let us consider the following example particle distribution where $particle_1$ a
 	\end{center}
 \end{figure}
 
-In this case there exists no ideal cut in the x (horizontal) axis. As either there is 1 particle to the left or 3, but no cut can result in 2 particles to the left. If we keep adding particles along the same line, the method performs even worse. However since the algorithm uses a deterministic for loop, the algorithm will terminate anyways. 
-
-\Q{Write this? seems too vague}
+In this case there exists no ideal cut in the x (horizontal) axis. As either there is 1 particle to the left or 3, but no cut can result in 2 particles to the left. If we keep adding particles along the same line, the method performs even worse. However since the algorithm uses a deterministic for loop, the algorithm will terminate anyways and puts either 3 particles to the left or the right.
 
 \subsubsection{Runtime Analysis}
 
@@ -1387,8 +1386,7 @@ If we additionally set the compile flag -march=native we end up with the instruc
 
 We can identify $vmovups$, $vcomplpts$ and $vpsubd$ which are AVX commands. Since they are using the ymm instead of the xmm registers, we know these are AVX2 and not AVX commands.
 
-\Q{Look at this with doug}
-The following results were obtained on $2^{27}$ with a thread count of 16 on Piz Daint. The reduction takes 2.3 milliseconds, resulting in a throughput of $2^{27} / 10^{9} * 10^3 / 2.3 = 58 gflops$. This is close to the memory bandwidth (68 GB/s) and far below the performance maximum of the CPU, which even for ($np = 1$) is $3.8 * 8 * 2 * 1 * 16 = 972.8 gflops.$. Thus we conclude that the algorithm is memory bound for the CPU and most probably memory bound for the GPU. 
+The following results were obtained on $2^{27}$ particles with a thread count of 16 on Piz Daint. The reduction takes 2.3 milliseconds, resulting in a throughput of $2^{27} / 10^{9} * 10^3 / 2.3 = 58 gflops$. This is close to the memory bandwidth (68 GB/s) and far below the performance maximum of the CPU, which even for ($np = 1$) is $3.8 * 8 * 2 * 1 * 16 = 972.8 gflops$. Thus we conclude that the algorithm is memory bound for the CPU and most probably memory bound for the GPU. 
 
 
 \subsection{Runtime Estimates}
@@ -1435,11 +1433,11 @@ Which can be simplified to:
 \subsubsection{GPU Counting}
 
 
-The Equation \ref{eq:gpu} for the GPU is similar, the only difference being that we use the GPU memory bandwidth $B_{GPU}$ instead of the CPU bandwidth. Furthermore we have to consider the time it takes to send the data from the CPU to the GPU. This adds the terms size divided by CPU to GPU memory bandwidth denoted as $I_{GC}$. Finally we also need to load the data from the CPU memory to the CPU before we are able to send it. 
+The Equation \ref{eq:gpu} for the GPU is similar, the only difference being that we use the GPU memory bandwidth $B_{GPU}$ instead of the CPU bandwidth. Furthermore we have to consider the time it takes to send the data from the CPU to the GPU. This adds the terms size divided by CPU to GPU memory bandwidth denoted as $I_{GC}$.
 
 \begin{center}
 	\begin{equation}
-			\lceil log(d) \rceil \times \left ( p \times \frac{s}{B_{G}} +\max{  \frac{s}{I_{GC}}  + \frac{s}{B_{C}} )} \right )
+			\lceil log(d) \rceil \times \left ( p \times \frac{s}{B_{G}} +\frac{s}{I_{GC}} \right ) 
 		\label{eq:gpu}
 	\end{equation}
 \end{center}
@@ -1451,7 +1449,7 @@ We can also consider performing the partitioning on the GPU, this means that the
 
 \begin{center}
 	\begin{equation}
-		\lceil log(d) \rceil \times \left ( p \times \frac{s}{B_{G}} \right ) + \frac{s}{I_{GC}} + \frac{s}{B_{C}} = t
+		\lceil log(d) \rceil \times \left ( p \times \frac{s}{B_{G}} \right ) + \frac{s}{I_{GC}} = t
 		\label{eq:gputree}
 	\end{equation}
 \end{center}
@@ -1478,10 +1476,10 @@ The naive implementation yields the following speeds for the naive CPU  implemen
 
 
 And the corresponding GPU implementation:
-\pgfmathsetmacro\gpuPizN{ ln(1024) / ln(2) * (\p * \s / 732 + \s / 32 + \s / 68)}
+\pgfmathsetmacro\gpuPizN{ ln(1024) / ln(2) * (\p * \s / 732 + \s / 32)}
 \begin{center}
 	\begin{equation}
-		\lceil log(1024) \rceil \times \left ( 32 \times \frac{12 GB}{732 GB/s} + \frac{12 GB}{32 GB/s}  + \frac{12 GB}{68 GB/s} \right )=  \gpuPizN s
+		\lceil log(1024) \rceil \times \left ( 32 \times \frac{12 GB}{732 GB/s} + \frac{12 GB}{32 GB/s} \right )=  \gpuPizN s
 	\end{equation}
 \end{center}
 
@@ -1495,11 +1493,11 @@ This yields in a speed-up of:
 
 
 When considering the GPU Counting and Partitioning we end up with:
-\pgfmathsetmacro\gpuPizT{ ln(1024)/ln(2) * (\p * \s / 732)  + \s / 32 + \s / 68}
+\pgfmathsetmacro\gpuPizT{ ln(1024)/ln(2) * (\p * \s / 732)  + \s / 32}
 And the corresponding GPU implementation:
 \begin{center}
 	\begin{equation}
-		\lceil log(1024) \rceil \times \left ( \p \times \frac{\s GB}{732 GB/s} \right ) + \times \frac{\s GB}{32 GB/s}  + \frac{\s GB}{68 GB/s} = \gpuPizT s
+		\lceil log(1024) \rceil \times \left ( \p \times \frac{\s GB}{732 GB/s} \right ) + \times \frac{\s GB}{32 GB/s} = \gpuPizT s
 	\end{equation}
 \end{center}
 
@@ -1516,11 +1514,11 @@ This yields in a speed-up of:
 \pgfmathsetmacro\cpuSummit{ln(1024) / ln(2) * (\p * \s / (170 * 2)}
 \pgfmathsetmacro\gpuSummitN{ln(1024) / ln(2) * (
 	(\p * \s / (900 * 6) + 
-	\s / (50 * 6) + \s /(170 * 2)
+	\s / (50 * 6)
 	)}
 \pgfmathsetmacro\gpuSummitT{ln(1024) / ln(2) * 
 	(\p * \s / (900 * 6))
-	+  \s / (50 * 6) + \s /(170 * 2)}
+	+  \s / (50 * 6)}
 \pgfmathsetmacro\cpuEiger{ln(1024) / ln(2) * (\p * \s / (204.8 * 2)}
 
 
@@ -2398,10 +2396,9 @@ unsigned int * g_odata) {
 
 \subsection{GPU Accelerated Partitioning}
 
-We have successfully implemented a version with a GPU accelerated Count Left. Since the particles are still partitioned on the CPU, the data needs to be copied to GPU each time we expand the SPTDS by another . As we use the Make Axis service to compress the axes into a single array, we only need to copy $N$ elements, but we need to do so $\lceil \log_2 d \rceil$ times. 
+We have successfully implemented a version with a GPU accelerated Count Left. Since the particles are still partitioned on the CPU, the data needs to be copied to GPU each time we expand the SPTDS. As we use the Make Axis service to compress the axes into a single array, we only need to copy $N$ elements, but we need to do so $\lceil \log_2 d \rceil$ times. 
 If we partition the particles on the GPU, the data needs to be copied only once, but in this case all three coordinates have to be copied, thus $
-N \times 3$. Nevertheless this corresponds a fraction of the total data transfer: $\frac{3}{\lceil \log_2 d \rceil \times}$. In figure \ref{fig:transfer} its observable how after d reaches $d$ the number of bytes to be transferred are less after $d$ exceeds $2^3$.
-
+N \times 3$. Nevertheless this corresponds a fraction of the total data transfer: $\frac{3}{\lceil \log_2 d \rceil \times}$. In figure \ref{fig:transfer} its observable that a GPU partition becomes feasible, at least in terms of data transfer, after $d$ exceeds 16. 
 
 \begin{figure}[H]
 	\begin{center}
@@ -2412,7 +2409,7 @@ N \times 3$. Nevertheless this corresponds a fraction of the total data transfer
 				log basis x={2},
 				log basis y={2},
 				xlabel={d},
-				ylabel={N Bytes},
+				ylabel={$N \times$ Bytes},
 				%x filter/.code=\pgfmathparse{#1 + 6.90775527898214},
 				xmin = 1, xmax = 4096, ymin= 1, ymax=100,
 				legend style={at={(0.05,1.2)},anchor=west}]
@@ -2441,11 +2438,11 @@ N \times 3$. Nevertheless this corresponds a fraction of the total data transfer
 
 A GPU partitioning algorithm was first proposed by Cederman \cite{GPUQ} and later refined by Manca \cite{CUDAQ} where atomic operations are leveraged to improve the runtime of the algorithm. Our version is built around the concepts introduced by Manca. 
 
-Early results have shown partitioning the data on the GPU is not really faster than the CPU version where the CPU version is not even implemented in a optimal manner and finally the number of particles which can be stored on the GPU memory is reduced by $\frac{5}{3}$. This is caused by required additional temporary arrays for memory swaps on the GPU. Furthermore there was not enough time to fully optimize and track down all issues with the code, therefore we do not describe the full kernel code and instead limit ourselves to lay the ground work for subsequent work. 
+Early results have shown partitioning the data on the GPU is not really faster than the CPU version where the CPU version is not even implemented in a optimal manner and finally the number of particles which can be stored on the GPU memory is reduced by $\frac{5}{3}$. This is caused by required additional temporary arrays for memory swaps on the GPU. Furthermore there was not enough time to fully optimize and track down all issues with the code, therefore we do not describe the full kernel code and instead limit ourselves to introduce the ideas for subsequent work. 
 
 \subsubsection{Schedule}
 
-In the adapted schedule \ref{fig:orbgpu3} we can move the Copy Particles To GPU service out of the main loop, other than that the schedule remains the same. 
+In the adapted schedule (figure \ref{fig:orbgpu3}) we can move the Copy Particles To GPU service out of the main loop, other than that the schedule remains the same. 
 
 \begin{figure}[H]
 	\begin{center}
@@ -2481,7 +2478,7 @@ In the adapted schedule \ref{fig:orbgpu3} we can move the Copy Particles To GPU 
 		\end{tikzpicture}
 	\end{center}
 	\caption{Parallelized ORB with GPU counting and GPU partitioning}
-	\label{fig:orbgpup3}
+	\label{fig:orbgpu3}
 \end{figure}
 
 
@@ -2497,7 +2494,7 @@ In our case the input array are coordinate values of particles and the output ar
 
 As of now only a single axis is partitioned, but the same needs to be done for the other two axes. One approach is to partition all the other arrays in the same kernel, as the permutations can simply be reapplied. However in this case we need three additional temporary arrays, one for each axis. Further Reducing the number of particles which can be stored on the GPU by $\frac{1}{2}$. A more memory efficent, but slightly slower variant is to allocate another array on the GPU where the actual permutation indices are stored when the partition kernel is executed. Therefore together with the temporary array $N$ is only reduced by $\frac{3}{5}$. After the partition kernel has finished, we can copy back the coordinates from the temporary array to the original location in a device to device copy. Then the second axis is partitioned using the precomputed permutations and the results are again copied back to the proper location. Finally after the step is repeated for the last axis, the partition is finished.
 
-\subsubsection{Partitioning Multiple cells}
+\subsubsection{Partitioning Multiple Cells}
 
 We apply the same method as introduced in section \ref{imprctl} to ensure only a single kernel has to be launched for all cells. 
 Each block is assigned a cell, where all relevant information about the cell is stored in different arrays in global memory. Each block then read the designated data by acessing the arrays at index $blockIdx.x$. The variables $leq$ and $g$ are replaced by arrays of the same length as there are cells to be partitioned (which is not equivalent to the number of blocks). This ensures all the blocks assigned to a single cell perform the atomic operations on the same variable. For a block to know which element in the $leq$ and $g$ arrays it needs to access, a sequential cell index array is passed, where all blocks working on the same cell receive the same cell index. 
@@ -2543,7 +2540,9 @@ All measurements where performed on Piz Daint where the performance of system ca
 \end{figure}
 
 In figure \ref{fig:analy2} the final measurements are plotted. The total runtime of the ORB is around 43 seconds when performed only on the CPU, for the GPU accelerated version it comes down to 18 seconds. However a large part of the execution time can be attributed to the Partitioning, where its overhead remains equal for both versions. Even the CPU Partitioning can be improved a lot and the GPU version might increase the performance even further. 
-If we subtract the time lost for the partitioning, the GPU version is about $5.6$ times faster, which even slightly outperforms the expected speedup of $5.25$. The implemented version is able to outperform the theoretical model because of the way we have leveraged the streaming in CUDA, as soon as the data transfer from one processor to the GPU is done, the GPU can already start performing some work. Therefore some part of the data transfer costs can actually be hidden. This however does not explain the entire difference in absolute terms. However the theoretical model considers an upper bound for the total number of iterations which it the bisection method takes to converge. In reality this number is closer to 15 than to p which is 32 in the measured data. When considering this, the measurements are also in an absolute term quiet close to the theoretical model.  
+If we subtract the time lost for the partitioning, the GPU version is about $5.6$ times faster, which even slightly worse than the expected speedup of $6.2$. The difference can mostly be explained by additional overheads, especially as the GPU kernel has to touch the elements more than once due to the way the reduction was implemented. 
+
+When we look at the absolute number there is a stark difference: $56.47s$ predicted for the CPU version were $31.83$ was the actual timing. Similarly the GPU was expected to execute ORB (without the partitioning) in $8.99s$, however it only took $5.6s$. The theoretical model considers an upper bound for the total number of iterations which the bisection method takes to converge. In reality this number is closer to 20 than to $p$ which is 32 in the measured data. When considering this, the measurements are also in an absolute term relatively close to the theoretical model. $56.47s \times \frac{20}{32} = 37s$ against the actual $31.83s$ and $8.99s \times \frac{20}{32} =5.99s$ compared to $5.6s$.
 \subsection{Scaling}
 
 To make sure the GPU version scales good we have evaluated the total runtimes for 
@@ -2613,11 +2612,6 @@ To make sure the GPU version scales good we have evaluated the total runtimes fo
 	\caption{Execution times of different strategies}
 	\label{fig:analy}
 \end{figure}
-
-
-The total execution time is more than halfed. Note that this also includes the unoptimized partition part. If we repeat the plots but without the partition 
-
-\subsection{Comparison to Theoretical Model}
 
 \newpage
 \section{Conclusion}
