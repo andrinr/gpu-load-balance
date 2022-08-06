@@ -108,7 +108,7 @@ PkDGrav, as well as most state of the art simulation softwares, use a space part
 
 In mathematics, a multipole is a concept used to approximate the shape of a physical body. In our case the body consists of the particles contained within the subspace, or volume of a cell. The multipole expansion is the mathematical series that results from this approximation. The resulting series can simplify the original body, by choosing a suitable precision.
 
-To keep force integration within a reasonable error margin, in most cases it is not necessary to compute all $N$ to $N$ interactions. Particles far away are instead considered only as a part of the volume of the corresponding cell in the SPTDS and summarized with a multipole expansion. 
+To keep force integration within a reasonable error margin, in most cases it is not necessary to compute all $N$ to $N$ interactions. The fast multipole method can compute gravity in $O(N)$ runtime by leveraging the SPTDS. \cite{Stadel2001}
 
 On a more intuitive level, one can imagine a large cluster of objects far away from planet Earth. If we wish to compute the interactions between every single object of the cluster and Earth, we will need to perform $O(N^2)$ computations. However, since the object is reasonably far away, it does not make sense to compute every interaction. Instead, we summarize the cluster into a single object and compute the gravity acting between planet Earth and the group. Consequently, objects within our own solar system would be too close to planet Earth to approximate its effects using a multipole. In such cases, it is necessary to perform all computations, however they can be hidden within a constant and do not affect the total runtime. 
 Note that this example does not directly translate to the simulations, as a particle is not equivalent to a planet or a star. More on that in section \ref{sec:target-data}.
@@ -120,9 +120,10 @@ From \cite{Stadel2001}: "the opening radius of a cell is given by some constant 
 
 \subsection{ORB vs. K-d Trees}
 
+A number of methods exist to create SPTDS, however since we require each cell on the same depth of the tree to encompass an almost equal number of particles method like octrees are not suitable. The k-d tree construction method however is strikingly similar to the ORB method we are using, however there is a slight difference in the construction process. 
 The Orthogonal Recursive Bisection method constructs a SPTDS where all resulting cells represent subspaces, or volumes, similar to cubes. K-d construction methods generate SPTDS as well, but shapes of the resulting subspaces can be strongly skewed and are thus ill suited for FMM. Both algorithms start with a single cell and iteratively construct the SPTDS by searching for axis aligned planes cutting the volume of each leaf cell of the current SPTDS into two. From the resulting two volumes, two new cells are generated and appended to the SPTDS. 
 
-In k-d tree construction, the axis lying orthogonal to the cut plane is chosen periodically, meaning all cells with an equal distance (depth) to the root of the SPTDS are cut with planes orthogonal to the same axis. In the case of ORB, the axis where a cells volume is largest is picked to compute an orthogonal plane. Therefore cells with the same depth can have cut planes of variable orientations. 
+In k-d tree construction, the axis lying orthogonal to the cut plane is chosen periodically, meaning all cells with an equal distance (depth) to the root of the SPTDS are cut with planes orthogonal to the same axis. In the case of ORB, the axis where a cells volume is largest is picked to compute an orthogonal plane. Therefore cells with the same depth can have cut planes of variable orientations. This make ORB special as it combines a balanced distribution with near cubic shapes.  
 
 \subsection{Rise of the GPU}
 
@@ -338,10 +339,9 @@ A modified random Gaussian distributed is used to generate the target dataset, w
 
 
 \begin{itemize}
-	\item We define a particle as $par_i$  where $i \in \{0,...,N\}$. 
 	\item We define the space of binary numbers with a precision of $p$ as $\mathbb{B}_p$ where we have $a \in \mathbb{B}_p \Leftrightarrow a \in \{0,1\}^{p}$
 	\item We define the corner coordinates of root domain with $\vec{lower}, \vec{upper}$ where we have $\vec{lower}, \vec{upper} \in \mathbb{B}_p^3$. 
-	\item We define the coordinates of a particle $par_i$ as $\vec{x_i}$ for which holds $\{\vec{x} | \vec{lower} \leq \vec{x} \leq \vec{upper}, \vec{x} \in \mathbb{B}_p^3 \}$.
+	\item We define the coordinates of a particle $i$ as $\vec{x_i}$ for which holds $\{\vec{x} | \vec{lower} \leq \vec{x} \leq \vec{upper}, \vec{x} \in \mathbb{B}_p^3 \}$.
 	When refering to a single coordinate of a particle object we do so by writing $\vec{x}_{i,j}$. Finally the array of all particles positions in a single axis is denoted as $\vec{x}_{:,j}$. 
 	
 \end{itemize}
@@ -354,10 +354,10 @@ It lies in the nature of the universe, that large clusters of particles are foun
 			\randistr{10}{5}{100}
 			\draw (0,0) rectangle (10, 5);
 			\filldraw  (0,0) circle (3pt) node [anchor=west]{};
-			\node[yshift=0.3cm, xshift=-0.3cm] at (0,0) {$-\frac{b}{2}$};
+			\node[yshift=-0.3cm, xshift=-0.3cm] at (0,0) {$lower$};
 			
 			\filldraw  (10,5) circle (3pt) node [anchor=west]{};
-			\node[yshift=0.3cm, xshift=-0.3cm] at (10,5) {$\frac{b}{2}$};
+			\node[yshift=0.3cm, xshift=-0.3cm] at (10,5) {$upper$};
 		\end{tikzpicture}
 	\end{center}
 	\caption{Uniform random distribution of 3D coordinates in cube domain projected onto a 2d plane}
@@ -385,6 +385,12 @@ As we initialize our recursion with the root cell alone, it follows that $V_{roo
 When a cell is cut into two child cells, we refer to the children as $leftCell$ and $rightCell$. For any cell the following equations hold:
 
 \begin{center}
+	\begin{equation}
+		depth_{cell} = \lceil \log_2{d_{cell}} \rceil 
+	\end{equation}
+\end{center}
+
+\begin{center}
 	\begin{equation}\label{eq:v}
 		V_{cell} = V_{leftCell} \cup V_{rightChild}
 	\end{equation}
@@ -396,28 +402,19 @@ When a cell is cut into two child cells, we refer to the children as $leftCell$ 
 	\end{equation}
 \end{center}
 
-Defining $d_{cell}$ for each cell is especially important, since in some cases $d$ is a non power of two number, meaning some recursion paths terminate earlier. The larger portion of leaf cells are always allocated to the left cell, as this ensures that the final constructed tree is a nearly complete binary tree. 
+Defining $d_{cell}$ for each cell is especially important, since we want to ensure the final tree is a nearly complete binary tree. The way we define $d_{leftCell}$ and $d_{rightCell}$ we ensure that on the last level of tree the cells are filled from the left to the right. This way no gaps are present and the tree can be stored as a heap in an array. 
 
 \begin{center}
 	\begin{equation} \label{eq:d1}
-		d_{leftCell} = \left \lceil\frac{d_{cell}}{2} \right \rceil 
+		d_{leftCell} = \min \{ d_{cell} - 2^{depth_{cell} -2}, 2^{depth_{cell} - 1}\}
 	\end{equation}
 \end{center}
 
 \begin{center}
 	\begin{equation}  \label{eq:d2}
-		d_{rightCell} = d_{cell} - d_{leftCell}
+		d_{rightCell} = \max \{ d_{cell} - 2^{depth_{cell} -1}, 2^{depth_{cell} - 2}\}
 	\end{equation}
 \end{center}
-
-We can prove that the resulting tree is indeed a nearly complete binary with a case distinction:
-
-\begin{itemize}
-	\item \textbf{Case A:} $d_cell$ is divisible by two, then $	d_{rightCell} = d_{leftCell}$ and the tree is complete. 
-	\item \textbf{Case B:} $d_cell$ is not divisible by two, then $	d_{rightCell} + 1 = d_{leftCell}$. In this case... 
-\end{itemize}
-
-\Q{How to proof this?}
 
 Finally the number of particles encompassed in $V_{leftCell}$ and $V_{rigtCell}$ are defined as follows:
 
@@ -1442,7 +1439,7 @@ The Equation \ref{eq:gpu} for the GPU is similar, the only difference being that
 
 \begin{center}
 	\begin{equation}
-			\lceil log(d) \rceil \times \left ( p \times \frac{s}{B_{G}} +\max{ ( \frac{s}{I_{GC}}  + \frac{s}{B_{C}} )} \right )
+			\lceil log(d) \rceil \times \left ( p \times \frac{s}{B_{G}} +\max{  \frac{s}{I_{GC}}  + \frac{s}{B_{C}} )} \right )
 		\label{eq:gpu}
 	\end{equation}
 \end{center}
@@ -2496,23 +2493,20 @@ In theory the block wise partition could already be applied by storing each elem
 However our goal is to partition all elements across multiple blocks. To do so we introduce a global variable called $leq$ and $g$ where the total number of elements smaller equal and bigger than the cut are stored. Each time a block has computed both scans, the number of elements designated to the block smaller and larger than the cut are known. Thus a single thread of each block performs an atomic add on $leq$ and $g$ accordingly. $AtomicAdd()$ returns the old value of the variable. Therefore we can use and store it in two designated shared memory register $s_leq$ and $s_g$. 
 At this stage every thread in a block agrees on a value for $s_leq$ and $s_g$ the values can be treated as starting indices to store the block wise partitioned results in the output array. In this case however we store an element larger than the cut at position $i$ in location $A_i + s_leq$ and otherwise at $B_i = s_g$. 
 
-In our case the input array are coordinate values of particles and the output array is a temporary array of size $N$. The in an output array cannot be the same, meaning the partition cannot be performed in place, as doing so would result in elements that are overwritten before they are read by the thread assigned to it. This cannot be avoided as the relationship between the range of input data treated by a kernel and the output is not deterministic. Its dictated by the order, by which the kernel reach the $atomicAdd()$ statement. 
+In our case the input array are coordinate values of particles and the output array is a temporary array of size $N$. The in an output array cannot be the same as the partition cannot be performed in place. Doing so would result in elements that are overwritten before they are read by the thread assigned to it. This cannot be avoided with the proposed technique as the relationship between the range of input data treated by a kernel and the output is not deterministic. Its dictated by the order, by which the kernel reach the $atomicAdd()$ statement. 
 
-As of now only a single axis is partitioned, but the same needs to be done for the other two axes. One approach would be to partition all the other arrays in the same kernel, as the permutations can simply be reapplied. However in this case we need three additional temporary arrays, reducing the number of particles which can be stored on the GPU by $\frac{1}{2}$. A more memory efficent, but slightly slower variant is to allocate another array on the GPU where the actual permutation indices are stored. Therefore together with the temporary array $N$ is only reduced by $\frac{3}{5}$. After the partition kernel has finished, we can copy back the coordinates from the temporary array to the original location. Then the second axis is partitioned using the precomputed permutations and the results are again copied back to the proper location. Finally after the step is repeated for the last axis, the partition is finished.
+As of now only a single axis is partitioned, but the same needs to be done for the other two axes. One approach is to partition all the other arrays in the same kernel, as the permutations can simply be reapplied. However in this case we need three additional temporary arrays, one for each axis. Further Reducing the number of particles which can be stored on the GPU by $\frac{1}{2}$. A more memory efficent, but slightly slower variant is to allocate another array on the GPU where the actual permutation indices are stored when the partition kernel is executed. Therefore together with the temporary array $N$ is only reduced by $\frac{3}{5}$. After the partition kernel has finished, we can copy back the coordinates from the temporary array to the original location in a device to device copy. Then the second axis is partitioned using the precomputed permutations and the results are again copied back to the proper location. Finally after the step is repeated for the last axis, the partition is finished.
 
 \subsubsection{Partitioning Multiple cells}
 
-We apply the same method as introduced in section \ref{imprctl} to ensure only a single kernel has to be launched for all the cells. 
-Each block is assigned a cell, where all relevant information about the cell is stored in an array in global memory which can be read using the index $blockIdx.x$. The variables $leq$ and $g$ are replaced by array of the same length as there are cells to partitioned. Therefore all the blocks assigned to a single cell can perform the atomic operations on the same variable. 
-Finally when output 
-
-
+We apply the same method as introduced in section \ref{imprctl} to ensure only a single kernel has to be launched for all cells. 
+Each block is assigned a cell, where all relevant information about the cell is stored in different arrays in global memory. Each block then read the designated data by acessing the arrays at index $blockIdx.x$. The variables $leq$ and $g$ are replaced by arrays of the same length as there are cells to be partitioned (which is not equivalent to the number of blocks). This ensures all the blocks assigned to a single cell perform the atomic operations on the same variable. For a block to know which element in the $leq$ and $g$ arrays it needs to access, a sequential cell index array is passed, where all blocks working on the same cell receive the same cell index. 
 
 
 \newpage
 \section{Performance Analysis of ORB}\label{sec:empan}
 
-All measurements where performed on Piz Daint where the performance of system can be read from table \ref{fig:datapoints}. The supercomputer uses a slurm workload manager. Simple job script can be executed using $sbatch$. In our case we used a meta script which has the function of generating the actual job scripts for the desired parameters. 
+All measurements where performed on Piz Daint where the performance of system can be read from table \ref{fig:datapoints}. The supercomputer uses a slurm workload manager. \cite{Slurm} Simple job script can be executed using $sbatch$. In our case we used a meta script which has the function of modifying the actual job scripts for the desired parameters. 
 
 
 \begin{figure}[H]
