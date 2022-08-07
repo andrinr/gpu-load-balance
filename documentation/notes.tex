@@ -92,7 +92,7 @@ The N-Body technique has been used for decades to simulate the Universe to compa
 
 A common solution is to partition the space, in which the particles are contained, into a set of subspaces, also called cells. These cells are then stored in a space partitioning tree data structure (SPTDS) in order to speed up the simulation with the Fast Multipole Method (FMM) to $O(n)$. 
 Building the data structure uses a significant percentage of the overall simulation time. As of now this was usually done on the CPU, not leveraging GPU acceleration. 
-In this thesis we establish upper limits for the speedup of GPU accelerated SPTDS building algorithms over its CPU only counterpart. We then propose, implement and compare efficient methods of building the SPTDS on the CPU and the GPU.
+In this thesis an upper limit for the speedup of GPU accelerated SPTDS building algorithms over its CPU only counterpart is established. An efficient methods of building the SPTDS on the CPU and the GPU is then proposed and implemented in C++ and CUDA.
 
 \TODO{Describe measurement results here}
 
@@ -110,7 +110,7 @@ In mathematics, a multipole is a concept used to approximate the shape of a phys
 
 To keep force integration within a reasonable error margin, in most cases it is not necessary to compute all $N$ to $N$ interactions. The fast multipole method can compute gravity in $O(N)$ runtime by leveraging the SPTDS. \cite{Stadel2001}
 
-On a more intuitive level, one can imagine a large cluster of objects far away from planet Earth. If we wish to compute the interactions between every single object of the cluster and Earth, we will need to perform $O(N^2)$ computations. However, since the object is reasonably far away, it does not make sense to compute every interaction. Instead, we summarize the cluster into a single object and compute the gravity acting between planet Earth and the group. Consequently, objects within our own solar system would be too close to planet Earth to approximate its effects using a multipole. In such cases, it is necessary to perform all computations, however they can be hidden within a constant and do not affect the total runtime. 
+On a more intuitive level, one can imagine a large cluster of objects far away from planet Earth. To compute the interactions between every single object of the cluster and Earth, $O(N^2)$ have to be computed computations. However, since the object is reasonably far away, it does not make sense to compute every interaction. Instead, the cluster can be summarized into a single object and compute the gravity acting between planet Earth and the group. Consequently, objects within our own solar system would be too close to planet Earth to approximate its effects using a multipole. In such cases, it is necessary to perform all computations, however they can be hidden within a constant and do not affect the total runtime. 
 Note that this example does not directly translate to the simulations, as a particle is not equivalent to a planet or a star. More on that in section \ref{sec:target-data}.
 
 
@@ -120,7 +120,7 @@ From \cite{Stadel2001}: "the opening radius of a cell is given by some constant 
 
 \subsection{ORB vs. K-d Trees}
 
-A number of methods exist to create SPTDS, however since we require each cell on the same depth of the tree to encompass an almost equal number of particles method like octrees are not suitable. The k-d tree construction method however is strikingly similar to the ORB method we are using, however there is a slight difference in the construction process. 
+A number of methods exist to create SPTDS, however since each cell on the same depth of the tree is required to encompass an almost equal number of particles, methods like octrees are not suitable as they do not produce balanced groups. The k-d tree construction method however is strikingly similar to the ORB method, however there is a slight difference in the construction process. 
 The Orthogonal Recursive Bisection method constructs a SPTDS where all resulting cells represent subspaces, or volumes, similar to cubes. K-d construction methods generate SPTDS as well, but shapes of the resulting subspaces can be strongly skewed and are thus ill suited for FMM. Both algorithms start with a single cell and iteratively construct the SPTDS by searching for axis aligned planes cutting the volume of each leaf cell of the current SPTDS into two. From the resulting two volumes, two new cells are generated and appended to the SPTDS. 
 
 In k-d tree construction, the axis lying orthogonal to the cut plane is chosen periodically, meaning all cells with an equal distance (depth) to the root of the SPTDS are cut with planes orthogonal to the same axis. In the case of ORB, the axis where a cells volume is largest is picked to compute an orthogonal plane. Therefore cells with the same depth can have cut planes of variable orientations. This make ORB special as it combines a balanced distribution with near cubic shapes.  
@@ -139,7 +139,7 @@ The computational effort required in PKDGrav and most modern astrophysical N-Bod
 
 In PKDG each category is about one third of the total calculation time\cite{Stadel2001}. Making Global (1.) and Local Tree Building (2.) subjects to possible performance improvements, as GPU acceleration is as of now only exploited in Force Calculation and Integration(3.).
 
-Our main objective is to improve the runtime of astrophysical simulations, or more specifically PKDGrav. Simultaneously penalties with regards to $N$, the total number of particles, should be kept as low as possible. Simulation accuracy benefits from large $N$ as well as an increased number of time steps. As GPU accelerations act on a low level, hardware specific details are relevant. We want do adapt and optimize the algorithms with regards to the target computer Piz Daint.
+Our main objective is to improve the runtime of astrophysical simulations, or more specifically PKDGrav. Simultaneously penalties with regards to $N$, the total number of particles, should be kept as low as possible. Simulation accuracy benefits from large $N$ as well as an increased number of time steps. As GPU accelerations are low level, hardware specific details are relevant. Thus the algorithms should be adapted and optimized the algorithms with regards to the target hardware Piz Daint.
 
 
 \subsection{Related Work}
@@ -147,7 +147,7 @@ Our main objective is to improve the runtime of astrophysical simulations, or mo
 
 A number of GPU accelerated k-d tree construction algorithms exists, however the methods cannot simply be translated to ORB due to different axis choosing method. Fore example in the master thesis of Voglsam \cite{rrt} a k-d tree is computed on the GPU and used to improve ray tracing for 3D graphics. However it makes use of a binning algorithm to find an optimal cut across cells of the same depth, which can be done in a single iteration. However in our case the axes for cells of the same depth vary.
 
-When we subdivide ORB into its individual components as shown below, some subroutines can be computed using fairly general algorithms, which have already been implemented and optimized for the GPU in many open source libraries. 
+When subdividing ORB into its individual components as shown below, some subroutines can be computed using fairly general algorithms, which have already been implemented and optimized for the GPU in many open source libraries. 
 
 \begin{outline}[enumerate]
 	\1 Cut cells on last level in tree
@@ -159,143 +159,10 @@ When we subdivide ORB into its individual components as shown below, some subrou
 \end{outline}
 
 Thrust by \textit{NVIDIA} \cite{thrust} has an implementation of a reduction, which can be used to perform step 1.b), a binary search is equivalent to the entire step 1. and finally it also exposes a partition interface. The library is very high level and does not allow us to control memory operations, which are very crucial to a highly efficient implementation of ORB. 
-Furthermore CUB \cite{cub}, also developed by \textit{NVIDIA}, exposes a more low level API of the equivalent elements but the implementation is not general enough to deal with some critical performance issues. As the SPTDS grows, so do the number of leaf cells and thus the number of cells for which a cut plane has to be found in the same iteration. If we initialize a kernel for each cell, the number of kernels initialized grow exponentially, resulting in kernel invocation overheads dominating the actual computational costs.
+Furthermore CUB \cite{cub}, also developed by \textit{NVIDIA}, exposes a more low level API of the equivalent elements but the implementation is not general enough to deal with some critical performance issues. As the SPTDS grows, so do the number of leaf cells and thus the number of cells for which a cut plane has to be found simultaneously. When initializing a kernel for each cell, the number of kernels initialized grow exponentially, resulting in kernel invocation overheads dominating the actual computational costs. The problem is almost equivalent to a \textit{Device Segmented Reduce}\cite{cubSeg} where CUB provides an API, however unfortunately the reduction operator is set to be the same across all segments, which is not true in this case as for each cell the particle coordinates are compared to a different value. 
 
 
 \newpage
-
-
-%After the SPTDS is built, we compute the multipole for all cells in the tree. This allows us to dynamically select more or less detailed functions to represent a group of particles. Depending on the distance between the particle we want to determine the forces for and the particles which exert the forces, we might choose a higher or lower multipole expansion.
-
-\begin{comment}
-\subsection{Procedure Overview}
-
-When a simulation is initialized, all data is distributed randomly among the nodes. With regards to particle positions, the target data is initially unstructured, therefore we have no way distribute the particles in a better way. As we want to leverage FMM we need to compute a SPTDS across all nodes. 
-
-The SPTDS has to be recomputed each time after force integration is computed.  Some particles may have crossed their cell boundaries during the process, violating the very constraint that all particles "owned" by a cell are contained within its volume. There are smarter ways to update the tree, which include more relaxed constraints, we will not focus on updating strategies and simply recompute the entire tree after each time step.
-
-Depicted below is an illustration giving a high level overview over the necessary steps required to perform the load balancing. 
-
-\begin{enumerate}
-	\item 
-	The simulation data is generated and located on a central storage device.
-	
-	\pgfmathsetseed{10}
-	\begin{figure}[H]
-		\begin{center}
-			\begin{tikzpicture}
-				\foreach \i in {1,...,80}{
-					\filldraw [red] (rnd*\linewidth*0.5,rnd*\linewidth*0.5) circle (1pt) node [anchor=west]{};
-				}
-				\draw (0,0) rectangle (\linewidth*0.5, \linewidth*0.5);
-			\end{tikzpicture}
-		\end{center}
-		\caption{Initial data with particles}
-	\end{figure}
-	\item
-	Since the data is initially unstructured, is is distributed randomly among the nodes in the super computer.
-	\pgfmathsetseed{10}
-	\begin{figure}[H]
-		\begin{center}
-			\foreach \j in {1,...,4}{
-				\begin{minipage}[c]{0.2\linewidth}
-					\begin{tikzpicture}
-						\foreach \i in {1,...,20}{
-							\filldraw [red] (rnd*\linewidth,rnd*\linewidth) circle (1pt) node [anchor=west]{};
-						}
-						\draw (0,0) rectangle (\linewidth, \linewidth);
-					\end{tikzpicture}
-				\end{minipage}
-			}
-		\end{center}
-		\caption{Particles are randomly distributed among 4 nodes}
-	\end{figure}
-	\item
-	 The SPTDS is constructed with ORB. The tree is computed globally across all nodes, meaning the volumes of the individual cell are identical for all nodes.
-	\pgfmathsetseed{10}
-	\begin{figure}[H]
-		\begin{center}
-			\foreach \j in {1,...,4}{
-				\begin{minipage}[c]{0.2\linewidth}
-					\begin{tikzpicture}
-						\foreach \i in {1,...,20}{
-							\filldraw [red] (rnd*\linewidth,rnd*\linewidth) circle (1pt) node [anchor=west]{};
-						}
-						\draw (0,0) rectangle (\linewidth, \linewidth);
-						
-						\draw (0,0) rectangle (\linewidth*0.55, \linewidth);
-						
-						\draw (0,0) rectangle (\linewidth*0.55, \linewidth*0.6);
-						
-						\draw (\linewidth*0.55,0) rectangle (\linewidth, \linewidth*0.5);
-						
-					\end{tikzpicture}
-				\end{minipage}
-			}
-		\end{center}
-		\caption{Space partitioning tree data structure is computed}
-	\end{figure}
-	
-	\item
-	In a final step the particles are redistributed among the nodes, such that each node stores all particles contained in the volume of a unique cell.
-	\begin{figure}[H]
-		\begin{center}
-			\pgfmathsetseed{10}
-			\begin{minipage}[c]{0.2\linewidth}
-				\begin{tikzpicture}
-					\foreach \i in {1,...,80}{
-						\filldraw [red] (rnd*\linewidth,rnd*\linewidth) circle (1pt) node [anchor=west]{};
-					}
-					\draw[fill=white] (0,0) rectangle (\linewidth*0.55,  \linewidth*0.6);
-					\draw[fill=white] (\linewidth*0.55,0) rectangle (\linewidth,  \linewidth*0.5);
-					\draw[fill=white] (0,\linewidth*0.6) rectangle (\linewidth*0.55,  \linewidth);
-					\draw (\linewidth*0.55,\linewidth*0.5) rectangle (\linewidth,  \linewidth);
-					
-				\end{tikzpicture}
-			\end{minipage}
-			\pgfmathsetseed{10}
-			\begin{minipage}[c]{0.2\linewidth}
-				\begin{tikzpicture}
-					\foreach \i in {1,...,80}{
-						\filldraw [red] (rnd*\linewidth,rnd*\linewidth) circle (1pt) node [anchor=west]{};
-					}
-					\draw[fill=white] (0,0) rectangle (\linewidth*0.55,  \linewidth*0.6);
-					\draw[fill=white] (\linewidth*0.55,0) rectangle (\linewidth,  \linewidth*0.5);
-					\draw (0,\linewidth*0.6) rectangle (\linewidth*0.55,  \linewidth);
-					\draw[fill=white] (\linewidth*0.55,\linewidth*0.5) rectangle (\linewidth,  \linewidth);
-					
-				\end{tikzpicture}
-			\end{minipage}
-			\pgfmathsetseed{10}
-			\begin{minipage}[c]{0.2\linewidth}
-				\begin{tikzpicture}
-					\foreach \i in {1,...,80}{
-						\filldraw [red] (rnd*\linewidth,rnd*\linewidth) circle (1pt) node [anchor=west]{};
-					}
-					\draw[fill=white] (0,0) rectangle (\linewidth*0.55,  \linewidth*0.6);
-					\draw (\linewidth*0.55,0) rectangle (\linewidth,  \linewidth*0.5);
-					\draw[fill=white] (0,\linewidth*0.6) rectangle (\linewidth*0.55,  \linewidth);
-					\draw[fill=white] (\linewidth*0.55,\linewidth*0.5) rectangle (\linewidth,  \linewidth);
-				\end{tikzpicture}
-			\end{minipage}	
-			\pgfmathsetseed{10}
-			\begin{minipage}[c]{0.2\linewidth}
-				\begin{tikzpicture}
-					\foreach \i in {1,...,80}{
-						\filldraw [red] (rnd*\linewidth,rnd*\linewidth) circle (1pt) node [anchor=west]{};
-					}
-					\draw (0,0) rectangle (\linewidth*0.55,  \linewidth*0.6);
-					\draw[fill=white] (\linewidth*0.55,0) rectangle (\linewidth,  \linewidth*0.5);
-					\draw[fill=white] (0,\linewidth*0.6) rectangle (\linewidth*0.55,  \linewidth);
-					\draw[fill=white] (\linewidth*0.55,\linewidth*0.5) rectangle (\linewidth,  \linewidth);
-				\end{tikzpicture}
-			\end{minipage}
-		\end{center}
-		\caption{Leaf cells of data structure are distributed among nodes}
-	\end{figure}
-\end{enumerate}
-\end{comment}
-
 
 \newpage
 \section{Orthogonal Recursive Bisection (ORB)} \label{section:orb}
@@ -316,33 +183,14 @@ Naturally each cell has two pointers pointing to its two children, which are use
 
 \subsection{Target Data and Notation}\label{sec:target-data}
 
-\begin{comment}
-The target data consists of $N$ particles where we use the following notations:
-
-constrained realization
-Gaussian random distribution, modified to match the measured power.
-
-The higher the resolution the more accurate the result.
-
-Large scales are more uniform, small scale 
-
-smallest thing you want to be able to resolve. 
-
-boxes around a giga parsec
-
-want to be able to resolve galaxies, milky way 10^12 solar masses,
-
-want to be able to resolve smaller galaxies, 10^8 for a single particle
-Imp 
-\end{comment}
 A modified random Gaussian distributed is used to generate the target dataset, where its set to fit measured constraints of the actual universe. Thus the number of particles can set dynamically. In the simulation, a single particle has a mass of $10^8$ solar masses. 
 
 
 \begin{itemize}
-	\item We define the space of binary numbers with a precision of $p$ as $\mathbb{B}_p$ where we have $a \in \mathbb{B}_p \Leftrightarrow a \in \{0,1\}^{p}$
-	\item We define the corner coordinates of root domain with $\vec{lower}, \vec{upper}$ where we have $\vec{lower}, \vec{upper} \in \mathbb{B}_p^3$. 
-	\item We define the coordinates of a particle $i$ as $\vec{x_i}$ for which holds $\{\vec{x} | \vec{lower} \leq \vec{x} \leq \vec{upper}, \vec{x} \in \mathbb{B}_p^3 \}$.
-	When refering to a single coordinate of a particle object we do so by writing $\vec{x}_{i,j}$. Finally the array of all particles positions in a single axis is denoted as $\vec{x}_{:,j}$. 
+	\item The space space of binary numbers with a precision of $p$ is defined as $\mathbb{B}_p$ where $a \in \mathbb{B}_p \Leftrightarrow a \in \{0,1\}^{p}$
+	\item The corner coordinates of the root volume are defined as $\vec{lower}, \vec{upper}$ where $\vec{lower}, \vec{upper} \in \mathbb{B}_p^3$. 
+	\item The coordinates of a particle $i$ are defined as $\vec{x_i}$ for which holds $\{\vec{x} | \vec{lower} \leq \vec{x} \leq \vec{upper}, \vec{x} \in \mathbb{B}_p^3 \}$.
+	When refering to a single coordinate of a particle object, it is done by writing $\vec{x}_{i,j}$. Finally the array of all particles positions in a single axis is denoted as $\vec{x}_{:,j}$. 
 	
 \end{itemize}
 
@@ -365,24 +213,24 @@ It lies in the nature of the universe, that large clusters of particles are foun
 
 
 \subsection{Memory and Workload Balancing}\label{balancing}
-As mentioned we want to (1) improve the runtime of ORB whilst (2) at the same time keeping the number of particles $N$ as large as possible. There exists some averse effects when disregarding interactions between minimizing runtime and maximizing $N$.
+As mentioned the aim is to (1) improve the runtime of ORB whilst (2) at the same time keeping the number of particles $N$ as large as possible. There exists some averse effects when disregarding interactions between minimizing runtime and maximizing $N$.
 
 To reduce the force integration error across all particles, some particles require more timesteps than others. This is caused by the vastly variant forces which are exerted on the particles. Whilst some follow a straight path with an almost constant velocity requiring little computational effort for great precision, others are influenced by strong gravitational poles resulting in highly curved movement paths and correlating with higher numbers of timesteps required.
 
-We denote the workload for a particle $p_i$ as the weighting function $w(p_i)$. The workload correlates with the number of simulations steps, that need to be computed for a single particle. In an optimally parallelized system balanced in terms of computational effort, the workload should be very similar among computing units. Where ideally the sum over all the particles considered by a thread is equal to the sum of all others. With strongly varying weights among particles, perfectly balancing the computational effort, results in a unbalanced distribution in terms of memory. 
+The workload for a particle $p_i$ is defined as the weighting function $w(p_i)$. The workload correlates with the number of simulations steps, that need to be computed for a single particle. In an optimally parallelized system balanced in terms of computational effort, the workload should be very similar among computing units. Where ideally the sum over all the particles considered by a thread is equal to the sum of all others. With strongly varying weights among particles, perfectly balancing the computational effort, results in a unbalanced distribution in terms of memory. 
 
-Let us consider a simple example to illustrate the point. Given the set of particles $A = \{p_1, p_2, .., p_{2m/3}\}$ and respectively $B = \{p_{2m/3 + 1}, p_2, .., p_{m}\}$. This yields a total number of particles equivalent to $N = m$. We assuming that $\forall p \in A : w(p) = 1$ and $\forall p \in B : w(p) = 2$. 
-We assign all particles from set $A$ to process with rank 0 and the particles from B to rank 1. It follows $\sum_{p\in A} w(p) = \sum_{p\in B} w(p)$. Thus the two processors are balanced in terms of computing costs, but not in terms of memory size. In fact, process with rank 0 has $2m/3$ elements and rank 1 has $m/3$ elements. Assuming each process has a memory size of $2m/3$, then clearly this configuration is not optimal. If we were to favor memory balancing, we could assign $2m/3$ to each processor and we would be able process $(4/3) \times m$ particles in total, which is larger than the original $N$ and therefore favorable since a dataset with a larger $N$ could be used.
+Let us consider a simple example to illustrate the point. Given the set of particles $A = \{p_1, p_2, .., p_{2m/3}\}$ and respectively $B = \{p_{2m/3 + 1}, p_2, .., p_{m}\}$. This yields a total number of particles equivalent to $N = m$. Assuming that $\forall p \in A : w(p) = 1$ and $\forall p \in B : w(p) = 2$. 
+All particles from set $A$ are assigned to processor rank 0 and the particles from B to rank 1. It follows $\sum_{p\in A} w(p) = \sum_{p\in B} w(p)$. Thus the two processors are balanced in terms of computing costs, but not in terms of memory size. In fact, process with rank 0 has $2m/3$ elements and rank 1 has $m/3$ elements. Assuming each process has a memory size of $2m/3$, then clearly this configuration is not optimal. When favoring memory balancing, $2m/3$ could be assigned to each processor and $(4/3) \times m$ as many particles could be processed in total, which is larger than the original $N$ and therefore favorable.
 
-To which degree its ideal favor memory over workload balancing is difficult to answer. For now parametrize the workload using the weighting function. If we decide to completely ignore the workload balancing and solely focus on memory balancing, we can simply set $w(p_i) = 1$ for all particles.
+To which degree its ideal favor memory over workload balancing is difficult to answer. For now parametrize the workload using the weighting function. The workload balancing can also be completely ignored by setting $w(p_i) = 1$ for all particles.
 
 \subsection{ORB}
 
 
-To introduce the ORB algorithm, we consider a recursive implementation of ORB as it is easier to understand than the iterative version. We define all cell properties recursively, allowing us to describe the algorithm in detail and derive the necessary constraints.
+To introduce the ORB algorithm, a recursive implementation of ORB is considered as it is easier to understand than the iterative version. All cell properties are defined recursively.
 
-As we initialize the recursion with the root cell alone, it follows that $V_{root}$ is equivalent to entire volume of the input data. $d_{cell} = d$ and $N_{root} = N$ are true per definition of $N$ and $d$. 
-When a cell is cut into two child cells, we refer to the children as $leftCell$ and $rightCell$. For any cell the following equations hold:
+As the recursion is initialized with the root cell alone, it follows that $V_{root}$ is equivalent to entire volume of the input data. $d_{cell} = d$ and $N_{root} = N$ are true per definition of $N$ and $d$. 
+When a cell is cut into two child cells, the children are refereed to as $leftCell$ and $rightCell$. For any cell the following equations hold:
 
 \begin{center}
 	\begin{equation}
@@ -402,7 +250,7 @@ When a cell is cut into two child cells, we refer to the children as $leftCell$ 
 	\end{equation}
 \end{center}
 
-Defining $d_{cell}$ for each cell is especially important, since we want to ensure the final tree is a nearly complete binary tree. The way we define $d_{leftCell}$ and $d_{rightCell}$ we ensure that on the last level of tree the cells are filled from the left to the right. This way no gaps are present and the tree can be stored as a heap in an array. 
+Defining $d_{cell}$ for each cell is especially important, since its crucial to ensure the final tree is a nearly complete binary tree. The way $d_{leftCell}$ and $d_{rightCell}$ is defined, guarantees that on the last level of tree the cells are filled from the left to the right. This way no gaps are present and the tree can be stored as a heap in an array. 
 
 \begin{center}
 	\begin{equation} \label{eq:d1}
@@ -430,11 +278,11 @@ Finally the number of particles encompassed in $V_{leftCell}$ and $V_{rigtCell}$
 	\end{equation}
 \end{center}
 
-To simplify the visual and numeric explanation of the ORB algorithm, we assume $\forall i \in \{0,..,N\} : w(p_i) = 1$.
+To simplify the visual and numeric explanation of the ORB algorithm, its assumed assume $\forall i \in \{0,..,N\} : w(p_i) = 1$.
 
 The cut plane, which divides $V_{leftCell}$ and $V_{rightCell}$ is axis aligned an thus orthogonal to a given axis $a$. Thus searching for a single value $c$ is sufficient to construct the plane, where $c$ is the position of the plane along the axis $a$. The plane is considered ideal if the number of particles where $x_{i,a} \leq c$ are equivalent to $N_{leftCell}$. 
 
-After a plane is found, we can divide or cut the $V_{cell}$ in two volumes, where $V_{leftCell}$ and $V_{rightCell}$ are constrained by the original $V_{cell}$ and the cut plane. As defined in equation \ref{eq:v2} the volumes do not intersect, thus $V_{leftCell}$ along axis $a$ ends at $c$, where $V_{rightCell}$ start at $c$.
+After a plane is found, the $V_{cell}$ can be divided or cut in two volumes, where $V_{leftCell}$ and $V_{rightCell}$ are constrained by the original $V_{cell}$ and the cut plane. As defined in equation \ref{eq:v2} the volumes do not intersect, thus $V_{leftCell}$ along axis $a$ ends at $c$, where $V_{rightCell}$ start at $c$.
     
   
 \subsubsection{Algorithm}
@@ -442,8 +290,9 @@ After a plane is found, we can divide or cut the $V_{cell}$ in two volumes, wher
 Algorithm \ref{proc:orbmain} as mentioned below, is the main routine of ORB. All the volumes are described using a lower and an upper boundary point, sufficiently describing a box, thus the only input parameters required is $x$ storing the particles positions, $lower$, $upper$ and finally $d$.
 If $d$ is equal to 1, this means the reduction must not be continued, as the target of a single subsequent leaf cell is already reached, since the cell itself is treated as a leaf cell. The stopping condition is formulated on lines 2-4. 
 Line 6 describes a call to a method called $maxIndex()$, which essentially compares all provided values and returns the index of the maximum values. The result $i$ provides us with the axis where the cell volume is largest. 
-$d_{leftCell}$ is computed as described in equation \ref{eq:d1} and its results is stored in a variable named $d^\prime$. All prerequisites are met to compute the actual cut with the $cut$ method which we will explain in more detail in section \ref{sec:root}. The return value stored in $cut$ is equivalent to the position of the cut plane along the cut axis. Using the $cut$ value, the array of particles is partitioned as described in \ref{sec:part} returning the $mid$ value which is the pivot index of the partitioning.
-Finally we can divide the original volume into two volumes as described on lines 10-13 and recursively call $ORB$ method where we provide it with two slices of the $x$ array.
+$d_{leftCell}$ is computed as described in equation \ref{eq:d1} and its results is stored in a variable named $d^\prime$. All prerequisites are met to compute the actual cut with the $cut$ method which will be explained in more detail in section \ref{sec:root}. The return value stored in $cut$ is equivalent to the position of the cut plane along the cut axis. Using the $cut$ value, the array of particles is partitioned as described in \ref{sec:part} returning the $mid$ value which is the pivot index of the partitioning.
+Finally the original volume can be subdivided into two volumes as described on lines 10-13 and recursively call $ORB$ method passing it two slices of the $x$ array.
+\TODO{Adapt lines numbers}
 
 \begin{algorithm}[H]
  	\begin{algorithmic}[1]
@@ -514,8 +363,7 @@ A sample dataset is proposed to help with visual and numerical explanations of t
 	0.9,0.3,6
 \end{filecontents*}
 
-We explore the algorithm visually using the provided example dataset:
-
+The algorithm is explained visually using the following example data set:
 
 \begin{figure}[H]
 	\begin{center}
@@ -640,7 +488,7 @@ Depicted in figure \ref{fig:orb1} \&  \ref{fig:orb11} is the SPTDS after initial
 \end{figure}
 A cut plane, which translates to a cut line in our simplified 2D example is constructed and $cell_2$ and $cell_3$ are generated accordingly.
 
-\ref{fig:orb2} \&  \ref{fig:orb22} Depict a SPTDS of depth 2, or two levels, where a cut plane was found dividing $V_{cell_1}$ into $V_{cell_2}$ and $V_{cell_3}$, $d_{cell_2} = 2$ and $d_{cell_3} = 1$ subsequently are calculated, meaning $cell_3$ is considered a leaf cell. Thus we can compute $N_{cell_2}$ using a simplified version of equation \ref{eq:N1} since we assume all weights are equal 1: $N_{cell_2} = \lfloor \frac{d_{cell_2}}{d_{cell_3}} * N_{cell_1} \rfloor = \lfloor \frac{2}{3}  * 7 \rfloor = 4$ subsequently $N_{cell_3} = 3$. 
+\ref{fig:orb2} \&  \ref{fig:orb22} Depict a SPTDS of depth 2, or two levels, where a cut plane was found dividing $V_{cell_1}$ into $V_{cell_2}$ and $V_{cell_3}$, $d_{cell_2} = 2$ and $d_{cell_3} = 1$ subsequently are calculated, meaning $cell_3$ is considered a leaf cell. Thus $N_{cell_2}$ can be computed using a simplified version of equation \ref{eq:N1} since all weights are assumed to be 1: $N_{cell_2} = \lfloor \frac{d_{cell_2}}{d_{cell_3}} * N_{cell_1} \rfloor = \lfloor \frac{2}{3}  * 7 \rfloor = 4$ subsequently $N_{cell_3} = 3$. 
 
 \begin{figure}[H]
 	\begin{center}
@@ -688,29 +536,24 @@ A cut plane, which translates to a cut line in our simplified 2D example is cons
 	\caption{Tree with ORB at recursion depth 2}
 \end{figure}
 
-Again the procedure is repeated for $cell_2$ but not for $cell_3$ as there recursion is terminated by the stopping condition. Finally we end up with $cell_4$ and $cell_5$ where the stopping condition is met as well. The resulting SPTDS has 3 leaf cells and partitions the space into three subspaces.
-
-%Since $d_{cellLeft} - d_{cellRight}$ must always be $\leq 1$, it must hold that the tree is a nearly complete binary tree. Therefore we can conclude that the height of the tree is equal to $\lceil log(d) \rceil$ and the total number of nodes (not only leaf nodes) is $log(d) \times d$. Since we have a nearly complete binary tree, we also have the possibility of storing it as a heap\cite{algorithms} data-structure in an array.  This increase the performance of many tree operations, since we will not have to perform a tree walk to access individual cells in the tree. Furthermore child an parent cells can be accessed without pointers but directly by computing their index in the array.
+Again the procedure is repeated for $cell_2$ but not for $cell_3$ as there recursion is terminated by the stopping condition. Finally $cell_4$ and $cell_5$ is computed, where the stopping condition is met as well. The resulting SPTDS has 3 leaf cells and partitions the space into three subspaces.
 
 
 \subsection{Root finding} \label{sec:root}
 
 
-%Finding the median of a large particle array is an essential step for ORB. We will thus explore different algorithms alongside their advantages and disadvantages for our specific use case.
-%Note that there exists approximation algorithms for example the median of medians algorithms. But the correctness guarantee of the median lying between 30\% and 70\% is not good enough in our case. If we were to implement such an approximation algorithms we would run into similar issues as described in \ref{sec:balancing}. But in this case the unequal memory balancing do not have the advantage of equal workload balancing, which in turn will worsen the performance and the maximum number of workable particles. Thus we will only consider approximation algorithms, if their approximation to the ideal values are very exact and can be determined.
-
-
 The $cut$ algorithm takes an array of particle positions $x$, an $axis$, $left$ and $right$ boundaries and a $percentage$. Its goal is to return a position along the cut axis such that the particles less or equal to the a $cut$ value are equivalent to the percentage multiplied by the length of the $x$ array.
 
-The problem is related to a selection algorithm and a quick select\cite{algorithms} could be used. However quick select has a worst case runtime of $O(n^2)$. Furthermore median algorithms could be explored as well, but they are mostly approximation algorithms with bad worst case runtimes. We can reformulate the problem as a root finding problem. To do so we define a function $f(c)$ which evaluates the number of elements smaller than the cut value minus half the number of total particles. When the function evaluates to zero, we have found an axis aligned cut plane, where exactly half the particles are located on the left side. There exist many different solvers for the root-finding problem, but the most stable and easiest to implement is the bisection method. Some solver combine approximate solver with the stable bisection method to generate fast but stable root finding methods. Such algorithms could be explored in later work.
+The problem is related to a selection algorithm and a quick select\cite{algorithms} could be used. However quick select has a worst case runtime of $O(n^2)$. Furthermore median algorithms could be explored as well, but they are mostly approximation algorithms with bad worst case runtimes. The problem can be reformulated as a root finding problem. To do so a function $f(c)$ is defined which evaluates the number of elements smaller than the cut value minus half (or any other desired percentage) the number of total particles. When the function evaluates to zero, a an axis aligned cut plane is found, where exactly half the particles are located on the left side. There exist many different solvers for the root-finding problem, but the most stable and easiest to implement is the bisection method. Some solver combine approximate solver with the stable bisection method to generate fast but stable root finding methods. Such algorithms could be explored in later work.
 
-Since we are operating on binary numbers with a limited precision, the bisection method is guaranteed to terminate after $p$ steps.
+Since the algorithm operates on binary numbers with a limited precision, the bisection method is guaranteed to terminate after $p$ steps.
 
 \subsubsection{Bisection Method}
 
 Initially an estimation for a cut is made, in this case the exact middle of the domain boundaries. Some median finding algorithms use improved guessing to speed up the process, again a method which could be leveraged in later work. 
 
-Because the maximal number of iterations is known, a loop can be used as seen below in algorithm \ref{proc:cut} on line 4. A cut is then computed (line 5), which in the first iteration is the center position between left and right. We then check weather the stopping condition has already been reached (line 7-9), meaning the cut lies within $\alpha$ points of the ideal result. If it was not reached the boundaries can be improved as follows: In case there are too many elements left of the cut, we know that the cut position was chosen too far to the right and we can be sure that the ideal cut must be left of the current guess. Therefore we adjust the boundaries, in this case we set $righ$ equal to $cut$ as seen on line 13. The analog concept can be applied in the other case (line 11). 
+
+Because the maximal number of iterations is known, a loop can be used as seen below in algorithm \ref{proc:cut} on line 4. A cut is then computed (line 5), which in the first iteration is the center position between left and right. It is then checked whether the stopping condition has already been reached (line 7-9), meaning the cut lies within $\alpha$ points of the ideal result. If it was not reached, the boundaries can be improved as follows: In case there are too many elements left of the cut, it is known that the cut position was chosen too far to the right and it follows that the ideal cut must be left of the current guess. Therefore, the boundaries can be adjusted, in this case by setting $righ$ equal to $cut$ as seen on line 13. The analogous concept can be applied in the other case (line 11). 
 
 \begin{algorithm}[H]
 		\begin{algorithmic}[1]
@@ -756,19 +599,19 @@ Let us consider the following example particle distribution where $particle_1$ a
 	\end{center}
 \end{figure}
 
-In this case there exists no ideal cut in the x (horizontal) axis. As either there is 1 particle to the left or 3, but no cut can result in 2 particles to the left. If we keep adding particles along the same line, the method performs even worse. However since the algorithm uses a deterministic for loop, the algorithm will terminate anyways and puts either 3 particles to the left or the right.
+In this case there exists no ideal cut in the x (horizontal) axis. As either there is 1 particle to the left or 3, but no cut can result in 2 particles to the left. If more particles are added along the same line, the method performs even worse. However since the algorithm uses a deterministic for loop, the algorithm will terminate anyways and puts either 3 particles to the left or the right.
 
 \subsubsection{Runtime Analysis}
 
 On line 5, the number of particles to the left of the cut plane are summed. As the array is unordered, all coordinates of one axis need to be read once, resulting in a runtime of $O(N)$. All other operations inside the for loop can be computed in a negligible constant time. The loop itself is repeated $p$ number of times, where $p$ corresponds to the precision of $x$ coordinates.
 
-To proof that the loop concludes after $p$ iterations we assume integer numbers. With each iteration the range of possible solutions is divided by two. The same goes for integer numbers, each time a bit is removed, the size of the range of numbers which can be represented is reduced by two. Thus after $p$ iterations the precision limit is reached and the cut cannot be improved.
+To proof that the loop concludes after $p$ iterations for integer numbers. With each iteration the range of possible solutions is divided by two. The same goes for integer numbers, each time a bit is removed, the size of the range of numbers which can be represented is reduced by two. Thus after $p$ iterations the precision limit is reached and the cut cannot be improved. The proof does not hold analogously for float numbers as the precision is uniformly distributed there, however its also limited. 
 
 \subsection{Partition Algorithm}\label{sec:part}
 
-We want to continuously update the array storing the positions of the particles and in the words used before, have a direct correlation between $x_i$ and $i$. This enables grouping particles within a cell in a fixed range of two indexes of the particles array. The advantages of this are two fold: Access all particles within a cell in constant time, manipulate particles within a cell using a slice of the array. 
+Its desired to continuously update the array storing the positions of the particles and in the words used before, have a direct correlation between $x_i$ and $i$. This enables grouping particles within a cell in a fixed range of two indexes of the particles array. The advantages of this are two fold: Access all particles within a cell in constant time, manipulate particles within a cell using a slice of the array. 
 
-As seen in the pseudo code in algorithm \ref{proc:part}, the algorithm looks for a pair of particles, where for both the coordinate along the relevant axis are  on the wrong side of the cut plane. In this case the particles can be swapped (line 8) resulting in the correct position of both particles. We refer to \cite{algorithms} for a correctness proof and a more detailed explanation of the algorithm. 
+As seen in the pseudo code in algorithm \ref{proc:part}, the algorithm looks for a pair of particles, where for both the coordinate along the relevant axis are  on the wrong side of the cut plane. In this case the particles can be swapped (line 8) resulting in the correct position of both particles. Correctness and a more detailed explanation of the algorithm can be found in the book  \cite{algorithms}. \TODO{citations}
 
 \algnewcommand\And{\textbf{and} }
 
@@ -794,9 +637,9 @@ As seen in the pseudo code in algorithm \ref{proc:part}, the algorithm looks for
 \label{proc:part}
 \end{algorithm}
 
-A runtime of $O(N)$ can be derived, as the algorithm iterates over all particles once. Since we need to touch each element at least once to partition the entire array there exists no better method.
+A runtime of $O(N)$ can be derived, as the algorithm iterates over all particles once. Since each element in the array needs to be touched at least once to partition the entire array there exists no better method.
 
-Lets apply the algorithm to our running example. We start with our initial array of particles as follows:
+Applying the algorithm to the running example looks as follows:
 
 \begin{figure}[H]
 	\begin{center}
@@ -808,7 +651,7 @@ Lets apply the algorithm to our running example. We start with our initial array
 	\end{center}
 \end{figure}
 
-We then partition the particles with a cut in the x axis set to 0.65 as seen in figure \ref{fig:orb2}.
+The particles are then partitioned with a cut in the x axis set to 0.65 as seen in figure \ref{fig:orb2}.
 
 \begin{figure}[H]
 	\begin{center}
@@ -820,7 +663,7 @@ We then partition the particles with a cut in the x axis set to 0.65 as seen in 
 	\end{center}
 \end{figure}
 
-Finally we partition $cell_2$ into $cell_4$ and $cell_5$ with the cut position 0.55 along the y axis as seen in figure \ref{fig:orb2}. We end up with the following array:
+Finally $cell_2$ is cut divided into $cell_4$ and $cell_5$ with the cut position 0.55 along the y axis as seen in figure \ref{fig:orb2} ending up with:
 
 \begin{figure}[H]
 	\begin{center}
@@ -838,13 +681,13 @@ Note how all particles from $cell_4$ are contained in the range of 0-1. The part
 \newpage
 \section{Theoretical Analysis}
 
-The main goal of this thesis, is to improve the runtime of the ORB algorithm by leveraging the graphics processing unit over the central processing unit. Before implementing, it makes sense to explore if and how strong the performance benefits could in theory manifest itself. For this purpose we develop a simplified model, which we use to compare the CPU version against two different GPU variants. As GPU programming is very low level, the knowledge gained while developing the model also builds a solid theoretical foundation.
+The main goal of this thesis, is to improve the runtime of the ORB algorithm by leveraging the graphics processing unit over the central processing unit. Before implementing, it makes sense to explore if and how strong the performance benefits could in theory manifest itself. For this purpose a simplified model is proposed, which is used to compare the runtime of the CPU version against two different GPU variants. As GPU programming is very low level, the knowledge gained while developing the model also builds a solid theoretical foundation.
 
 \subsection{General Memory Model}\label{sec:gmm}
 
-For a consistent terminology of a computer, we briefly establish a general computing model, which can be applied to most modern high performance systems. We are looking at a single node and its hardware components, a supercomputer may have thousands of these computers linked together where different bandwidth are seen between individual nodes.
-
-Both the CPU and the GPU have their own memory which are connected by a data link, where the the connections are bound by the memory bandwidths. We name the capacity of the CPU memory bandwidth $B_{CPU}$ and the GPU memory bandwidth $B_{GPU}$. There is a separate data link between the CPU and the GPU memory, which is commonly referred to as PCI express or NVLink (for modern \textit{NVIDIA} GPU`s, in our model we use the term $I_{GC}$. In systems with multiple CPU there is a link between the individual CPU's which we denote as $I_{CC}$. Finally we call the link between GPUs as $I_{GG}$.
+For a consistent terminology of a computer, a general computing model, which can be applied to most modern high performance systems. The model reflects a single node and its hardware components, a supercomputer may have thousands of these nodes linked together where different bandwidth are seen between individual nodes.
+However the internodal communication and parallelization is not important in this work.
+Both the CPU and the GPU have their own memory which are connected by a data link, where the the connections are bound by the memory bandwidths. The capacity of the CPU memory bandwidth is named $B_{CPU}$ and the GPU memory bandwidth $B_{GPU}$. There is a separate data link between the CPU and the GPU memory, which is commonly referred to as PCI express or NVLink (for modern \textit{NVIDIA} GPU`s, here the simplified term $I_{GC}$ is used. In systems with multiple CPU there is a link between the individual CPU's which is denoted as $I_{CC}$. Finally the data link between GPU's is referred to as $I_{GG}$.
 
 \begin{figure}[H]
 	\begin{center}
@@ -1012,7 +855,7 @@ Both the CPU and the GPU have their own memory which are connected by a data lin
 
 \subsection{Supercomputers}
 
-For Piz Daint, Summit and Eiger we have collected all relevant hardware metrics and compiled it into the table seen in table \ref{fig:datapoints}. Piz Daint and Eiger were chosen, because we have the possibility to test the Code on its systems. Furthermore we include Summit as its is at the time of writing this thesis, one of the most capable supercomputers in the world.
+For Piz Daint, Summit and Eige all relevant hardware metrics were collected and compiled to table \ref{fig:datapoints}. Piz Daint and Eiger were chosen, because the systems can be used to test the code. Furthermore Summit is included as it is, at the time of writing this thesis, one of the most capable supercomputers in the world.
 
 \small
 \begin{table}[H]
@@ -1050,7 +893,7 @@ For Piz Daint, Summit and Eiger we have collected all relevant hardware metrics 
 
 \subsection{Roofline Performance Model} \label{sec:roof}
 
-In a first step we determine weather our computations are bound by memory bandwidth or the actual performance of the computing unit. The most costly computation is line 6 of the cut method (figure \ref{proc:cut}) with a runtime of $O(32 \times N)$. Oftentimes when an algorithm iterates over a large dataset performing only very little calculations on its individual elements, the limiting factor is the memory. To support this claim make roofline models for all three systems and check weather they are really memory bound. A roofline model compares arithmetic intensity in flops per byte against the actual performance of the computing chip in flops. Therefore we need to gather all the relevant data first.
+In a first step it is determined weather our computations are bound by memory bandwidth or the actual performance of the computing unit. The most costly computation is line 6 of the cut method (figure \ref{proc:cut}) with a runtime of $O(32 \times N)$. Oftentimes when an algorithm iterates over a large dataset performing only very little calculations on its individual elements, the limiting factor is the memory. To support this claim make roofline models for all three systems and check weather they are really memory bound. A roofline model compares arithmetic intensity in flops per byte against the actual performance of the computing chip in flops. 
 
 \subsubsection{Estimating Flops}
 
@@ -1058,7 +901,7 @@ For modern hardware, its fairly uncommon to release flops (floating point operat
 
 For most modern CPU chip architectures AVX is the fastest SIMD instruction set available. The common AVX2 enables the processing of 8 floating point operations per instruction with a  CPI (cycles per instructions) of 0.5. The CPI can also vary depending on chip architecture, but to our knowledge all relevant CPU's from figure \ref{fig:datapoints} indeed support a CPI of 0.5 along with AVX2. A lower CPI results in a higher efficiency, as several instructions can be completed in a single cycle. 
 
-We define in equation \ref{eq:avx}, a function to estimate the number of gigaflops for a given hardware. We define GHZ as the gigahertz which can be reached by the CPU, meanwhile $NF$ is the number of floats which can be processed simultaneously using AVX. $CPI$ is as mentioned the cycles per instructions for the AVX instruction set. Finally we have $np$ which is the number of processors, where we assume a perfect parallelization, meaning 100\% of the code can be parallelized.
+Equation \ref{eq:avx} defines a function to estimate the number of gigaflops for a given hardware. GHZ is the number of gigahertz which can be reached by the CPU, meanwhile $NF$ is the number of floats which can be processed simultaneously using AVX. $CPI$ is as mentioned the cycles per instructions for the AVX instruction set. Finally $np$ represents the number of processors, where a perfect parallelization is assumed, meaning 100\% of the code can be parallelized.
 
 \begin{center}
 	\begin{equation}
@@ -1067,7 +910,7 @@ We define in equation \ref{eq:avx}, a function to estimate the number of gigaflo
 \label{eq:avx}
 \end{center}
 
-Since we have peak flops benchmarks available for the \textit{NVIDIA} P100 and V100s we do not need to make any estimations on the GPU side.
+Since peak flops benchmarks are available for \textit{NVIDIA} P100 and V100s no estimations need to be made on the GPU side.
 
 \subsubsection{Estimating Arithmetic Intensity}
 
@@ -1077,7 +920,7 @@ Arithmetic intensity is measured in FLOPS per byte or the number of floating poi
 	for(auto p= startPtr; p<endPtr; ++p) nLeft += *p < cut;
 \end{lstlisting}
 
-Where $p$ is a C-style array which stores the particles position and $nLeft$ stores the number of particles which are smaller than $cut$. We can list the operations per loaded float:
+Where $p$ is a C-style array which stores the particles position and $nLeft$ stores the number of particles which are smaller than $cut$. The operations per loaded float can be listed as follows:
 
 \begin{enumerate}
 	\item Compare particle to cut
@@ -1088,13 +931,13 @@ Where $p$ is a C-style array which stores the particles position and $nLeft$ sto
 
 Which results in a total of 4 operations. Since a single float is stored using 4 bytes, this computes to 1.0 operations per byte or an arithmetic intensity of four. 
 
-Estimating the arithmetic intensity for the GPU is a lot more complicated as it can vary a lot depending on the specific implementation details. But for now we will just assume the same arithmetic intensity as we have had for the CPU.
+Estimating the arithmetic intensity for the GPU is a lot more complicated as it can vary a lot depending on the specific implementation details. But for now the same arithmetic intensity is assumed for both CPU and GPU. 
 
-Note that SIMD instructions do not influence the arithmetic intensity, as the number of floating point operations per byte remains the same. We simply perform a set of operations concurrently. What is however influenced by AVX, is the maximum number of GFLOPS which can be processed by the hardware. If we were to ignore AVX, the algorithm would clearly not be bound by memory, as its performance would lack behind the memory bandwidth. For this reason it is important to consider SIMD instructions.
+Note that SIMD instructions do not influence the arithmetic intensity, as the number of floating point operations per byte remains the same. It just means that a set of operations is executed concurrently. What is however influenced by AVX, is the maximum number of GFLOPS which can be processed by the hardware. If AVX was ignored, the algorithm would clearly not be bound by memory, but by the much lower performance of the processing unit. For this reason it is important to consider SIMD instructions.
 
 \subsubsection{The Plots}
 
-Lets us compute the maximally achievable gflops for Piz Daint. To do so, we plug in the corresponding datapoints from figure \ref{fig:datapoints} into the formula \ref{eq:avx} for $np = 1, 2$ and $3$.
+The maximally achievable gflops for Piz Daint are computed as follows: The datapoints from figure \ref{fig:datapoints} are plugged into the formula \ref{eq:avx} for $np = 1, 2$ and $3$.
 
 \begin{center}
 	\begin{equation}
@@ -1117,7 +960,7 @@ Lets us compute the maximally achievable gflops for Piz Daint. To do so, we plug
 	\label{eq:daintp3}
 \end{center}
 
-The results are depicted as horizontal lines in \ref{fig:roofdaint}. The memory bandwidth is plotted as a line with an equivalent slope. Finally we add a dotted line representing the arithmetic intensity of the Count Left procedure. 
+The results are depicted as horizontal lines in \ref{fig:roofdaint}. The memory bandwidth is plotted as a line with an equivalent slope. Finally a dotted line represents the arithmetic intensity of the Count Left procedure. 
 To interpret the roofline mode, one has to follow the dotted line starting from the bottom. Weather it intersect with line representing the maximal performance or the memory bandwidth first, gives an indication weather the program is performance or memory bound. 
 
 \begin{figure}[H]
@@ -1354,9 +1197,9 @@ Finally alps, which has the highest memory bandwidth compared to its flops, also
 
 \subsubsection{Empirical Verification}
 
-We consider a minimal C++ code to verify the theoretical model. We use the -S flag along with the g++ compiler to generate assembly code from the c++ source code and make sure that AVX commands are enabled. For testing purposes all entries in the array are set to random values between 0 and 1, and cut is set to 0.5.
+A minimal C++ code is considered to verify the theoretical model. The -S flag along with the g++ compiler is used to generate assembly code from the c++ source code. For testing purposes all entries in the array are set to random values between 0 and 1, and cut is set to 0.5.
 
-In a first test, we do not enable AVX, but turn on $O3$. The generated assembly code is depicted in listing \ref{assembler}.
+In a first test, only $O3$ is enabled. The generated assembly code is depicted in listing \ref{assembler}.
 
 \begin{lstlisting}[language=c++, caption=Reduction Assembler Code without AVX, label=assembler]
 .L18:
@@ -1369,9 +1212,9 @@ In a first test, we do not enable AVX, but turn on $O3$. The generated assembly 
 
 \end{lstlisting}
 
-$psubd$ is a packaged instruction, meaning it already uses some form of SIMD instructions. The command is used in the MME and later the SSE2 instruction set. Since we can observe that the $xmm$ registers are used, we know its a SSE2 instruction. 
+$psubd$ is a packaged instruction, meaning it already uses some form of SIMD instructions. The command is used in the MME and later the SSE2 instruction set. Since the $xmm$ registers are used, is follows that it is an AVX instruction.\ref{assembler-avx}.
 
-If we additionally set the compile flag -march=native we end up with the instructions as depicted in listing \ref{assembler-avx}.
+If the compile flag $-march=native$ is added, the instructions as depicted in listing \ref{assembler-avx} are the result of the compilation.
 
 \begin{lstlisting}[language=c++, caption=Reduction Assembler Code with AVX2, label=assembler-avx]
 .L19:
@@ -1384,26 +1227,22 @@ If we additionally set the compile flag -march=native we end up with the instruc
 
 \end{lstlisting}
 
-We can identify $vmovups$, $vcomplpts$ and $vpsubd$ which are AVX commands. Since they are using the ymm instead of the xmm registers, we know these are AVX2 and not AVX commands.
+$vmovups$, $vcomplpts$ and $vpsubd$ are AVX2 commands since they are using the $ymm$ registers.
 
-The following results were obtained on $2^{27}$ particles with a thread count of 16 on Piz Daint. The reduction takes 2.3 milliseconds, resulting in a throughput of $2^{27} / 10^{9} * 10^3 / 2.3 = 58 gflops$. This is close to the memory bandwidth (68 GB/s) and far below the performance maximum of the CPU, which even for ($np = 1$) is $3.8 * 8 * 2 * 1 * 16 = 972.8 gflops$. Thus we conclude that the algorithm is memory bound for the CPU and most probably memory bound for the GPU. 
+The following results were obtained on $2^{27}$ particles with a thread count of 16 on Piz Daint. The reduction takes 2.3 milliseconds, resulting in a throughput of $2^{27} / 10^{9} * 10^3 / 2.3 = 58 gflops$. This is close to the memory bandwidth (68 GB/s) and far below the performance maximum of the CPU, which even for ($np = 1$) is $3.8 * 8 * 2 * 1 * 16 = 972.8 gflops$. Thus the algorithm is assumed to be memory bound for the CPU and most probably memory bound for the GPU. 
 
 
 \subsection{Runtime Estimates}
 
-We construct runtime estimation for the CPU version and two different GPU implementations. In the first GPU implementation \textit{GPU Counting}, we simply send an array of particles to the GPU, where counting is then performed. In a more advanced variant \textit{GPU Counting and Partitioning} we send the particles from the CPU to GPU only once and perform the partitioning on the GPU as well.  
+A runtime estimation for the CPU version and two different GPU implementations is constructed. In the first GPU implementation \textit{GPU Counting}, an array of particles is sent to the GPU, where counting is then performed. In a more advanced variant \textit{GPU Counting and Partitioning} the particles are sent from the CPU to GPU only once and the partitioning is performed on the GPU as well.  
 
-We assume a precision $p$ of 32, which is general standard for both integers and floats and its a sensible assumption for astrophysical simulations. The total storage required for all particle positions is $32 \times 3 \times N bits = 4 \times 3 \times N Bytes = 12 \times N Bytes$. Furthermore we assume $d = 1024$ and $N=10^9$.
+A precision $p$ of 32 is assumed, which is general standard for both integers and floats and its a sensible assumption for astrophysical simulations. The total storage required for all particle positions is $32 \times 3 \times N bits = 4 \times 3 \times N Bytes = 12 \times N Bytes$. Furthermore $d = 1024$ and $N=10^9$ are assumed.
  
 \subsubsection{CPU Version}
 
+Each time the leaf cells of the SPTDS are split into two child cells and appended to the tree, the tree ends up with twice the number of cells. As the goal is to construct a tree with $d$ leaf cells, the cut algorithm needs to be performed $\lceil log_2(d) \rceil$ times over all leaf cells. 
 
-Whilst the number of cells increases each time the tree depth is increased, simultaneously the number of particles to be iterated over decreases. Thus the amount of cells which are to be iterated cancels out and we end up with the size of all particles $s$ divide by the memory bandwidth $B_C$.  
-
-
-Each time the leaf cells of the SPTDS are split into two child cells and appended to the tree, we end up with twice the number of leaf cells. Considering we want to end up with $d$ leaf cells in the end, we need to perform the cut algorithm $\lceil log_2(d) \rceil$ times for all leaf cells. 
-
-Consequently we sum over all $\lceil log_2(d) \rceil$ iterations, where in each iteration a cut has to be found for $i$ cells. The cut itself is found in $p$ iterations, where the actual array of particles is each time we grow the SPTDS by a level. As only the memory bandwidth is considered, we divide the size of the particles to be iterated over.
+Consequently the runtime estimate sums over all $\lceil log_2(d) \rceil$ iterations, where in each iteration a cut has to be found for $i$ cells. The cut for a single cell is found in $p$ iterations, where the number of particle to be iterated over for a single cell is divided by two in each iteration. 
 
 \begin{center}
 	\begin{equation}
@@ -1412,7 +1251,7 @@ Consequently we sum over all $\lceil log_2(d) \rceil$ iterations, where in each 
 	\end{equation}
 \end{center}
 
-$i$ cancels out from the equation and we end up with:
+$i$ cancels out from the equation and the equation becomes:
 
 \begin{center}
 	\begin{equation}
@@ -1433,7 +1272,7 @@ Which can be simplified to:
 \subsubsection{GPU Counting}
 
 
-The Equation \ref{eq:gpu} for the GPU is similar, the only difference being that we use the GPU memory bandwidth $B_{GPU}$ instead of the CPU bandwidth. Furthermore we have to consider the time it takes to send the data from the CPU to the GPU. This adds the terms size divided by CPU to GPU memory bandwidth denoted as $I_{GC}$.
+The Equation \ref{eq:gpu} for the GPU is similar, the only difference being that  GPU memory bandwidth $B_{GPU}$ is used instead of the CPU bandwidth. Furthermore the additional overhead of sending the data from the CPU to the GPU has to be reflected. This adds the terms size divided by CPU to GPU memory bandwidth denoted as $I_{GC}$.
 
 \begin{center}
 	\begin{equation}
@@ -1445,7 +1284,7 @@ The Equation \ref{eq:gpu} for the GPU is similar, the only difference being that
 
 \subsubsection{GPU Counting and Partitioning}\label{gpu-tree-building}
 
-We can also consider performing the partitioning on the GPU, this means that there is no need to send data from the CPU to GPU each time we want to find a cut, allowing us to reduce the costly overheads. This means that we are able to move the corresponding terms out of the brackets. 
+Another variant is to performing the partitioning on the GPU, meaning there is no need to send data from the CPU to GPU each time a cut needs to be found. This allows for a reduction of the costly overheads introduced by the rather slow bandwidth $I_{GC}$. The overhead can be moved out of the bracket as the transfer needs to happen only once before. 
 
 \begin{center}
 	\begin{equation}
@@ -1492,7 +1331,7 @@ This yields in a speed-up of:
 \end{center}
 
 
-When considering the GPU Counting and Partitioning we end up with:
+When considering the GPU Counting and Partitioning the results are:
 \pgfmathsetmacro\gpuPizT{ ln(1024)/ln(2) * (\p * \s / 732)  + \s / 32}
 And the corresponding GPU implementation:
 \begin{center}
@@ -1522,77 +1361,10 @@ This yields in a speed-up of:
 \pgfmathsetmacro\cpuEiger{ln(1024) / ln(2) * (\p * \s / (204.8 * 2)}
 
 
-\begin{comment}
-
-\subsection{Summit}
-
-Let us plugin the values from Figure \ref{fig:datapoints} into the corresponding formulas \ref{eq:cpu}, \ref{eq:gpu}, \ref{eq:cputree} and \ref{eq:gputree}.
-
-\subsubsection{Naive implementation}
-The naive implementation yields the following speeds for the naive CPU  implementation:
-
-
-\begin{center}
-	\begin{equation}
-		log(1024) \times \left ( \p \times \frac{ \s GB }{170 GB/s \times 2} \right ) = \cpuSummit s
-	\end{equation}
-\end{center}
-
-And the corresponding GPU implementation:
-
-\begin{center}
-	\begin{equation}
-		log(1024) \times \left ( \p \times \frac{\s GB}{900 GB/s \times 6} + \frac{\s GB}{50 GB/s \times 6}  + \frac{\s GB}{170 GB/s \ \times 2} \right )= \gpuSummitN s
-	\end{equation}
-\end{center}
-
-This yields in a speed-up of:
-\pgfmathsetmacro\speedup{\cpuSummit / \gpuSummitN}
-\begin{center}
-	\begin{equation}
-		\frac{\cpuSummit s}{\gpuSummitN s} = \speedup \times 
-	\end{equation}
-\end{center}
-
-
-\subsubsection{GPU Tree Building}
-
-And the corresponding GPU implementation:
-
-\begin{center}
-	\begin{equation}
-		log(1024) \times \left ( \p \times \frac{\s GB}{900 GB/s \times 6} \right ) + \frac{\s GB}{50 GB/s \times 2}  + \frac{\s GB}{170 GB/s \times 2} = \gpuSummitT s
-	\end{equation}
-\end{center}
-
-This yields in a speed-up of:
-\pgfmathsetmacro\speedup{\cpuSummit / \gpuSummitT}
-\begin{center}
-	\begin{equation}
-		\frac{\cpuSummit s}{\gpuSummitT s} = \speedup \times
-	\end{equation}
-\end{center}
-
-
-\vspace{5mm}
-
-
-\subsection{Eiger}
-
-\pgfmathsetmacro\cpuEiger{ln(1024) / ln(2) * (\p * \s / (204.8 * 2)}
-
-\begin{center}
-	\begin{equation}
-		\log(1024) \times \p \times \frac{ \s GB }{204.8 GB/s \times 2} = \cpuEiger s
-	\end{equation}
-\end{center}
-
-\end{comment}
-
 \subsection{Conclusion}
 
  
-The computations for Eiger and Summit can analogously to the ones from Piz Daint. For Eiger we cannot make any assumption for a GPU version as its CPU only system. All the results are plotted in \ref{fig:exectimes}. As expected the GPU Counting outperforms the CPU version on both hybrid (CPU and GPU available )super computers. Furthermore GPU Counting and Partitioning yields more performance improvements, but the speed up is less drastic. As the model may differ from reality depending in implementation and compilation details, these results cannot be taken for granted and we will compare the results with actual empirical observations in section \ref{sec:empan}. 
+The computations for Eiger and Summit can analogously to the ones from Piz Daint. Eiger is non hybrid, thus only estimates for a CPU version are computed. All the results are plotted in \ref{fig:exectimes}. As expected the GPU Counting outperforms the CPU version on both hybrid (CPU and GPU available )super computers. Furthermore GPU Counting and Partitioning yields more performance improvements, but the speed up is less drastic. As the model may differ from reality depending in implementation and compilation details, these results cannot be taken for granted but offer a good baseline of what is possible. 
 
 \begin{figure}[H]
 	\begin{center}
@@ -1635,13 +1407,13 @@ The computations for Eiger and Summit can analogously to the ones from Piz Daint
 \newpage
 \section{CPU Implementation}
 
-In this section we describe the stand-alone implementation of the ORB algorithm using CPU acceleration only. Building on the CPU version, we later introduce GPU accelerated alternatives to selected parts of the code. 
+In this section the stand-alone implementation of the ORB algorithm using CPU acceleration only is described. Building on the CPU version, GPU accelerated alternatives to selected parts of the code are proposed. 
 
-We develop somewhat separately from the PKDGrav codebase in order to keep the project smaller and more easy to understand. However we make use of the machine dependent layer (MDL) from PKDGrav, which is used to distribute the workload among processors. This reduces the complexity of the implementation and we do not have to worry about communication methods and CPU parallelism too much. Furthermore it makes integration into PKDGrav simple. Note that processors might be located in different nodes, but MDL is general enough to abstract node and processor level communication and parallelization away.
+The code is developed somewhat separately from the PKDGrav codebase in order to keep the project smaller and more easy to understand. However the machine dependent layer (MDL) from PKDGrav is used, which provides a system to distribute the workload among processors. This reduces the complexity of the implementation and communication methods and CPU parallelism are abstracted away from the code. Furthermore it makes integration into PKDGrav simple. Note that processors might be located in different nodes, but MDL is general enough to abstract node and processor level communication and parallelization away.
 
-We refrain from describing each part of the code in detail, however any details crucial to performance are described. Furthermore, we will pay special attention to the CUDA kernels and also memory management strategies for several reasons: minor implementation details can have a big impact upon the performance and increased replicability.
+Not every part of the code is described in detail, however any details crucial to performance are outlined. Furthermore, special attention is paid to the CUDA kernels and memory management strategies for two reasons: minor implementation details can have a big impact upon the performance and increased replicability.
 
-For this project we will use C++ 17 along with CUDA 11.3, OpenMPI 4.1.0 and Blitz++ 1.0.2 \cite{blitzcpp}. 
+For this project C++ 17 along with CUDA 11.3, OpenMPI 4.1.0 and Blitz++ 1.0.2  \cite{blitzcpp} is used. 
 
 \subsection{MDL and PKDGrav}
 
@@ -1654,17 +1426,17 @@ Each processor has its own local data, which can be accessed by calling $pst->lc
 
 \subsection{Particles}
 
-The particles array has ownership over all particle objects. It has a (N,3) shape where each row represents a single particle. To enable coalesced memory access when iterating over a single axis i.e. $x_{:, axis}$, we choose a column major storage order, over a row major storage order. Even though row accesses patterns i.e. $x_{i,:}$ are used as well, they happen less frequently. Most importantly there are cases where entire section of a row have to copied, which is by magnitude faster with row major storage.
+The particles array has ownership over all particle objects. It has a (N,3) shape where each row represents a single particle. To enable coalesced memory access when iterating over a single axis i.e. $x_{:, axis}$, a column major storage order is chosen. Even though row accesses patterns i.e. $x_{i,:}$ are used as well, they happen less frequently. Most importantly there are cases where entire section of a row have to copied, which is by magnitude faster with row major storage.
 
-We use C-style arrays interchangeably with Blitz++ arrays to store all particles. Blitz++ is an open source wrapper class around C-style arrays, which helps with pointer management and can speed up the debugging process by keeping track of the array boundaries. Furthermore it features array slicing and does its own memory management. In certain cases we need to access the actual C-style array, which can be accessed with $array.data()$. For example when iterating over the Blitz++ array, we have observed compiled assembly code  which does not reflect the latest SIMD instructions.
+We use C-style arrays interchangeably with Blitz++ arrays to store all particles. Blitz++ is an open source wrapper class around C-style arrays, which helps with pointer management and can speed up the debugging process by keeping track of the array boundaries. Furthermore it features array slicing and does its own memory management. In certain cases the actual C-style array needs to be accessed, which can be accessed with $array.data()$. For example when iterating over the Blitz++ array, non optimal assembly code was observed, not reflecting optimal SIMD instructions available to the hardware. 
 
 The particle data is loaded into the local data storage of each processor, meaning each processor owns a different unique set of particles.
 
 \subsection{Cell}
 
-The cell class is a structure keeping track of the fundamental cell information. In essence it is the analogue to the concept of the $cell$ which we have already introduced in section \ref{section:orb}.
+The cell class is a structure keeping track of the fundamental cell information. In essence it is the analogue to the concept of the $cell$ which has been introduced in section \ref{section:orb}.
 
-Quickly building and accessing elements of the SPTDS generated by ORB requires a suitable data structure. Instead of a tree with pointers, we can use a heap since the necessary conditions for a nearly complete binary tree are met. Elements within a heap can be accessed and added in constant runtime. Depicted in figure \ref{fig:treeheap} is the finished SPTDS of the sample dataset stored as a heap.
+Quickly building and accessing elements of the SPTDS generated by ORB requires a suitable data structure. Instead of a tree with pointers, a heap can be used since the necessary conditions for a nearly complete binary tree are met. Elements within a heap can be accessed and added in constant runtime. Depicted in figure \ref{fig:treeheap} is the finished SPTDS of the sample dataset stored as a heap.
 
 The SPTDS and thus the cells are constructed on the master alone, cells are only distributed when dispatching services on the PST.
 
@@ -1702,10 +1474,10 @@ The SPTDS and thus the cells are constructed on the master alone, cells are only
 An array can be used as an efficient storage medium for the heap, since in our case $d$ can be set at compile time and the maximum number of cells in the SPTDS can be derived from that. Meaning the array can be allocated statically.
 Because MDL communicates data as arrays between the threads, another advantage of the array storage is the absence of any costly data structure conversion. 
 
-Since the STPDS is only a nearly complete binary tree and not a complete binary tree, we have to be careful when iterating over the levels of three, as the very last level is not filled entirely with cells. But because $d$ is known, many attributes of the SPTDS can be determined deterministically.
+Since the STPDS is only a nearly complete binary tree and not a complete binary tree, special attention has to be paid when performing the ORB algorithm in an iterative way. But because $d$ is known, many attributes of the SPTDS can be determined deterministically.
 
 \subsubsection{Heap Conditions}
-As with all heap data-structures we have the following conditions:
+As with all heap data-structures the following conditions are given:
 
 \begin{itemize}
 	\item The root cell has index 1
@@ -1725,22 +1497,22 @@ As with all heap data-structures we have the following conditions:
 \end{figure}
 
 \vspace{0.5cm}
-We can derive the following constraints given the number of leaf cells $d$. 
+The following constraints can be derived given the number of leaf cells $d$. 
 
 \begin{itemize}
-	\item We can compute the depth of the tree with: $\lceil log_2(d) \rceil$
+	\item The depth of the tree can be computed with: $\lceil log_2(d) \rceil$
 	\item The number of leaf cells on the second last level is given by $2^{depth} - d$ 
 	\item There are exactly $2 \times d - 2^{depth}$ items (which must all be leaf cells) on the last level. 
 	\item The total number of cells are $2\times d - 1$.
 \end{itemize}
 
-In the example tree depicted in figure \ref{fig:extree} we indeed observe that the depth corresponds to: $\lceil log_2(d) \rceil = 2$, the number of leaves on the second last level is  $2^{2} - 3 = 1$ and the number of leaves on the last level are $2 \times 3 - 2^{2} = 2$. Finally the total number of cells is $2\times 3 - 1 = 5$.
+In the example tree depicted in figure \ref{fig:extree} the depth corresponds to: $\lceil log_2(d) \rceil = 2$, the number of leaves on the second last level is  $2^{2} - 3 = 1$ and the number of leaves on the last level are $2 \times 3 - 2^{2} = 2$. Finally the total number of cells is $2\times 3 - 1 = 5$.
 
 \subsubsection{Class}
 Among the fields in the cell are the following variables:
 
 \begin{itemize}
-	\item $id$: Unique identification of the cell instance. Corresponds to its index in the heap array plus one. The plus one comes from the different indexing for heap constraints, where we start with 1, and the classic array indexing starting with 0. It can be used to compute  indices of both child cells and parent cells using the above shown formulas.
+	\item $id$: Unique identification of the cell instance. Corresponds to its index in the heap array plus one. The plus one comes from the different indexing for heap constraints, starting with 1, and the classic array indexing starting with 0. It can be used to compute  indices of both child cells and parent cells using the above shown formulas.
 	\item $nLeafCells$: Equivalent to  $d_{cell}$ and depicts the number of leaf cells to be found in all of its successors. Its used when building the tree, to track weather a cell needs to be split or not. 
 	\item $lower$: 3D point coordinate representing the lower boundary corner of the 3D volume $V_{cell}$ which is encompassed by this cells.
 	\item $upper$: Represents the upper boundary corner of the volume.	
@@ -1760,14 +1532,14 @@ To support and simplify common operations, a further abstraction layer is given 
 
 \subsection{Mapping Cells to Particles}
 
-As SPTDS heap is stored on the master but the particles are distributed among the local storages of the processors, its is crucial to know which particles are encompassed in the volume of which cell. Thus we introduce a data structure to keep track of the relation between cells and its particles. 
-Thanks to the partitioning algorithm all particles belonging to a single cell can be found in a consecutive section of the particles array. Thus we can use a 2D array, which again is stored in the local data of the processor, where for each cell the corresponding range is stored as a tuple. Making the size of the array equivalent to the total number of cells $2 \times d -1$ multiplied by two. Naturally the data structure needs to be updated across all processors whenever we a partition is performed.
+As SPTDS heap is stored on the master but the particles are distributed among the local storages of the processors, its is crucial to know which particles are encompassed in the volume of which cell. Thus a data structure to keep track of the relation between cells and its particles is introduced.
+Thanks to the partitioning algorithm all particles belonging to a single cell can be found in a consecutive section of the particles array. A 2D array is used to keep track of the relation,  which again is stored in the local data of the processor, where for each cell the corresponding range is stored as a tuple. Making the size of the array equivalent to the total number of cells $2 \times d -1$ multiplied by two. Naturally the data structure needs to be updated across all processors whenever a partition is performed.
 
 \subsection{Services}\label{services}
 
 A service implementation consists of a $Service()$ function as well as a $Combine()$ function. Parameters include an $PST$ object which stores information about the process location as well as the local data. Furthermore two void pointers providing storage for the input and output data called $in$ and $out$ along with their respective sizes are passed. The reason void pointers are used, is the variability of the input data structure but c++ does not offer dynamic typing. Data stored inside the void pointers can be converted into their respective classes using casting. 
 
-In the $Combine()$ function two output void pointers $vout$ and $vout2$ and the sizes of the underlying arrays are given as parameters. A combination strategy of the elements can be chosen and implemented, where the results is to be stored in $vout$. For example if we were to implement a service which returns the sum of all particles, the combine function would simply store the sum of $vout$ and $vout2$ in $vout$.
+In the $Combine()$ function two output void pointers $vout$ and $vout2$ and the sizes of the underlying arrays are given as parameters. A combination strategy of the elements can be chosen and implemented, where the results is to be stored in $vout$. For example in a service which returns the sum of all particles, the combine function would simply store the sum of $vout$ and $vout2$ in $vout$.
 
 \subsubsection{Init and Finalize Service}
 
@@ -1778,8 +1550,8 @@ The initialize service is also responsible to load the particle data into the lo
 \subsubsection{Count Left Service}
 
 As mentioned, counting the elements smaller than the cut position is computationally intensive. T
-The $Service()$ function which performs the actual computations, $in$ points to an array of cells and as we know the length of the array, we can simply iterate over all of its elements and cast them to the correct cell data structure as shown in listing \ref{ctl} on line 1-2. In case the $foundCut$ flag of cell was set to true, we know that the ideal cut was already found and we can continue with the next cell (line 4-6).
-We then read the begin and end indices of the particles array corresponding to the range of objects contained within the cells volume and respectively make a slice of the local particles array (lines 7-11). We then compute start and end pointers and obtain the cut position to be tested (lines 13 -17). Finally the number of particles smaller than the cut are counted and written back to the output array (lines 18-23). As we need to store the results for each cell individually, the output is stored at an offset equivalent to the $cellPtrOffset$. This offset however does not corresponds to the $cell.id$, its rather a sequential indexing over all leaf cells of the same depth in the SPTDS. 
+The $Service()$ function which performs the actual computations, $in$ points to an array of cells and as the length of the array is known, its possible to simply iterate over all of its elements and cast them to the correct cell data structure as shown in listing \ref{ctl} on line 1-2. In case the $foundCut$ flag of cell was set to true, its known that the ideal cut was already found and the cell can be skipped (line 4-6).
+Then the begin and end indices of the particles array corresponding to the range of objects contained within the cells volume are read and respectively a slice of the local particles array (lines 7-11) is made. Start and end pointers are computed and the cut position to be tested is fetched (lines 13 -17). Finally the number of particles smaller than the cut are counted and written back to the output array (lines 18-23). As the results for each cell needs to be stored individually, its written to the output with an offset equivalent to the $cellPtrOffset$. This offset however does not corresponds to the $cell.id$, its rather a sequential indexing over all leaf cells of the same depth in the SPTDS. 
 
 
 \begin{lstlisting}[language=c++, caption=Part of the Count Left Service() method, label=ctl]
@@ -1831,7 +1603,7 @@ Counting the total number of particles contained within a cell is trivial with t
 
 \subsubsection{Partition}
 
-The Partitioning Service is a direct implementation of the hoare partition and can be seen in listing \ref{partition}. Again the service receives a buffer with a given number of cells, which are then iterated over using the outer for loop. Each cell from the buffer is then casted to the proper struct (line 2). Using the id of the cell, we can the access the start and end indices of the corresponding particles stored in local storage (lines 4-5). Lines 7-37 search for pairs located on the wrong side of the cut and then swap them using a simple $swap()$ helper function. $i$ has to be initialized using $beginInd -1$ as the $i++$ operation happens before a read on the array (line 15). For the same reason $j$ is initialized to $endInd$ and not $endInd -1$. Then the while loop terminates, $i$ points to the first index in the array where the value is greater than the cut, therefore we can update the $cellToRangeMap$ with $i$, as for the left child cell the start remains equal but the end is now $i$ and for the right child cell its vice versa. 
+The Partitioning Service is a direct implementation of the hoare partition and can be seen in listing \ref{partition}. Again the service receives a buffer with a given number of cells, which are then iterated over using the outer for loop. Each cell from the buffer is then casted to the proper struct (line 2). Using the id of the cell, the start and end indices of the corresponding particles stored in local storage can be accessed (lines 4-5). Lines 7-37 search for pairs located on the wrong side of the cut and then swap them using a simple $swap()$ helper function. $i$ has to be initialized using $beginInd -1$ as the $i++$ operation happens before a read on the array (line 15). For the same reason $j$ is initialized to $endInd$ and not $endInd -1$. Then the while loop terminates, $i$ points to the first index in the array where the value is greater than the cut, therefore $cellToRangeMap$ can be updated using $i$, as for the left child cell the start remains equal but the end is now $i$ and for the right child cell its vice versa. 
 Note that the implementation is not ideal for two reasons:
 
 \begin{enumerate}
@@ -1886,12 +1658,12 @@ for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset){
 
 \subsubsection{Make Axis}
 
-As mentioned in section \ref{sec:multipole} the relevant axis to search for the cut position differs for each cell. Therefore we cannot simply iterate over a single array, we need to iterate over the relevant axis instead. In order to simplify the process we introduce a service which copies iterates over all cells and copies the slice of coordinates which are encompassed in its volume and lie on its cut axis to a temporary array.
+As mentioned in section \ref{sec:multipole} the relevant axis to search for the cut position differs for each cell. Therefore the algorithm cannot simply iterate over a single array. In order to simplify the process the Make Axis service is introduced which iterates over all cells and copies the slices of coordinates which are encompassed the respective volumes and lie on the cells cut axis to a temporary array.
 
 \subsection{Parallel Schedule}\label{sec:parellize-orb}
 
-In the context of parallelization, we define the number of processors as $np$ and $p_0$ is the processor executing the master layer. 
-Initially we assume that each processor has a random unique subset of all the particles stored in its local memory.
+In the context of parallelization, the number of processors is defined as $np$ and $p_0$ is the processor executing the master layer. 
+Initially it is assumed that each processor has a random unique subset of all the particles stored in its local memory.
 
 In the running example this might look as follows:
 
@@ -1997,9 +1769,9 @@ The CUDA platform is designed to work with programming languages such as C, C++,
 
 \subsection{Relevant CUDA Concepts}
 
-CUDA gives us the ability to launch kernels, which are written in C with some additional CUDA specific syntax. These kernel can be run from the CPU, commonly refereed to as the host, and are then executed on the GPU, also known as the device. The device and the host have a separate memory and as seen in section \ref{sec:gmm} the transfer $I_{CG}$ rates between the GPU and CPU are generally slower, under performing $I_{C}$ and $I_G$ speeds. Therefore one of key the challenges when rewriting CPU code to GPU code is to limit data transfers between the GPU and CPU as much as possible. Furthermore we have divide our problems into subproblems, where each subproblem is then executed on a block. CUDA cannot give any guarantees considering the order of execution of these blocks, therefore we have to fundamentally rethink algorithms when porting them from CPU to GPU code, where some algorithms are more or less fitted. Generally we only think about problems which are applied on large data arrays, the less connection between the individual results exists, the easier it is to implement an GPU version of the computation. Furthermore we can assume that problems with less branching work better on the GPU due to various reasons, which we will explain in detail later. 
+CUDA gives us the ability to launch kernels, which are written in C with some additional CUDA specific syntax. These kernel can be run from the CPU, commonly refereed to as the host, and are then executed on the GPU, also known as the device. The device and the host have a separate memory and as seen in section \ref{sec:gmm} the transfer $I_{CG}$ rates between the GPU and CPU are generally slower, under performing $I_{C}$ and $I_G$ speeds. Therefore one of key the challenges when rewriting CPU code to GPU code is to limit data transfers between the GPU and CPU as much as possible. Furthermore the problems have to be divided into smaller subproblem, such that each of them fits a single block. CUDA cannot give any guarantees considering the order of execution of these blocks greatly limiting the possibilities of communication between blocks. Algorithms have to be fundamentally redesigned when porting them from CPU to GPU code. Generally problems which are applied on large data arrays are well suited where less connection between computations is suitable  the easier it is to implement an GPU version of the computation. Furthermore it can be assumed that problems with less branching work better.
 
-We can access the location of a thread within a block using $threadIdx.x$ as well as the block ID among all other blocks associated with the same kernel $blockIdx.x$. Finally the number of blocks are stored in the variable $gridDim.x$. 
+The location of a thread within a block can be accessed using $threadIdx.x$. The block ID among all other blocks associated with the same kernel is stored in $blockIdx.x$. Finally the number of blocks are stored in the variable $gridDim.x$. 
 
 Building a tree is therefore a rather challenging problem as there are many computations which influence another and building a tree involves a lot of branching, at least when it is done in a conventional manner.
 
@@ -2026,11 +1798,11 @@ Each consecutive grouping of 32 threads form a warp. All threads within a warp a
 
 \subsubsection{Memory}
 
-Each block has access to shared memory register, where the capacity of this register can be defined at runtime by the host as seen in figure \ref{cuda:call} on line 4. The maximum shared memory size depends depending on the architecture ranges between 48 and 96kB. \cite{CUDAGuide} There are also upper limits for the number of threads per block which is usually between 512 and 1024. \cite{CUDAGuide} With a shared memory size of 48kb and 1024 threads per block we get $\frac{48000B}{1024} = 46B$ per thread, which is roughly equivalent to 11 32 bit precision numbers per thread. However as we usually do not max out the thread counts per block, there is more shared memory space available per thread. 
+Each block has access to shared memory register, where the capacity of this register can be defined at runtime by the host as seen in figure \ref{cuda:call} on line 4. The maximum shared memory size depends depending on the architecture ranges between 48 and 96kB. \cite{CUDAGuide} There are also upper limits for the number of threads per block which is usually between 512 and 1024. \cite{CUDAGuide} With a shared memory size of 48kb and 1024 threads per block there is $\frac{48000B}{1024} = 46B$ of memory available per thread, which is roughly equivalent to 11 32 bit precision numbers per thread. However as the thread counts per block is usually not maxed out, there is more shared memory space available per thread. 
 
 Data in the shared memory exists only as long as the kernel exists and it cannot be accessed across different blocks. Race conditions do apply to shared memory, but threads in a block can be synchronized, therefore it is not safe to have writes from multiple threads on the same shared memory address. There exists a CUDA command $\_\_synchtreads()$ which allows us to synchronize all threads within a block, enabling us to control the execution order of individual statements.
 
-Additionally to the shared memory, there exists global memory. Global memory is persistent even after a block or a kernel has finished and is the only way to send data between the device and the host. Since the data is not deleted after a kernel has finished, we can and should reuse the data whenever possible for other kernels, reducing the memory transfer overhead. Global memory is significantly slower than shared memory and it is best practice to copy data from global memory to shared memory before performing actual computations on it, thus reducing the total number of memory accesses on global memory. After the computations have finished, the results can be written back from shared to global memory.
+Additionally to the shared memory, there exists global memory. Global memory is persistent even after a block or a kernel has finished and is the only way to send data between the device and the host. Since the data is not deleted after a kernel has finished, the data can and should be reused whenever possible. Global memory is significantly slower than shared memory and it is best practice to copy data from global memory to shared memory before performing actual computations on it, thus reducing the total number of memory accesses on global memory. After the computations have finished, the results can be written back from shared to global memory.
 
 \subsubsection{Memory Access Patterns}
 
@@ -2108,29 +1880,27 @@ There exists however a way to communicate between blocks in a safe way. Atomic o
 
 \subsection{Streams}
 
-As described in section \ref{sec:async}, we can leverage streams to improve the runtime a CUDA accelerated application. The way we make use of streams is simple, each thread performs all its computations using on a unique stream. Since leveraging streams only improves the runtime in low numbers because the actual copy and kernel engines are not very numerous, this variant is very simple and effective. We have observed that using more streams on the individual threads does not improve the runtime, quiet contrary it can have a negative impact. 
+As described in section \ref{sec:async}, streams can be leveraged to improve the runtime a CUDA accelerated application. In the GPU accelerated ORB streams are used in a straight forward manner, each thread performs all its computations using its own unique stream. Since leveraging streams only improves the runtime in low numbers because the actual copy and kernel engines are not very numerous, this variant is very simple and effective. It was observed that using more streams on the individual threads does not improve the runtime, quiet contrary it can have a negative impact. 
 
 
 \subsection{Memory Management}
 
-We use several strategies in order to improve the performance of memory allocation: 
+Several strategies are used to improve the performance of memory allocation: 
 
 \begin{enumerate}
-	\item \textbf{Pinned Memory} As the GPU cannot access the default paged memory directly, when copying memory from the host to the device, the memory must first be copied to pinned memory. This means if we use pinned memory directly with $cudaMallocHost()$, data transfers can be around twice as fast. In our implementation we use pinned memory for all data, which need to be either sent from the host to device or vice versa.
-	\item \textbf{Reuse Memory} We can avoid allocation and freeing commands altogether and instead reuse previously allocated memory whenever possible. In our implementation we allocate the memory in the very beginning. Since we have a fixed number of particles as well as an upper limit for the number of cells memory can be allocated when calling the initialize service. The concept is applied to both CPU and GPU memory.
+	\item \textbf{Pinned Memory} As the GPU cannot access the default paged memory directly, when copying memory from the host to the device, the memory must first be copied to pinned memory. This means when pinned memory is used directly with $cudaMallocHost()$, data transfers can be around twice as fast. Thus pinned memory is used for all data, which needs to be either sent from the host to device or vice versa.
+	\item \textbf{Reuse Memory} Memory allocation and freeing can be avoided altogether by reusing previously allocated memory whenever possible. Since there exists a fixed number of particles as well as an upper limit for the number of cells, memory can be allocated when calling the Initialize service and finalized with the Finalize service.
 \end{enumerate}
 
 \subsection{GPU Accelerated Count Left}
 
-
-We have described a CPU implementation of the Count Left Service. In this section we explain how we can port this problem to the GPU. In essence we can use a general reduction as a basis version, and adapt it to sum up up elements which fulfill a certain condition, where the condition is being smaller than a given value. The code is based on the reduction as its explained in a Webinar from \textit{NVIDIA}. \cite{reduction}
+To solve the problem on the GPU essentially a general reduction can be taken as a basis and adapted to sum elements, which fulfill a certain condition. The condition is weather an element is than a given value, which in this case is the position of the cut plane. The code is based on the reduction as its explained in a Webinar from \textit{NVIDIA}. \cite{reduction}
 
 \subsubsection{Schedule}
 
-The entire schedule of the GPU accelerated ORB is depicted in figure \ref{fig:orbgpup}. In a first step we call the initialize service, where the necessary data is allocated on all devices and the particles are loaded. Furthermore the initial SPTDS is constructed, which essentially only consists of the root node, encompassing the entire domain and all the particles. Next we enter the main loop of ORB, which iterates until a SPTDS with the desired size is constructed. Within the loop the Count Service is called, computing the number of cells for each cell summed over all the threads in the system. To prepare the data for the GPU transfer a temporary array is made, using the make axis service, which is then sent to the GPU. 
+The entire schedule of the GPU accelerated ORB is depicted in figure \ref{fig:orbgpup}. In a first step the initialize service is called, where the necessary data is allocated on all devices and the particles are loaded. Furthermore the initial SPTDS is constructed, which essentially only consists of the root node, encompassing the entire domain and all the particles. Nextthe main loop of ORB is entered, which iterates until a SPTDS with the desired size is constructed. Within the loop the Count Service is called, computing the number of cells for each cell summed over all the threads in the system. To prepare the data for the GPU transfer a temporary array is made, using the make axis service, which is then sent to the GPU. 
 At this stage the actual bisection methods starts on the master, where counting the number of particles left of a cut plane is done with the GPU Count Left service. Depending on the outcome, the cut position is improved respectively and the process is repeated until a nearly perfect cut is found for all the leaf cells of the current SPTDS. For each leaf cell cell two new child cells can be generated using the computed cut positions. Finally the SPTDS can be enriched with the new cell data and the particles array is partitioned accordingly using the Partition service. 
-The tree building loop is then repeated or if the desired size of the SPTDS is reached, we exit the loop and call the Finalize service to free the allocated memory.
-
+The tree building loop is then repeated or if the desired size of the SPTDS is reached, the loop is exited and the Finalize service is called to free the allocated memory.
 
 \begin{figure}[H]
 	\begin{center}
@@ -2177,11 +1947,11 @@ The number of blocks per cell can be determined by $N_{cell}$ divided by the num
 All the relevant information can be passed along with the cell can be passed using pass by value  parameters, there is no need to copy any additional data from the CPU to the GPU in advance. The only relevant data is already in global memory, when the particles where copied from the host to the device. Hpwever the results, which are also stored in global memory, need to be copied back from the GPU to the GPU after the kernel has finished.
 
 \subsubsection{Kernel Code}\label{sec:countleftcode}
-The actual kernel code is depicted in listing \ref{cuda:reduction}. The input parameters of the reduction kernel (line 13-16) are in order: the input data, which is in sequential order the particles, the output array, where the results of the kernel is stored, the position of the cut plane and finally the total number of elements contained within the cell. Note that since we make use of the Make Axis Service, there is no need to know to which axis the orthogonal cut plane is searched for. 
+The actual kernel code is depicted in listing \ref{cuda:reduction}. The input parameters of the reduction kernel (line 13-16) are in order: the input data, which is in sequential order the particles, the output array, where the results of the kernel is stored, the position of the cut plane and finally the total number of elements contained within the cell. Because of the Make Axis service the kernel can simply iterate over a single array. 
 
-In a first step on lines 18-20 each thread ID $tid$ is associated with an index in the global memory of input data. Furthermore on line 22-23 the shared data is initialized and set to zero. Its size is equivalent to the block size, the total number of thread per block. Meaning we can store a single float per thread. On lines 25-28 the thread iterates over all elements which it is associated to and copies the results of a compare to shared memory. This allows us to work exclusively with shared memory instead of global memory, reducing the amount of costly memory accesses.
+In a first step on lines 18-20 each thread ID $tid$ is associated with an index in the global memory of input data. Furthermore on line 22-23 the shared data is initialized and set to zero. Its size is equivalent to the block size, the total number of thread per block. Meaning a single float can be stored per thread. On lines 25-28 the thread iterates over all elements which it is associated to and copies the results of a compare to shared memory. This allows us to work exclusively with shared memory instead of global memory, reducing the amount of costly memory accesses.
 
-There exists an optimum in terms of number of operation performed by a single thread. In order to adapt the number of ops dynamically, the while loop ensures that each thread iterates over a certain number of elements as seen in lines 25-28. The input parameter $n$ defines the total number of particles. Therefore if we reduce the total number of blocks by a factor of $r$, the while loop will iterate over $r$ elements. Inside the while loop on line 27 the index $i$ is incremented by $gridSize$ in each iteration. The grid size is equivalent to the total number of threads associated with the kernel. Therefore when launching the kernel, the number of blocks can be divided by $r$ which then results in $r$ iterations performed in the while loop. In our case we set $r$ to 16 as more or less items per thread will result in a lower performance.
+There exists an optimum in terms of number of operation performed by a single thread. In order to adapt the number of ops dynamically, the while loop ensures that each thread iterates over a certain number of elements as seen in lines 25-28. The input parameter $n$ defines the total number of particles. Therefore if the total number of blocks is reduced by a factor of $r$, the while loop will iterate over $r$ elements. Inside the while loop on line 27 the index $i$ is incremented by $gridSize$ in each iteration. The grid size is equivalent to the total number of threads associated with the kernel. Therefore when launching the kernel, the number of blocks can be divided by $r$ which then results in $r$ iterations performed in the while loop. $r$ to 16 as more or less items per thread result in a lower performance.
 
 The rest of the kernel code performs the actual reduction, where in each step two elements from the shared memory are summed together. Given a block size of 256, after line 37 exactly 256 sums are stored in shared memory. In a next step as seen on line 37 (lines 31-36 are not relevant as the size is smaller than 512) the left half threads in the block add their value together with the values stored in a position offset by 128. This step reduces the total number of elements to be considered to 128, and the step can be repeated as seen on lines 42 to 46. 
 
@@ -2247,12 +2017,12 @@ extern __global__ void reduce(
 
 
 
-Initializing the kernel once for each cell is a simple solution, however as we increase the number of cells, more and more calls to the kernel are made. Calls are not free of cost, as there is some overhead with each initialization of a kernel. Thus the performance degrades gradually as the tree is built, because on each level the number of cells for which the bisection method is executed doubles. At some point, the overhead even dominates over the actual computations by a lot. 
+Initializing the kernel once for each cell is a simple solution, however as the number of cells is increased, more calls to the kernel are made. Calls are not free of cost, as there is some overhead with each initialization of a kernel. Thus the performance degrades gradually as the tree is built, because on each level the number of cells for which the bisection method is executed doubles. At some point, the overhead even dominates over the actual computations by a lot. 
 
 
 \subsection{Improved GPU Accelerated Count Left} \label{imprctl}
 
-To solve the degrading performance problem we make some changes to the kernel and the overall schedule. The main idea is to prepare the necessary data for all cells in advance, effectively reducing the overall number of necessary kernel calls to $\lceil \log_2 d \rceil $ instead of $2 \times d$. In figure \ref{fig:degrading} the resulting number of kernel calls are compared for both versions. Each block is provided with information concerning the start and end index of the cells particles, the cut position as well as an index of the cell. 
+To solve the degrading performance problem some changes are made to the kernel and the overall schedule. The main idea is to prepare the necessary data for all cells in advance, effectively reducing the overall number of necessary kernel calls to $\lceil \log_2 d \rceil $ instead of $2 \times d$. In figure \ref{fig:degrading} the resulting number of kernel calls are compared for both versions. Each block is provided with information concerning the start and end index of the cells particles, the cut position as well as an index of the cell. 
 
 
 \begin{figure}[H]
@@ -2290,12 +2060,12 @@ To solve the degrading performance problem we make some changes to the kernel an
 	\end{center}
 \end{figure}
 
-We will explain the improved version using a simple example: Let us consider $cell_2$ with a volume that encompasses particles in the range 0 - 10240. $cell_3$ encompasses particles in the range 10240 - 20480. We have a blocksize of 256 threads and the elements per thread are 16, thus each block processes $256 * 16 = 4096$ elements. In this case we reserve three blocks for each cell, where the first block processes elements 0 - 4096 and the second one 4096 - 10240. By assigning more work to the second block, we make sure that there are no underworked threads, as measurements have shown a slight increase in elements per thread is better than a decrease. Furthermore we can avoid blocks where not even all the threads are occupied, because less than 256 elements are processed on the block. Consequently the third and fourth block respectively process particles 10240 to 14446 and 14446 to 20480. Since the number of required blocks for cell is known as well as the exact range of particles for which the reduction has to be computed, we can copy all this information to the GPU in advance and simply launch a kernel with the total block sum. 
+The improved Count Left service works as follows on a simple example: Given $cell_2$ with a volume that encompasses particles in the range 0 - 10240 and $cell_3$ encompasses particles in the range 10240 - 20480.  A block size of 256 threads is given and the number of elements per thread is set to 16, thus each block processes $256 * 16 = 4096$ elements. In this case two blocks are allocated to each cell, where the first block processes elements 0 - 4096 and the second one 4096 - 10240. By assigning more work to the second block, the threads will perform more work as others, however this is more favorable than threads which perform less work. Furthermore blocks where not even all the threads are occupied can be avoided that way. Consequently the third and fourth block respectively process particles 10240 to 14446 and 14446 to 20480. Since the number of required blocks for cell is known as well as the exact range of particles for which the reduction has to be computed, all this information can be copied to the GPU in advance and a kernel with the total block sum can be launched. 
 Each kernel stores its information in an output array where the assignment between the output and the actual cell is known. The service therefore needs to iterate over all the output which have been computed by the blocks associated with a kernel and output them at a single cell specific location in the output $ou$ array of the service.
 
 \subsubsection{Schedule}
 
-Only a single change is made to the schedule: We introduce another service which is called GPU Copy Cell Service, which does as the name says, copying the cell information from the CPU to the GPU. Since only the cut positions change while we are iterating over the inner loop, this service can be called outside of it. The Improved GPU Count Left Service copies the cut data each time it is invoked. Other than that, the schedule remains equal. 
+Only a single change is made to the schedule: A service called GPU Copy Cell Service is introduced, which does as the name says, copies the cell information from the CPU to the GPU. Since only the cut positions change while ORB is iterating to find and improve a cut and the rest of the cell information stays static, this service can be called outside of the loop. The Improved GPU Count Left Service copies the cut data each time it is invoked. Other than that, the schedule remains equal. 
 
 \begin{figure}[H]
 	\begin{center}
@@ -2338,7 +2108,7 @@ Only a single change is made to the schedule: We introduce another service which
 
 \subsubsection{Kernel Code}
 
-The kernel code as seen in listing \ref{ctlocuda} largely remains the same. New data pointers are passed along as a parameter where $g_begin$ and $g_end$ mark the begin and end of the important particle array slice, furthermore $g_cuts$ is an array of cell cuts for each block. As we prepare the data in a way, that each block only needs to operate over the particles contained within a single cell, the data can be read using the blockIdx.x (lines 20 - 22) which is a CUDA variable and provides a sequential indexing of blocks associated with the kernel. Everything else, including the subroutine $warpReduce$ remain equal. 
+The kernel code as seen in listing \ref{ctlocuda} largely remains the same. New data pointers are passed along as a parameter where $g_begin$ and $g_end$ mark the begin and end of the important particle array slice, furthermore $g_cuts$ is an array of cell cuts for each block. The data is prepared in such a way, that each block only needs to operate over the particles contained within a single cell. $blockIdx.x$ provides the index to read out the cell information from the input arrays (lines 20 - 22). Everything else, including the subroutine $warpReduce$ remains equal. 
 
 \begin{figure}[H]
 	\begin{lstlisting}[language=c++, caption=Kernel Optimized GPU Count Left, label = ctlocuda]
@@ -2396,8 +2166,8 @@ unsigned int * g_odata) {
 
 \subsection{GPU Accelerated Partitioning}
 
-We have successfully implemented a version with a GPU accelerated Count Left. Since the particles are still partitioned on the CPU, the data needs to be copied to GPU each time we expand the SPTDS. As we use the Make Axis service to compress the axes into a single array, we only need to copy $N$ elements, but we need to do so $\lceil \log_2 d \rceil$ times. 
-If we partition the particles on the GPU, the data needs to be copied only once, but in this case all three coordinates have to be copied, thus $
+A GPU accelerated Count Left service is implemented successfully. Since the particles are still partitioned on the CPU, the data needs to be copied to GPU each time the SPTDS is expanded. As the Make Axis service is used to compress the axes into a single array, only $N$ elements need to be copied, but this needs to be repeated $\lceil \log_2 d \rceil$ times. 
+If the particles are partitioned on the GPU, it needs to be copied only once, but in this case all three coordinates have to be copied, thus $
 N \times 3$. Nevertheless this corresponds a fraction of the total data transfer: $\frac{3}{\lceil \log_2 d \rceil \times}$. In figure \ref{fig:transfer} its observable that a GPU partition becomes feasible, at least in terms of data transfer, after $d$ exceeds 16. 
 
 \begin{figure}[H]
@@ -2438,11 +2208,11 @@ N \times 3$. Nevertheless this corresponds a fraction of the total data transfer
 
 A GPU partitioning algorithm was first proposed by Cederman \cite{GPUQ} and later refined by Manca \cite{CUDAQ} where atomic operations are leveraged to improve the runtime of the algorithm. Our version is built around the concepts introduced by Manca. 
 
-Early results have shown partitioning the data on the GPU is not really faster than the CPU version where the CPU version is not even implemented in a optimal manner and finally the number of particles which can be stored on the GPU memory is reduced by $\frac{5}{3}$. This is caused by required additional temporary arrays for memory swaps on the GPU. Furthermore there was not enough time to fully optimize and track down all issues with the code, therefore we do not describe the full kernel code and instead limit ourselves to introduce the ideas for subsequent work. 
+Early results have shown partitioning the data on the GPU is not really faster than the CPU version where the CPU version is not even implemented in a optimal manner and finally the number of particles which can be stored on the GPU memory is reduced by $\frac{5}{3}$. This is caused by required additional temporary arrays for memory swaps on the GPU. Furthermore there was not enough time to fully optimize and track down all issues with the code, therefore not full kernel code is provided, instead the underlying concepts are introduced for subsequent work. 
 
 \subsubsection{Schedule}
 
-In the adapted schedule (figure \ref{fig:orbgpu3}) we can move the Copy Particles To GPU service out of the main loop, other than that the schedule remains the same. 
+In the adapted schedule (figure \ref{fig:orbgpu3}) the Copy Particles To GPU service can be moved out of the main loop. Other than that the schedule remains the same. 
 
 \begin{figure}[H]
 	\begin{center}
@@ -2484,27 +2254,26 @@ In the adapted schedule (figure \ref{fig:orbgpu3}) we can move the Copy Particle
 
 \subsubsection{Partitioning a Single Cell}
 
-In a first step we perform a block wise partition, meaning there is no synchronization between blocks at this stage. Each thread loads the particle coordinate of the matching axis into the shared memory register $S$. We then make two copies of the data stored in the shared memory, the first copy $A$ compares each value with the cut and stores 0 if the value is smaller and 1 otherwise. The second copy $B$ stores the inverted result. 
-We now perform a parallel prefix sum, or scan, on both copies. We can use an algorithm as it is described in GPU Gems \cite{SCAN}. On $B$ we add the total number of elements smaller than the cut to each element. 
+In a first step a block wise partition is performed, meaning there is no synchronization between blocks at this stage. Each thread loads the particle coordinate of the matching axis into the shared memory register $S$. Then two copies of the data stored in the shared memory are made where the first copy $A$ compares each value with the cut and stores 0 if the value is smaller and 1 otherwise. Consequently the second copy $B$ stores the inverted result. 
+Now a parallel prefix sum (also refered to as a scan) is computed on both copies, where an algorithm as described in GPU Gems \cite{SCAN} can be used. In $B$ each element is then incremented by the an offset equal to the total number of elements smaller than the cut. 
 In theory the block wise partition could already be applied by storing each element with index $i$ larger than the cut at $A_i$ and larger elements at $B_i$. 
-However our goal is to partition all elements across multiple blocks. To do so we introduce a global variable called $leq$ and $g$ where the total number of elements smaller equal and bigger than the cut are stored. Each time a block has computed both scans, the number of elements designated to the block smaller and larger than the cut are known. Thus a single thread of each block performs an atomic add on $leq$ and $g$ accordingly. $AtomicAdd()$ returns the old value of the variable. Therefore we can use and store it in two designated shared memory register $s_leq$ and $s_g$. 
-At this stage every thread in a block agrees on a value for $s_leq$ and $s_g$ the values can be treated as starting indices to store the block wise partitioned results in the output array. In this case however we store an element larger than the cut at position $i$ in location $A_i + s_leq$ and otherwise at $B_i = s_g$. 
+However our goal is to partition all elements across multiple blocks. To do so a global variable called $leq$ and $g$ is introduced, where the total number of elements smaller equal and bigger than the cut are stored. Each time a block has computed both scans, the number of elements designated to the block smaller and larger than the cut are known. Thus a single thread of each block performs an atomic add on $leq$ and $g$ accordingly. $AtomicAdd()$ returns the old value of the variable. The return value can be caught and stored two designated shared memory register $s_leq$ and $s_g$. 
+At this stage every thread in a block agrees on a value for $s_leq$ and $s_g$ the values can be treated as starting indices to store the block wise partitioned results in the output array. In this case however an element $i$, which is larger than the cut is stored location $A_i + s_leq$ and if larger at $B_i = s_g$. 
 
 In our case the input array are coordinate values of particles and the output array is a temporary array of size $N$. The in an output array cannot be the same as the partition cannot be performed in place. Doing so would result in elements that are overwritten before they are read by the thread assigned to it. This cannot be avoided with the proposed technique as the relationship between the range of input data treated by a kernel and the output is not deterministic. Its dictated by the order, by which the kernel reach the $atomicAdd()$ statement. 
 
-As of now only a single axis is partitioned, but the same needs to be done for the other two axes. One approach is to partition all the other arrays in the same kernel, as the permutations can simply be reapplied. However in this case we need three additional temporary arrays, one for each axis. Further Reducing the number of particles which can be stored on the GPU by $\frac{1}{2}$. A more memory efficent, but slightly slower variant is to allocate another array on the GPU where the actual permutation indices are stored when the partition kernel is executed. Therefore together with the temporary array $N$ is only reduced by $\frac{3}{5}$. After the partition kernel has finished, we can copy back the coordinates from the temporary array to the original location in a device to device copy. Then the second axis is partitioned using the precomputed permutations and the results are again copied back to the proper location. Finally after the step is repeated for the last axis, the partition is finished.
+As of now only a single axis is partitioned, but the same needs to be done for the other two axes. One approach is to partition all the other arrays in the same kernel, as the permutations can simply be reapplied. However in this case three  additional temporary arrays are needed, one for each axis. Further Reducing the number of particles which can be stored on the GPU by $\frac{1}{2}$. A more memory efficent, but slightly slower variant is to allocate another array on the GPU where the actual permutation indices are stored when the partition kernel is executed. Therefore together with the temporary array $N$ is only reduced by $\frac{3}{5}$. After the partition kernel has finished, the coordinates can be copied back from the temporary array to the original location in a device to device copy. Then the second axis is partitioned using the precomputed permutations and the results are again copied back to the proper location. Finally after the step is repeated for the last axis, the partition is finished.
 
 \subsubsection{Partitioning Multiple Cells}
 
-We apply the same method as introduced in section \ref{imprctl} to ensure only a single kernel has to be launched for all cells. 
+The same method as introduced in section \ref{imprctl} is applied to ensure only a single kernel has to be launched for all cells. 
 Each block is assigned a cell, where all relevant information about the cell is stored in different arrays in global memory. Each block then read the designated data by acessing the arrays at index $blockIdx.x$. The variables $leq$ and $g$ are replaced by arrays of the same length as there are cells to be partitioned (which is not equivalent to the number of blocks). This ensures all the blocks assigned to a single cell perform the atomic operations on the same variable. For a block to know which element in the $leq$ and $g$ arrays it needs to access, a sequential cell index array is passed, where all blocks working on the same cell receive the same cell index. 
 
 
 \newpage
 \section{Performance Analysis of ORB}\label{sec:empan}
 
-All measurements where performed on Piz Daint where the performance of system can be read from table \ref{fig:datapoints}. The supercomputer uses a slurm workload manager. \cite{Slurm} Simple job script can be executed using $sbatch$. In our case we used a meta script which has the function of modifying the actual job scripts for the desired parameters. 
-
+All measurements where performed on Piz Daint where the performance of system can be read from table \ref{fig:datapoints}.
 
 \begin{figure}[H]
 	\begin{center}
@@ -2540,12 +2309,12 @@ All measurements where performed on Piz Daint where the performance of system ca
 \end{figure}
 
 In figure \ref{fig:analy2} the final measurements are plotted. The total runtime of the ORB is around 43 seconds when performed only on the CPU, for the GPU accelerated version it comes down to 18 seconds. However a large part of the execution time can be attributed to the Partitioning, where its overhead remains equal for both versions. Even the CPU Partitioning can be improved a lot and the GPU version might increase the performance even further. 
-If we subtract the time lost for the partitioning, the GPU version is about $5.6$ times faster, which even slightly worse than the expected speedup of $6.2$. The difference can mostly be explained by additional overheads, especially as the GPU kernel has to touch the elements more than once due to the way the reduction was implemented. 
+If the time lost during the partitioning is subtracted, the GPU version is about $5.6$ times faster, which is slightly worse than the expected speedup of $6.2$. The difference can be explained by additional overheads, especially as the GPU kernel has to touch the elements more than once due to the way it was implemented. 
 
-When we look at the absolute number there is a stark difference: $56.47s$ predicted for the CPU version were $31.83$ was the actual timing. Similarly the GPU was expected to execute ORB (without the partitioning) in $8.99s$, however it only took $5.6s$. The theoretical model considers an upper bound for the total number of iterations which the bisection method takes to converge. In reality this number is closer to 20 than to $p$ which is 32 in the measured data. When considering this, the measurements are also in an absolute term relatively close to the theoretical model. $56.47s \times \frac{20}{32} = 37s$ against the actual $31.83s$ and $8.99s \times \frac{20}{32} =5.99s$ compared to $5.6s$.
+When looking at the absolute number there is a stark difference: $56.47s$ predicted for the CPU version were $31.83$ was the actual timing. Similarly the GPU was expected to execute ORB (without the partitioning) in $8.99s$, however it only took $5.6s$. The theoretical model considers an upper bound for the total number of iterations which the bisection method takes to converge. In reality this number is closer to 20 than to $p$ which is 32 in the measured data. When considering this, the measurements are also in an absolute term relatively close to the theoretical model. $56.47s \times \frac{20}{32} = 37s$ against the actual $31.83s$ and $8.99s \times \frac{20}{32} =5.99s$ compared to $5.6s$.
 \subsection{Scaling}
 
-To make sure the GPU version scales good we have evaluated the total runtimes for 
+To make sure the GPU version scales good the total runtimes..
 
 
 \begin{filecontents*}{results0.csv}
@@ -2615,6 +2384,7 @@ To make sure the GPU version scales good we have evaluated the total runtimes fo
 
 \newpage
 \section{Conclusion}
+
 
 
 % Use for reduction explanation https://texample.net/tikz/examples/database-decimation-process/

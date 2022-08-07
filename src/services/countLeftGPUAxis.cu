@@ -66,6 +66,61 @@ extern __global__ void reduce(
     }
 }
 
+#define FULL_MASK 0xffffffff
+template <unsigned int blockSize>
+extern __global__ void reduce2(
+        float * g_idata,
+        unsigned int * g_begins,
+        unsigned int * g_ends,
+        float * g_cuts,
+        unsigned int * g_odata) {
+
+    __shared__ unsigned int s_data[blockSize];
+
+    unsigned int tid = threadIdx.x;
+    const unsigned int begin = g_begins[blockIdx.x];
+    const unsigned int end = g_ends[blockIdx.x];
+    const float cut = g_cuts[blockIdx.x];
+
+    unsigned int i = begin + tid;
+    s_data[tid] = 0;
+
+    // unaligned coalesced g memory access
+    while (i < end) {
+        s_data[tid] += (g_idata[i] <= cut);
+        i += blockSize;
+    }
+    __syncthreads();
+
+    if (blockSize >= 512) {
+        if (tid < 256) {
+            s_data[tid] += s_data[tid + 256];
+        }
+        __syncthreads();
+    }
+    if (blockSize >= 256) {
+        if (tid < 128) {
+            s_data[tid] += s_data[tid + 128];
+        } __syncthreads();
+    }
+    if (blockSize >= 128) {
+        if (tid < 64) {
+            s_data[tid] += s_data[tid + 64];
+        } __syncthreads();
+    }
+    if (tid < 32) {
+        unsigned int val = s_data[tid];
+
+        for (int offset = 16; offset > 0; offset /= 2)
+            val += __shfl_down_sync(FULL_MASK, val, offset);
+
+        s_data[0] = val;
+    }
+    if (tid == 0) {
+        g_odata[blockIdx.x] = s_data[0];
+    }
+}
+
 int ServiceCountLeftGPUAxis::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
     // store streams / initialize in local d
     // ata
@@ -108,7 +163,7 @@ int ServiceCountLeftGPUAxis::Service(PST pst,void *vin,int nIn,void *vout, int n
     //CUDA_CHECK(cudaMemset, (lcl->d_index, 0, sizeof(unsigned int)));
 
     // Execute the kernel
-    reduce<N_THREADS><<<
+    reduce2<N_THREADS><<<
             nBlocks,
             N_THREADS,
             N_THREADS * sizeof (unsigned int),

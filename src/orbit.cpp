@@ -190,7 +190,7 @@ int master(MDL vmdl,void *vpst) {
 
             for (int i = 0; i < nCells; ++i) {
                 if (cells(i).foundCut) continue;
-                /*printf(
+                printf(
                         "counted left: %u, of %u. cut %f, axis %d, level %u, cell %u \n",
                         oCountsLeft[i],
                         oCounts[i] / 2,
@@ -198,7 +198,7 @@ int master(MDL vmdl,void *vpst) {
                         cells(i).cutAxis,
                         l,
                         cells(i).id
-                        );*/
+                        );
                 //CellHelpers::log(cells(i));
 
                 float ratio = ceil(cells(i).nLeafCells / 2.0) / cells(i).nLeafCells;
@@ -268,7 +268,7 @@ int master(MDL vmdl,void *vpst) {
                     nCells * sizeof(ServicePartition::input),
                     iCells,
                     oPartition);
-            auto qend = std::chrono::high_resolution_clock::now();
+            auto end = std::chrono::high_resolution_clock::now();
             int time = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
             tPartitions += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
         }
