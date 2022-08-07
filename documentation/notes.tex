@@ -38,20 +38,20 @@
 \usepackage{subcaption}
 %control
 \usepackage{ifthen}
-
 % Plots
 \usepackage{pgfplots}
 \pgfplotsset{compat = newest}
 \usepgfplotslibrary{fillbetween}
 % cake diagrams
 \usepackage{pgf-pie}  
-
 % Better enumerate
 \usepackage{outlines}
-
 % snake lines
 \usetikzlibrary{decorations.pathmorphing}
 \tikzset{snake it/.style={decorate, decoration=snake}}
+% Better citations
+\usepackage[style=verbose]{biblatex}
+\addbibresource{reference.bib}
 
 % Dependencies
 \usepackage{mymacros}
@@ -99,14 +99,14 @@ In this thesis an upper limit for the speedup of GPU accelerated SPTDS building 
 \newpage
 \section{Background}
 
-Structures occurring within astrophysical simulations can be identified in real observed data\cite{Stadel2001}. Thus the simulations can help us understand the universe. Generated datasets with similar distributions to reality are used to seed the simulations. Mass field distribution are approximated with a large number of particles, where each of them represents a mass point. Numerical integration methods then compute the gravitational forces on each object.
+Structures occurring within astrophysical simulations can be identified in real observed data \footcite{Stadel2001}. Thus the simulations can help us understand the universe. Generated datasets with similar distributions to reality are used to seed the simulations. Mass field distribution are approximated with a large number of particles, where each of them represents a mass point. Numerical integration methods then compute the gravitational forces on each object.
 Originally developed by Joachim Stadel during his PhD at University of Washington \cite{Stadel2001}, PKDGrav is a fully parallel N-Body code which is now maintained and improved by the ICS at UHZ \cite{ICS}. 
 PkDGrav, as well as most state of the art simulation softwares, use a space partitioning tree data structure (SPTDS), which is used to partition a space into subspaces. Each cell (node), in the tree represents a subspace, and the children of the node represent the subspaces that are contained within the node's subspace. The mutlipole expansion is then applied to each cell of the SPTDS and the fast multipole method increases the runtime from $O(N^2)$ to $O(N)$ where $N$ is the total number of particles. \cite{Stadel2001}
 
 
 \subsection{Fast Multipole Expansion} \label{sec:multipole}
 
-In mathematics, a multipole is a concept used to approximate the shape of a physical body. In our case the body consists of the particles contained within the subspace, or volume of a cell. The multipole expansion is the mathematical series that results from this approximation. The resulting series can simplify the original body, by choosing a suitable precision.
+In mathematics, a multipole is a concept used to approximate the shape of a physical body. In this case the body consists of the particles contained within the subspace, or volume of a cell. The multipole expansion is the mathematical series that results from this approximation. The resulting series can simplify the original body, by choosing a suitable precision.
 
 To keep force integration within a reasonable error margin, in most cases it is not necessary to compute all $N$ to $N$ interactions. The fast multipole method can compute gravity in $O(N)$ runtime by leveraging the SPTDS. \cite{Stadel2001}
 
@@ -139,13 +139,13 @@ The computational effort required in PKDGrav and most modern astrophysical N-Bod
 
 In PKDG each category is about one third of the total calculation time\cite{Stadel2001}. Making Global (1.) and Local Tree Building (2.) subjects to possible performance improvements, as GPU acceleration is as of now only exploited in Force Calculation and Integration(3.).
 
-Our main objective is to improve the runtime of astrophysical simulations, or more specifically PKDGrav. Simultaneously penalties with regards to $N$, the total number of particles, should be kept as low as possible. Simulation accuracy benefits from large $N$ as well as an increased number of time steps. As GPU accelerations are low level, hardware specific details are relevant. Thus the algorithms should be adapted and optimized the algorithms with regards to the target hardware Piz Daint.
+The main objective is to improve the runtime of astrophysical simulations, or more specifically PKDGrav. Simultaneously penalties with regards to $N$, the total number of particles, should be kept as low as possible. Simulation accuracy benefits from large $N$ as well as an increased number of time steps. As GPU accelerations are low level, hardware specific details are relevant. Thus the algorithms should be adapted and optimized the algorithms with regards to the target hardware Piz Daint.
 
 
 \subsection{Related Work}
 
 
-A number of GPU accelerated k-d tree construction algorithms exists, however the methods cannot simply be translated to ORB due to different axis choosing method. Fore example in the master thesis of Voglsam \cite{rrt} a k-d tree is computed on the GPU and used to improve ray tracing for 3D graphics. However it makes use of a binning algorithm to find an optimal cut across cells of the same depth, which can be done in a single iteration. However in our case the axes for cells of the same depth vary.
+A number of GPU accelerated k-d tree construction algorithms exists, however the methods cannot simply be translated to ORB due to different axis choosing method. Fore example in the master thesis of Voglsam \cite{rrt} a k-d tree is computed on the GPU and used to improve ray tracing for 3D graphics. However it makes use of a binning algorithm to find an optimal cut across cells of the same depth, which can be done in a single iteration. However in this case the axes for cells of the same depth vary.
 
 When subdividing ORB into its individual components as shown below, some subroutines can be computed using fairly general algorithms, which have already been implemented and optimized for the GPU in many open source libraries. 
 
@@ -219,7 +219,7 @@ To reduce the force integration error across all particles, some particles requi
 
 The workload for a particle $p_i$ is defined as the weighting function $w(p_i)$. The workload correlates with the number of simulations steps, that need to be computed for a single particle. In an optimally parallelized system balanced in terms of computational effort, the workload should be very similar among computing units. Where ideally the sum over all the particles considered by a thread is equal to the sum of all others. With strongly varying weights among particles, perfectly balancing the computational effort, results in a unbalanced distribution in terms of memory. 
 
-Let us consider a simple example to illustrate the point. Given the set of particles $A = \{p_1, p_2, .., p_{2m/3}\}$ and respectively $B = \{p_{2m/3 + 1}, p_2, .., p_{m}\}$. This yields a total number of particles equivalent to $N = m$. Assuming that $\forall p \in A : w(p) = 1$ and $\forall p \in B : w(p) = 2$. 
+Lets consider a simple example to illustrate the point. Given the set of particles $A = \{p_1, p_2, .., p_{2m/3}\}$ and respectively $B = \{p_{2m/3 + 1}, p_2, .., p_{m}\}$. This yields a total number of particles equivalent to $N = m$. Assuming that $\forall p \in A : w(p) = 1$ and $\forall p \in B : w(p) = 2$. 
 All particles from set $A$ are assigned to processor rank 0 and the particles from B to rank 1. It follows $\sum_{p\in A} w(p) = \sum_{p\in B} w(p)$. Thus the two processors are balanced in terms of computing costs, but not in terms of memory size. In fact, process with rank 0 has $2m/3$ elements and rank 1 has $m/3$ elements. Assuming each process has a memory size of $2m/3$, then clearly this configuration is not optimal. When favoring memory balancing, $2m/3$ could be assigned to each processor and $(4/3) \times m$ as many particles could be processed in total, which is larger than the original $N$ and therefore favorable.
 
 To which degree its ideal favor memory over workload balancing is difficult to answer. For now parametrize the workload using the weighting function. The workload balancing can also be completely ignored by setting $w(p_i) = 1$ for all particles.
@@ -486,7 +486,7 @@ Depicted in figure \ref{fig:orb1} \&  \ref{fig:orb11} is the SPTDS after initial
 	\caption{Tree with ORB at recursion depth 1}
 	\label{fig:orb22}
 \end{figure}
-A cut plane, which translates to a cut line in our simplified 2D example is constructed and $cell_2$ and $cell_3$ are generated accordingly.
+A cut plane, which translates to a cut line in the simplified 2D example is constructed and $cell_2$ and $cell_3$ are generated accordingly.
 
 \ref{fig:orb2} \&  \ref{fig:orb22} Depict a SPTDS of depth 2, or two levels, where a cut plane was found dividing $V_{cell_1}$ into $V_{cell_2}$ and $V_{cell_3}$, $d_{cell_2} = 2$ and $d_{cell_3} = 1$ subsequently are calculated, meaning $cell_3$ is considered a leaf cell. Thus $N_{cell_2}$ can be computed using a simplified version of equation \ref{eq:N1} since all weights are assumed to be 1: $N_{cell_2} = \lfloor \frac{d_{cell_2}}{d_{cell_3}} * N_{cell_1} \rfloor = \lfloor \frac{2}{3}  * 7 \rfloor = 4$ subsequently $N_{cell_3} = 3$. 
 
@@ -587,7 +587,7 @@ Because the maximal number of iterations is known, a loop can be used as seen be
 
 \subsubsection{Edge Cases}
 
-Let us consider the following example particle distribution where $particle_1$ and $particle_2$ have identical x coordinates. 
+Considering the following example particle distribution where $particle_1$ and $particle_2$ have identical x coordinates. 
 
 \begin{figure}[H]
 	\begin{center}
@@ -893,13 +893,13 @@ For Piz Daint, Summit and Eige all relevant hardware metrics were collected and 
 
 \subsection{Roofline Performance Model} \label{sec:roof}
 
-In a first step it is determined weather our computations are bound by memory bandwidth or the actual performance of the computing unit. The most costly computation is line 6 of the cut method (figure \ref{proc:cut}) with a runtime of $O(32 \times N)$. Oftentimes when an algorithm iterates over a large dataset performing only very little calculations on its individual elements, the limiting factor is the memory. To support this claim make roofline models for all three systems and check weather they are really memory bound. A roofline model compares arithmetic intensity in flops per byte against the actual performance of the computing chip in flops. 
+In a first step it is determined weather the computations are bound by memory bandwidth or the actual performance of the computing unit. The most costly computation is line 6 of the cut method (figure \ref{proc:cut}) with a runtime of $O(32 \times N)$. Oftentimes when an algorithm iterates over a large dataset performing only very little calculations on its individual elements, the limiting factor is the memory. To support this claim make roofline models for all three systems and check weather they are really memory bound. A roofline model compares arithmetic intensity in flops per byte against the actual performance of the computing chip in flops. 
 
 \subsubsection{Estimating Flops}
 
 For modern hardware, its fairly uncommon to release flops (floating point operations per second) values. Steadily evolving SIMD instruction sets result in varying performance for different implementation details, which in turn are compiled into different assembly instructions. Depending on the algorithm, implementation details and compilation flags the c++ compiler tries to compile ideal assembly instruction sets. SIMD instructions can only be used when there is a contiguous memory access, thus in some cases a poor memory layout choice may lead to a much lower flops. 
 
-For most modern CPU chip architectures AVX is the fastest SIMD instruction set available. The common AVX2 enables the processing of 8 floating point operations per instruction with a  CPI (cycles per instructions) of 0.5. The CPI can also vary depending on chip architecture, but to our knowledge all relevant CPU's from figure \ref{fig:datapoints} indeed support a CPI of 0.5 along with AVX2. A lower CPI results in a higher efficiency, as several instructions can be completed in a single cycle. 
+For most modern CPU chip architectures AVX is the fastest SIMD instruction set available. The common AVX2 enables the processing of 8 floating point operations per instruction with a  CPI (cycles per instructions) of 0.5. The CPI can also vary depending on chip architecture, all relevant CPU's from figure \ref{fig:datapoints} indeed support a CPI of 0.5 along with AVX2. A lower CPI results in a higher efficiency, as several instructions can be completed in a single cycle. 
 
 Equation \ref{eq:avx} defines a function to estimate the number of gigaflops for a given hardware. GHZ is the number of gigahertz which can be reached by the CPU, meanwhile $NF$ is the number of floats which can be processed simultaneously using AVX. $CPI$ is as mentioned the cycles per instructions for the AVX instruction set. Finally $np$ represents the number of processors, where a perfect parallelization is assumed, meaning 100\% of the code can be parallelized.
 
@@ -1302,7 +1302,7 @@ Another variant is to performing the partitioning on the GPU, meaning there is n
 \normalfont
 \subsubsection{Plugin Values} 
 
-Let us plugin the values from figure \ref{fig:datapoints} into the corresponding formulas \ref{eq:cpu}, \ref{eq:gpu} and \ref{eq:gputree} for Piz Daint.
+Lets plugin the values from figure \ref{fig:datapoints} into the corresponding formulas \ref{eq:cpu}, \ref{eq:gpu} and \ref{eq:gputree} for Piz Daint.
 The naive implementation yields the following speeds for the naive CPU  implementation:
 
 \pgfmathsetmacro\cpuPiz{ln(1024) / ln(2) * (\p * \s / 68)}
@@ -1428,7 +1428,7 @@ Each processor has its own local data, which can be accessed by calling $pst->lc
 
 The particles array has ownership over all particle objects. It has a (N,3) shape where each row represents a single particle. To enable coalesced memory access when iterating over a single axis i.e. $x_{:, axis}$, a column major storage order is chosen. Even though row accesses patterns i.e. $x_{i,:}$ are used as well, they happen less frequently. Most importantly there are cases where entire section of a row have to copied, which is by magnitude faster with row major storage.
 
-We use C-style arrays interchangeably with Blitz++ arrays to store all particles. Blitz++ is an open source wrapper class around C-style arrays, which helps with pointer management and can speed up the debugging process by keeping track of the array boundaries. Furthermore it features array slicing and does its own memory management. In certain cases the actual C-style array needs to be accessed, which can be accessed with $array.data()$. For example when iterating over the Blitz++ array, non optimal assembly code was observed, not reflecting optimal SIMD instructions available to the hardware. 
+C-style arrays are used interchangeably with Blitz++ arrays to store all particles. Blitz++ is an open source wrapper class around C-style arrays, which helps with pointer management and can speed up the debugging process by keeping track of the array boundaries. Furthermore it features array slicing and does its own memory management. In certain cases the actual C-style array needs to be accessed, which can be accessed with $array.data()$. For example when iterating over the Blitz++ array, non optimal assembly code was observed, not reflecting optimal SIMD instructions available to the hardware. 
 
 The particle data is loaded into the local data storage of each processor, meaning each processor owns a different unique set of particles.
 
@@ -1471,7 +1471,7 @@ The SPTDS and thus the cells are constructed on the master alone, cells are only
 	\label{fig:treeheap}
 \end{figure}
 
-An array can be used as an efficient storage medium for the heap, since in our case $d$ can be set at compile time and the maximum number of cells in the SPTDS can be derived from that. Meaning the array can be allocated statically.
+An array can be used as an efficient storage medium for the heap, since in this case $d$ can be set at compile time and the maximum number of cells in the SPTDS can be derived from that. Meaning the array can be allocated statically.
 Because MDL communicates data as arrays between the threads, another advantage of the array storage is the absence of any costly data structure conversion. 
 
 Since the STPDS is only a nearly complete binary tree and not a complete binary tree, special attention has to be paid when performing the ORB algorithm in an iterative way. But because $d$ is known, many attributes of the SPTDS can be determined deterministically.
@@ -2206,7 +2206,7 @@ N \times 3$. Nevertheless this corresponds a fraction of the total data transfer
 \end{figure}
 
 
-A GPU partitioning algorithm was first proposed by Cederman \cite{GPUQ} and later refined by Manca \cite{CUDAQ} where atomic operations are leveraged to improve the runtime of the algorithm. Our version is built around the concepts introduced by Manca. 
+A GPU partitioning algorithm was first proposed by Cederman \cite{GPUQ} and later refined by Manca \cite{CUDAQ} where atomic operations are leveraged to improve the runtime of the algorithm. This version is built around the concepts introduced by Manca. 
 
 Early results have shown partitioning the data on the GPU is not really faster than the CPU version where the CPU version is not even implemented in a optimal manner and finally the number of particles which can be stored on the GPU memory is reduced by $\frac{5}{3}$. This is caused by required additional temporary arrays for memory swaps on the GPU. Furthermore there was not enough time to fully optimize and track down all issues with the code, therefore not full kernel code is provided, instead the underlying concepts are introduced for subsequent work. 
 
@@ -2257,10 +2257,10 @@ In the adapted schedule (figure \ref{fig:orbgpu3}) the Copy Particles To GPU ser
 In a first step a block wise partition is performed, meaning there is no synchronization between blocks at this stage. Each thread loads the particle coordinate of the matching axis into the shared memory register $S$. Then two copies of the data stored in the shared memory are made where the first copy $A$ compares each value with the cut and stores 0 if the value is smaller and 1 otherwise. Consequently the second copy $B$ stores the inverted result. 
 Now a parallel prefix sum (also refered to as a scan) is computed on both copies, where an algorithm as described in GPU Gems \cite{SCAN} can be used. In $B$ each element is then incremented by the an offset equal to the total number of elements smaller than the cut. 
 In theory the block wise partition could already be applied by storing each element with index $i$ larger than the cut at $A_i$ and larger elements at $B_i$. 
-However our goal is to partition all elements across multiple blocks. To do so a global variable called $leq$ and $g$ is introduced, where the total number of elements smaller equal and bigger than the cut are stored. Each time a block has computed both scans, the number of elements designated to the block smaller and larger than the cut are known. Thus a single thread of each block performs an atomic add on $leq$ and $g$ accordingly. $AtomicAdd()$ returns the old value of the variable. The return value can be caught and stored two designated shared memory register $s_leq$ and $s_g$. 
+However the goal is to partition all elements across multiple blocks. To do so a global variable called $leq$ and $g$ is introduced, where the total number of elements smaller equal and bigger than the cut are stored. Each time a block has computed both scans, the number of elements designated to the block smaller and larger than the cut are known. Thus a single thread of each block performs an atomic add on $leq$ and $g$ accordingly. $AtomicAdd()$ returns the old value of the variable. The return value can be caught and stored two designated shared memory register $s_leq$ and $s_g$. 
 At this stage every thread in a block agrees on a value for $s_leq$ and $s_g$ the values can be treated as starting indices to store the block wise partitioned results in the output array. In this case however an element $i$, which is larger than the cut is stored location $A_i + s_leq$ and if larger at $B_i = s_g$. 
 
-In our case the input array are coordinate values of particles and the output array is a temporary array of size $N$. The in an output array cannot be the same as the partition cannot be performed in place. Doing so would result in elements that are overwritten before they are read by the thread assigned to it. This cannot be avoided with the proposed technique as the relationship between the range of input data treated by a kernel and the output is not deterministic. Its dictated by the order, by which the kernel reach the $atomicAdd()$ statement. 
+In this case the input array are coordinate values of particles and the output array is a temporary array of size $N$. The in an output array cannot be the same as the partition cannot be performed in place. Doing so would result in elements that are overwritten before they are read by the thread assigned to it. This cannot be avoided with the proposed technique as the relationship between the range of input data treated by a kernel and the output is not deterministic. Its dictated by the order, by which the kernel reach the $atomicAdd()$ statement. 
 
 As of now only a single axis is partitioned, but the same needs to be done for the other two axes. One approach is to partition all the other arrays in the same kernel, as the permutations can simply be reapplied. However in this case three  additional temporary arrays are needed, one for each axis. Further Reducing the number of particles which can be stored on the GPU by $\frac{1}{2}$. A more memory efficent, but slightly slower variant is to allocate another array on the GPU where the actual permutation indices are stored when the partition kernel is executed. Therefore together with the temporary array $N$ is only reduced by $\frac{3}{5}$. After the partition kernel has finished, the coordinates can be copied back from the temporary array to the original location in a device to device copy. Then the second axis is partitioned using the precomputed permutations and the results are again copied back to the proper location. Finally after the step is repeated for the last axis, the partition is finished.
 
@@ -2388,8 +2388,9 @@ To make sure the GPU version scales good the total runtimes..
 
 
 % Use for reduction explanation https://texample.net/tikz/examples/database-decimation-process/
-\bibliographystyle{unsrt}
-\bibliography{reference}
+%\bibliographystyle{unsrt}
+\printbibliography
+
 
 \listoffigures
 \listoftables
