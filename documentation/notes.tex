@@ -81,6 +81,9 @@
     tabsize=3,	
 }
 
+% Reviewers
+\usepackage{soul}
+\DeclareRobustCommand{\doug}[1]{ {\begingroup\sethlcolor{orange}\hl{(doug) #1}\endgroup} }
 
 % Title
 \title{Orthogonal Recursive Bisection on the GPU for Accelerated Load Balancing in Large N-Body Simulations \\ - \\ Bachelor Thesis}
@@ -100,9 +103,9 @@
 \section{Introduction}
 
 
-The N-Body technique has been used for decades to simulate the Universe to compare theory with observations. It uses "particles" to represent objects of a certain mass and computes the forces by applying the gravity equation. As the forces operate over infinite distance it is necessary to consider all pair-wise interactions, making a naive implementation $\mathcal{O}(n^2)$. This does not scale with large particle counts.
+The N-Body technique has been used for decades to simulate the Universe to compare theory with observations. It uses ``particles'' to represent objects of a certain mass and computes the forces by applying the gravity equation. As the forces operate over infinite distance it is necessary to consider all pair-wise interactions, making a naive implementation $\mathcal{O}(n^2)$. This does not scale with large particle counts.\doug{the problem becomes ``computationally infeasible'' with large particle counts}
 
-A common solution is to partition the space, in which the particles are contained, into a set of subspaces, also called cells. These cells are then stored in a space partitioning tree data structure (SPTDS) in order to speed up the simulation with the Fast Multipole Method (FMM) to $O(n)$. 
+A common solution is to partition the space in which the particles are contained, into a set of subspaces, also called cells. These cells are then stored in a space partitioning tree data structure (SPTDS) in order to speed up the simulation with the Fast Multipole Method (FMM) to $O(n)$. 
 Building the data structure uses a significant percentage of the overall simulation time. As of now this was usually done on the CPU, not leveraging GPU acceleration. 
 In this thesis an upper limit for the speedup of GPU accelerated SPTDS building algorithms over its CPU only counterpart is established. An efficient methods of building the SPTDS on the CPU and the GPU is then proposed and implemented in C++ and CUDA.
 
@@ -111,14 +114,14 @@ In this thesis an upper limit for the speedup of GPU accelerated SPTDS building 
 \newpage
 \section{Background}
 
-Structures occurring within astrophysical simulations can be identified in real observed data \cite{Stadel2001}. Thus the simulations can help us understand the universe. Generated datasets with similar distributions to reality are used to seed the simulations. Mass field distribution are approximated with a large number of particles, where each of them represents a mass point. Numerical integration methods then compute the gravitational forces on each object.
+Structures occurring within astrophysical simulations can be identified\doug{we model observations (create mock universes) to compare with observation} in real observed data \cite{Stadel2001}. Thus the simulations can help us understand the universe. Generated datasets with similar distributions to reality are used to seed the simulations. Mass field distribution are approximated with a large number of particles, where each of them represents a mass point.\doug{We model a collisionless fluid and use ``particles'' to sample the mass distribution} Numerical integration methods then compute the gravitational forces on each object.
 Originally developed by Joachim Stadel during his PhD at University of Washington \cite{Stadel2001}, PKDGrav is a fully parallel N-Body code which is now maintained and improved by the ICS at UHZ \cite{ICS}. 
 PkDGrav, as well as most state of the art simulation softwares, use a space partitioning tree data structure (SPTDS), which is used to partition a space into subspaces. Each cell (node), in the tree represents a subspace, and the children of the node represent the subspaces that are contained within the node's subspace. The mutlipole expansion is then applied to each cell of the SPTDS and the fast multipole method increases the runtime from $O(N^2)$ to $O(N)$ where $N$ is the total number of particles. \cite{Stadel2001}
 
 
 \subsection{Fast Multipole Expansion} \label{sec:multipole}
 
-In mathematics, a multipole is a concept used to approximate the shape of a physical body. In this case the body consists of the particles contained within the subspace, or volume of a cell. The multipole expansion is the mathematical series that results from this approximation. The resulting series can simplify the original body, by choosing a suitable precision.
+In mathematics, a multipole is a concept used to approximate the shape of a physical body\doug{distribution}. In this case the body consists of the particles contained within the subspace, or volume of a cell. The multipole expansion is the mathematical series that results from this approximation. The resulting series can simplify the original body, by choosing a suitable precision.
 
 To keep force integration within a reasonable error margin, in most cases it is not necessary to compute all $N$ to $N$ interactions. The fast multipole method can compute gravity in $O(N)$ runtime by leveraging the SPTDS. \cite{Stadel2001}
 
@@ -144,12 +147,12 @@ Most if not all state of the art supercomputers are hybrid, meaning each node ha
 The computational effort required in PKDGrav and most modern astrophysical N-Body simulations can be divided into three categories:
 
 \begin{enumerate}
-	\item \textbf{Global Tree Building / Load Balancing:} In supercomputers, particles are distributed equally among computing nodes to leverage node level parallelization. ORB is used to generate a well suited SPTDS for FMM on a node level.
-	\item \textbf{Local Tree Building:} The same approach is repeated on a local level, where instead of distributing the workload among nodes, its distributed among threads. The tree from step 1. is expanded by the locally computed tree.
+	\item \textbf{Global Tree Building / Load Balancing:} In supercomputers, particles are distributed equally\doug{not ``equally'': to balance work or memory or some combination} among computing nodes to leverage node level parallelization. ORB is used to generate a well suited SPTDS for FMM on a node level.
+	\item \textbf{Local Tree Building:} The same approach is repeated on a local level, where instead of distributing the workload among nodes, its distributed among threads. The tree from step 1. is expanded by the locally computed tree.\doug{tree building continues down to ``buckets''}
 	\item \textbf{Force Calculation and Integration:} The STPDS constructed in step 1. and 2. combined with FMM is used to compute force integration. 
 \end{enumerate}
 
-In PKDG each category is about one third of the total calculation time \cite{Stadel2001}. Making Global (1.) and Local Tree Building (2.) subjects to possible performance improvements, as GPU acceleration is as of now only exploited in Force Calculation and Integration(3.).
+In PKDG each category is about one third of the total calculation time \cite{Potter2017}. Making Global (1.) and Local Tree Building (2.) subjects to possible performance improvements, as GPU acceleration is as of now only exploited in Force Calculation and Integration(3.).\doug{actually just the force calculations}
 
 The main objective is to improve the runtime of astrophysical simulations, or more specifically PKDGrav. Simultaneously penalties with regards to $N$, the total number of particles, should be kept as low as possible. Simulation accuracy benefits from large $N$ as well as an increased number of time steps. As GPU accelerations are low level, hardware specific details are relevant. Thus the algorithms should be adapted and optimized the algorithms with regards to the target hardware Piz Daint.
 
@@ -195,8 +198,7 @@ Naturally each cell has two pointers pointing to its two children, which are use
 
 \subsection{Target Data and Notation}\label{sec:target-data}
 
-A modified random Gaussian distributed is used to generate the target dataset, where its set to fit measured constraints of the actual universe. Thus the number of particles can set dynamically. In the simulation, a single particle has a mass of $10^8$ solar masses. 
-
+A modified random Gaussian distributed is used to generate the target dataset, where its set to fit measured constraints of the actual universe. Thus the number of particles can set dynamically. In the simulation, a single particle has a mass of $10^8$ solar masses. \doug{different simulations will use dramatically different particle masses. Are you giving an example here or making a more general statement?}
 
 \begin{itemize}
 	\item The space space of binary numbers with a precision of $p$ is defined as $\mathbb{B}_p$ where $a \in \mathbb{B}_p \Leftrightarrow a \in \{0,1\}^{p}$
@@ -225,13 +227,13 @@ It lies in the nature of the universe, that large clusters of particles are foun
 
 
 \subsection{Memory and Workload Balancing}\label{balancing}
-As mentioned the aim is to (1) improve the runtime of ORB whilst (2) at the same time keeping the number of particles $N$ as large as possible. There exists some averse effects when disregarding interactions between minimizing runtime and maximizing $N$.
+As mentioned the aim is to (1) improve the runtime of ORB whilst (2) at the same time keeping the number of particles $N$ as large as possible.\doug{really? Don't we want to improve performance for any given N?} There exists some averse effects when disregarding interactions between minimizing runtime and maximizing $N$.
 
 To reduce the force integration error across all particles, some particles require more timesteps than others. This is caused by the vastly variant forces which are exerted on the particles. Whilst some follow a straight path with an almost constant velocity requiring little computational effort for great precision, others are influenced by strong gravitational poles resulting in highly curved movement paths and correlating with higher numbers of timesteps required.
 
 The workload for a particle $p_i$ is defined as the weighting function $w(p_i)$. The workload correlates with the number of simulations steps, that need to be computed for a single particle. In an optimally parallelized system balanced in terms of computational effort, the workload should be very similar among computing units. Where ideally the sum over all the particles considered by a thread is equal to the sum of all others. With strongly varying weights among particles, perfectly balancing the computational effort, results in a unbalanced distribution in terms of memory. 
 
-Lets consider a simple example to illustrate the point. Given the set of particles $A = \{p_1, p_2, .., p_{2m/3}\}$ and respectively $B = \{p_{2m/3 + 1}, p_2, .., p_{m}\}$. This yields a total number of particles equivalent to $N = m$. Assuming that $\forall p \in A : w(p) = 1$ and $\forall p \in B : w(p) = 2$. 
+Lets consider a simple example\doug{this example could be simpler} to illustrate the point. Given the set of particles $A = \{p_1, p_2, .., p_{2m/3}\}$ and respectively $B = \{p_{2m/3 + 1}, p_2, .., p_{m}\}$. This yields a total number of particles equivalent to $N = m$. Assuming that $\forall p \in A : w(p) = 1$ and $\forall p \in B : w(p) = 2$. 
 All particles from set $A$ are assigned to processor rank 0 and the particles from B to rank 1. It follows $\sum_{p\in A} w(p) = \sum_{p\in B} w(p)$. Thus the two processors are balanced in terms of computing costs, but not in terms of memory size. In fact, process with rank 0 has $2m/3$ elements and rank 1 has $m/3$ elements. Assuming each process has a memory size of $2m/3$, then clearly this configuration is not optimal. When favoring memory balancing, $2m/3$ could be assigned to each processor and $(4/3) \times m$ as many particles could be processed in total, which is larger than the original $N$ and therefore favorable.
 
 To which degree its ideal favor memory over workload balancing is difficult to answer. For now parametrize the workload using the weighting function. The workload balancing can also be completely ignored by setting $w(p_i) = 1$ for all particles.
@@ -884,7 +886,7 @@ For Piz Daint, Summit and Eiger all relevant hardware metrics were collected and
 			Max $GHZ_C$ & 3.8 GHZ & 4 GHZ & 3.4 GHZ\\
 			\# Cores & 12 & 22 & 64 \\
 			Architexture & Haswell & POWER9 & AMD Infinity Architecture \\
-			SIMD & AVX2 & ? & AVX2 \\ 
+			SIMD & AVX2 & \doug{VSX} & AVX2 \\ 
 			\# GPUs & 1 & 6 & 0 \\
 			GPU Model & NVIDIA P100 \cite{TESLAP100} &NVIDIA V100s \cite{NVIDIA} & - \\
 			GPU Mem. Cap. & 16 GB & 16 GB $\times$ 6 & -\\
@@ -1262,12 +1264,11 @@ $vmovups$, $vcomplpts$ and $vpsubd$ are AVX2 commands since they are using the $
 
 The following results were obtained on $2^{27}$ particles with a thread count of 16 on Piz Daint. The reduction takes 2.3 milliseconds, resulting in a throughput of $2^{27} / 10^{9} * 10^3 / 2.3 = 58 gflops$. This is close to the memory bandwidth (68 GB/s) and far below the performance maximum of the CPU, which even for ($np = 1$) is $3.8 * 8 * 2 * 1 * 16 = 972.8 gflops$. Thus the algorithm is assumed to be memory bound for the CPU and most probably memory bound for the GPU. 
 
-
 \subsection{Runtime Estimates}
 
 A runtime estimation for the CPU version and two different GPU implementations is constructed. In the first GPU implementation \textit{GPU Counting}, an array of particles is sent to the GPU, where counting is then performed. In a more advanced variant \textit{GPU Counting and Partitioning} the particles are sent from the CPU to GPU only once and the partitioning is performed on the GPU as well.  
 
-A precision $p$ of 32 is assumed, which is general standard for both integers and floats and its a sensible assumption for astrophysical simulations. The total storage required for all particle positions is $32 \times 3 \times N bits = 4 \times 3 \times N Bytes = 12 \times N Bytes$. Furthermore $d = 1024$ and $N=10^9$ are assumed.
+A precision $p$ of 32 is assumed, which is general standard for both integers and floats\doug{I think things can be more complicated with float} and its a sensible assumption for astrophysical simulations. The total storage required for all particle positions is $32 \times 3 \times N bits = 4 \times 3 \times N Bytes = 12 \times N Bytes$. Furthermore $d = 1024$ and $N=10^9$ are assumed.
  
 \subsubsection{CPU Version}
 
@@ -1448,7 +1449,7 @@ For this project C++ 17 along with CUDA 11.3, OpenMPI 4.1.0 and Blitz++ 1.0.2  \
 
 \subsection{MDL and PKDGrav}
 
-MDL, the machine dependent layer provides an abstraction layer around the parallel primitives introduced by PKDGrav. The Master layer is responsible to coordinate the flow of the program. It does so by calling the PST (Processor Set Tree), which distributes the tasks and gets processors to work on them. As the name suggests, the PST is organized as a binary tree where intermediate nodes contains a pointer to a consecutive processor as well as a next lower node. Each leaf cell of the graph then correspond to an individual processor.
+MDL, the machine dependent layer provides an abstraction layer around the parallel primitives introduced by PKDGrav. The Master layer is responsible to coordinate the flow of the program. It does so by calling the PST (Processor Set Tree), which distributes the tasks and gets processors to work on them. As the name suggests, the PST is organized as a binary tree where intermediate nodes contains a pointer to a consecutive processor as well as a next lower node. Each leaf cell of the graph then correspond to an individual processor.\doug{to be precise each leaf is a ``core''}
 
 Parallel processes are dispatched by descending the PST until they reach all processors. There computations are performed and the results are combined by passing them back up the PST until they reach the master.
 A parallel process can be programmed by implementing the service interface as explained in section \ref{services}.
@@ -1989,6 +1990,8 @@ The rest of the kernel code performs the actual reduction, where in each step tw
 The reduction is optimized by using a template, which indicates the total number of thread per block, which is equivalent to the blockSize. Since the template is evaluated at compile time, all the if statements taking blockSize as a parameter in figure do not cause any performance loss. In fact, because  the reduction loops are unrolled (31-52) the the performance of the kernel is increased. 
 
 Each time there is a control statement involving non template arguments, a branch divergence is introduced. On the GPU these divergences become problematic bad when they are introduced inside a warp. Meaning if any of the 32 within a warp execute a different code from the other threads, the warp cannot function optimally anymore. For this reason, the $warpReduce$ method as seen on line 2-9 is introduced. This method is only executed when there are 64 elements in shared memory which are still to be summed, which requires only 32 threads as every thread in each iteration sums two elements together. Inside the warp reduce method, there are more unrolled loops continuing the same patterns as described above. However in this case there are no control statements that could introduce a warp divergence, which means there are computations performed which are not actually necessary, however as the computations inside a warp are executed in parallel anyways, this comes with no performance penalties. Inside a warp there is no need for synchronization as all threads are executed in parallel. 
+
+\doug{why don't you use the warp shuffle instrinsics, e.g., \_\_shfl\_down\_sync}
 
 \begin{lstlisting}[language=c++, caption=Conditional Reduction in CUDA, label=cuda:reduction]
 template <unsigned int blockSize>
