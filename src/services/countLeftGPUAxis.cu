@@ -7,6 +7,18 @@
 static_assert(std::is_void<ServiceCountLeftGPUAxis::input>()  || std::is_trivial<ServiceCountLeftGPUAxis::input>());
 static_assert(std::is_void<ServiceCountLeftGPUAxis::output>() || std::is_trivial<ServiceCountLeftGPUAxis::output>());
 
+#define FULL_MASK 0xffffffff
+template <unsigned int blockSize>
+extern __device__ void warpReduce2(volatile unsigned int *s_data, unsigned int tid) {
+    if (blockSize >= 64) s_data[tid] += s_data[tid + 32];
+    if (tid < 32) {
+        unsigned int val = s_data[tid];
+        for (int offset = 16; offset > 0; offset /= 2)
+            val += __shfl_down_sync(FULL_MASK, val, offset);
+        s_data[tid] = val;
+    }
+}
+
 template <unsigned int blockSize>
 extern __device__ void warpReduce(volatile unsigned int *s_data, unsigned int tid) {
     if (blockSize >= 64) s_data[tid] += s_data[tid + 32];
@@ -66,7 +78,6 @@ extern __global__ void reduce(
     }
 }
 
-#define FULL_MASK 0xffffffff
 template <unsigned int blockSize>
 extern __global__ void reduce2(
         float * g_idata,
@@ -85,39 +96,31 @@ extern __global__ void reduce2(
     unsigned int i = begin + tid;
     s_data[tid] = 0;
 
+    unsigned int val = 0;
     // unaligned coalesced g memory access
     while (i < end) {
-        s_data[tid] += (g_idata[i] <= cut);
+        val += (g_idata[i] <= cut);
         i += blockSize;
     }
     __syncthreads();
 
-    if (blockSize >= 512) {
-        if (tid < 256) {
-            s_data[tid] += s_data[tid + 256];
-        }
-        __syncthreads();
-    }
-    if (blockSize >= 256) {
-        if (tid < 128) {
-            s_data[tid] += s_data[tid + 128];
-        } __syncthreads();
-    }
-    if (blockSize >= 128) {
-        if (tid < 64) {
-            s_data[tid] += s_data[tid + 64];
-        } __syncthreads();
-    }
-    if (tid < 32) {
-        unsigned int val = s_data[tid];
+    for (int offset = 16; offset > 0; offset /= 2)
+        val += __shfl_down_sync(FULL_MASK, val, offset);
 
-        for (int offset = 16; offset > 0; offset /= 2)
-            val += __shfl_down_sync(FULL_MASK, val, offset);
+    s_data[tid] = val;
+    __syncthreads();
 
-        s_data[0] = val;
+    val = 0;
+    if (tid < 32 && tid * 32 < blockSize) {
+        val += s_data[tid * 32];
     }
+    __syncthreads();
+
+    for (int offset = 16; offset > 0; offset /= 2)
+        val += __shfl_down_sync(FULL_MASK, val, offset);
+
     if (tid == 0) {
-        g_odata[blockIdx.x] = s_data[0];
+        g_odata[blockIdx.x] = val;
     }
 }
 
