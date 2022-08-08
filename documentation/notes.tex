@@ -2217,6 +2217,73 @@ unsigned int * g_odata) {
 	\label{cuda:reduction2}
 \end{figure}
 
+
+\subsection{Improved GPU Accelerated Count Left with Warp Level Primitives} \label{imprctlwrp}
+
+A feature of CUDA which has not been leveraged as of now in this thesis are warp level primitives. The primitives enable performing operations on local data of threads across each warp. In theory this can increase the runtime as local data is even faster than shared memory. 
+The Improved Count Left service as proposed before does not have to be rewritten entirely, in fact only the kernel itself is rewritten and even simplified.
+
+
+\begin{figure}[H]
+	\begin{lstlisting}[language=c++, caption=Kernel Optimized GPU Count Left,
+		label = ctlocudawrp]
+ template <unsigned int blockSize>
+extern __global__ void reduce2(
+	float * g_idata,
+	unsigned int * g_begins,
+	unsigned int * g_ends,
+	float * g_cuts,
+	unsigned int * g_odata) {
+	
+	__shared__ unsigned int s_data[blockSize];
+	
+	unsigned int tid = threadIdx.x;
+	const unsigned int begin = g_begins[blockIdx.x];
+	const unsigned int end = g_ends[blockIdx.x];
+	const float cut = g_cuts[blockIdx.x];
+	
+	unsigned int i = begin + tid;
+	s_data[tid] = 0;
+	
+	unsigned int val = 0;
+	// unaligned coalesced g memory access
+	while (i < end) {
+		val += (g_idata[i] <= cut);
+		i += blockSize;
+	}
+	__syncwarp();
+	
+	for (int offset = 16; offset > 0; offset /= 2)
+	val += __shfl_down_sync(FULL_MASK, val, offset);
+	
+	s_data[tid] = val;
+	__syncthreads();
+	
+	// All warps but first one are not needed anymore
+	if (tid >= 32 ) {
+		return;
+	}
+	
+	val = 0;    
+	if (tid * 32 < blockSize) {
+		val += s_data[tid * 32];
+	}
+	__syncwarp();
+	
+	for (int offset = 16; offset > 0; offset /= 2)
+	val += __shfl_down_sync(FULL_MASK, val, offset);
+	
+	if (tid == 0) {
+		g_odata[blockIdx.x] = val;
+	}
+}
+	\end{lstlisting}
+	\caption{Reduction in CUDA}
+	\label{cuda:reduction3}
+\end{figure}
+
+
+
 \subsection{GPU Accelerated Partitioning}
 
 A GPU accelerated Count Left service is implemented successfully. Since the particles are still partitioned on the CPU, the data needs to be copied to GPU each time the SPTDS is expanded. As the Make Axis service is used to compress the axes into a single array, only $N$ elements need to be copied, but this needs to be repeated $\lceil \log_2 d \rceil$ times. 

@@ -110,18 +110,73 @@ extern __global__ void reduce2(
     s_data[tid] = val;
     __syncthreads();
 
+    if (tid > 32 ) {
+        return;
+    }
+
+    val = 0;
+    if (tid < 32 && tid * 32 < blockSize) {
+        val += s_data[tid * 32];
+    }
+    __syncwarp();
+
+    for (int offset = 16; offset > 0; offset /= 2)
+        val += __shfl_down_sync(FULL_MASK, val, offset);
+
+    if (tid == 0) {
+        g_odata[blockIdx.x] = val;
+    }
+}
+
+
+template <unsigned int blockSize>
+extern __global__ void reduce3(
+        float * g_idata,
+        unsigned int * g_begins,
+        unsigned int * g_ends,
+        float * g_cuts,
+        unsigned int * g_odata) {
+
+    __shared__ unsigned int s_data[32];
+
+    unsigned int tid = threadIdx.x;
+    const unsigned int begin = g_begins[blockIdx.x];
+    const unsigned int end = g_ends[blockIdx.x];
+    const float cut = g_cuts[blockIdx.x];
+
+    unsigned int i = begin + tid;
+    s_data[tid] = 0;
+
+    unsigned int val = 0;
+    // unaligned coalesced g memory access
+    while (i < end) {
+        val += (g_idata[i] <= cut);
+        i += blockSize;
+    }
+    printf("%d %i\n", tid, val);
+    __syncwarp();
+
+    for (int offset = 16; offset > 0; offset >>= 1)
+        val += __shfl_down_sync(FULL_MASK, val, offset);
+
+    printf("%d %d %d %i\n", tid, tid & (32 - 1), (tid) >> 5, val);
+    if (tid & (32 - 1) == 0) {
+        s_data[(tid) >> 5] = val;
+    }
+
+    __syncthreads();
+
     // All warps but first one are not needed anymore
     if (tid >= 32 ) {
         return;
     }
 
     val = 0;
-    if (tid * 32 < blockSize) {
-        val += s_data[tid * 32];
+    if (tid < 32 && tid * 32 < blockSize) {
+        val += s_data[tid ];
     }
-    __syncwarp();
 
-    for (int offset = 16; offset > 0; offset /= 2)
+    for (int offset = 16; offset > 0; offset >>= 1)
         val += __shfl_down_sync(FULL_MASK, val, offset);
 
     if (tid == 0) {
@@ -171,7 +226,7 @@ int ServiceCountLeftGPUAxis::Service(PST pst,void *vin,int nIn,void *vout, int n
     //CUDA_CHECK(cudaMemset, (lcl->d_index, 0, sizeof(unsigned int)));
 
     // Execute the kernel
-    reduce<N_THREADS><<<
+    reduce3<N_THREADS><<<
             nBlocks,
             N_THREADS,
             N_THREADS * sizeof (unsigned int),
