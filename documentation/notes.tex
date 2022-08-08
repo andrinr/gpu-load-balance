@@ -50,8 +50,20 @@
 \usetikzlibrary{decorations.pathmorphing}
 \tikzset{snake it/.style={decorate, decoration=snake}}
 % Better citations
-\usepackage[style=verbose]{biblatex}
-\addbibresource{reference.bib}
+%Includes "References" in the table of contents
+%\usepackage[
+%	backend=biber,
+%	style=alphabetic,
+%	sorting=ynt,
+%	style=authoryear]{biblatex}
+%\addbibresource{reference.bib}
+
+%\usepackage[round]{natbib}   % omit 'round' option if you prefer square brackets
+%\bibliographystyle{plainnat}
+
+\bibliographystyle{apalike} 
+
+%\bibliographystyle{plainnat}
 
 % Dependencies
 \usepackage{mymacros}
@@ -99,7 +111,7 @@ In this thesis an upper limit for the speedup of GPU accelerated SPTDS building 
 \newpage
 \section{Background}
 
-Structures occurring within astrophysical simulations can be identified in real observed data \footcite{Stadel2001}. Thus the simulations can help us understand the universe. Generated datasets with similar distributions to reality are used to seed the simulations. Mass field distribution are approximated with a large number of particles, where each of them represents a mass point. Numerical integration methods then compute the gravitational forces on each object.
+Structures occurring within astrophysical simulations can be identified in real observed data \cite{Stadel2001}. Thus the simulations can help us understand the universe. Generated datasets with similar distributions to reality are used to seed the simulations. Mass field distribution are approximated with a large number of particles, where each of them represents a mass point. Numerical integration methods then compute the gravitational forces on each object.
 Originally developed by Joachim Stadel during his PhD at University of Washington \cite{Stadel2001}, PKDGrav is a fully parallel N-Body code which is now maintained and improved by the ICS at UHZ \cite{ICS}. 
 PkDGrav, as well as most state of the art simulation softwares, use a space partitioning tree data structure (SPTDS), which is used to partition a space into subspaces. Each cell (node), in the tree represents a subspace, and the children of the node represent the subspaces that are contained within the node's subspace. The mutlipole expansion is then applied to each cell of the SPTDS and the fast multipole method increases the runtime from $O(N^2)$ to $O(N)$ where $N$ is the total number of particles. \cite{Stadel2001}
 
@@ -116,7 +128,7 @@ Note that this example does not directly translate to the simulations, as a part
 
 \subsubsection{Advantage of Cubic Bounding Volumes}\label{sec:cubic}
 
-From \cite{Stadel2001}: "the opening radius of a cell is given by some constant factor times $r_{max}$". $r_{max}$ is the distance between the center of mass of a cell and its most distant corner. The opening radius correlates with the error ratio, which in turn influences how many timesteps have to be performed. Of the family of rectangular cuboids, the cube is the shape where the average distance between any point and its most distant corner point is the smallest. 
+The distance between the center of mass of a cell and its most distant corner correlate with the error ratio \cite{Stadel2001}, which in turn influences how many timesteps have to be performed. Of the family of rectangular cuboids, the cube is the shape where the average distance between any point and its most distant corner point is the smallest. 
 
 \subsection{ORB vs. K-d Trees}
 
@@ -127,7 +139,7 @@ In k-d tree construction, the axis lying orthogonal to the cut plane is chosen p
 
 \subsection{Rise of the GPU}
 
-Most if not all state of the art supercomputers are hybrid, meaning each node has a CPU as well as a GPU.\cite{TOP500} GPU accelerated code can increase the speed of many computations, where in most cases CUDA is used to fully leverage the hardware. 
+Most if not all state of the art supercomputers are hybrid, meaning each node has a CPU as well as a GPU\cite{TOP500}. GPU accelerated code can increase the speed of many computations, where in most cases CUDA is used to fully leverage the hardware. 
 
 The computational effort required in PKDGrav and most modern astrophysical N-Body simulations can be divided into three categories:
 
@@ -137,7 +149,7 @@ The computational effort required in PKDGrav and most modern astrophysical N-Bod
 	\item \textbf{Force Calculation and Integration:} The STPDS constructed in step 1. and 2. combined with FMM is used to compute force integration. 
 \end{enumerate}
 
-In PKDG each category is about one third of the total calculation time\cite{Stadel2001}. Making Global (1.) and Local Tree Building (2.) subjects to possible performance improvements, as GPU acceleration is as of now only exploited in Force Calculation and Integration(3.).
+In PKDG each category is about one third of the total calculation time \cite{Stadel2001}. Making Global (1.) and Local Tree Building (2.) subjects to possible performance improvements, as GPU acceleration is as of now only exploited in Force Calculation and Integration(3.).
 
 The main objective is to improve the runtime of astrophysical simulations, or more specifically PKDGrav. Simultaneously penalties with regards to $N$, the total number of particles, should be kept as low as possible. Simulation accuracy benefits from large $N$ as well as an increased number of time steps. As GPU accelerations are low level, hardware specific details are relevant. Thus the algorithms should be adapted and optimized the algorithms with regards to the target hardware Piz Daint.
 
@@ -322,8 +334,6 @@ Finally the original volume can be subdivided into two volumes as described on l
  	\end{algorithmic}
  	\caption{The ORB main routine}\label{proc:orbmain}
 \end{algorithm}
-
-
 
 \subsection{By Example}
 
@@ -681,13 +691,13 @@ Note how all particles from $cell_4$ are contained in the range of 0-1. The part
 \newpage
 \section{Theoretical Analysis}
 
-The main goal of this thesis, is to improve the runtime of the ORB algorithm by leveraging the graphics processing unit over the central processing unit. Before implementing, it makes sense to explore if and how strong the performance benefits could in theory manifest itself. For this purpose a simplified model is proposed, which is used to compare the runtime of the CPU version against two different GPU variants. As GPU programming is very low level, the knowledge gained while developing the model also builds a solid theoretical foundation.
+The main goal of this thesis, is to improve the runtime of the ORB algorithm by leveraging the graphics processing unit over the central processing unit. Before implementing, it makes sense to explore if and tp which degree the performance benefits could in theory manifest themselves. For this purpose a simplified model is proposed, this model is then used to compare the runtime of the CPU version against two different GPU variants. As GPU programming is very low level, the knowledge gained while developing the model also builds a solid theoretical foundation.
 
 \subsection{General Memory Model}\label{sec:gmm}
 
-For a consistent terminology of a computer, a general computing model, which can be applied to most modern high performance systems. The model reflects a single node and its hardware components, a supercomputer may have thousands of these nodes linked together where different bandwidth are seen between individual nodes.
-However the internodal communication and parallelization is not important in this work.
-Both the CPU and the GPU have their own memory which are connected by a data link, where the the connections are bound by the memory bandwidths. The capacity of the CPU memory bandwidth is named $B_{CPU}$ and the GPU memory bandwidth $B_{GPU}$. There is a separate data link between the CPU and the GPU memory, which is commonly referred to as PCI express or NVLink (for modern \textit{NVIDIA} GPU`s, here the simplified term $I_{GC}$ is used. In systems with multiple CPU there is a link between the individual CPU's which is denoted as $I_{CC}$. Finally the data link between GPU's is referred to as $I_{GG}$.
+For a consistent terminology of a computer, a general computing model, which can be applied to most modern high performance systems is established. The model reflects a single node and its hardware components, a supercomputer may have thousands of these nodes linked together where different bandwidth are seen between individual nodes.
+However the internodal communication and parallelization is not important in this work, because the communication and optimization strategies are handled by parts of the PKDGrav which we adopt for this research.
+Both the CPU and the GPU have their own memory which are connected by a data link, where the connections are bound by the memory bandwidths. The capacity of the CPU memory bandwidth is named $B_{CPU}$ and the GPU memory bandwidth $B_{GPU}$. There is a separate data link between the CPU and the GPU memory, which is commonly referred to as PCI express or NVLink (for modern \textit{NVIDIA} GPU`s, here the simplified term $I_{GC}$ is used. In systems with multiple CPU's there is a link between the individual CPU's which is denoted as $I_{CC}$. Finally the data link between GPU's is referred to as $I_{GG}$.
 
 \begin{figure}[H]
 	\begin{center}
@@ -855,7 +865,7 @@ Both the CPU and the GPU have their own memory which are connected by a data lin
 
 \subsection{Supercomputers}
 
-For Piz Daint, Summit and Eige all relevant hardware metrics were collected and compiled to table \ref{fig:datapoints}. Piz Daint and Eiger were chosen, because the systems can be used to test the code. Furthermore Summit is included as it is, at the time of writing this thesis, one of the most capable supercomputers in the world.
+For Piz Daint, Summit and Eiger all relevant hardware metrics were collected and compiled to table \ref{fig:datapoints}. Piz Daint and Eiger were chosen, because the systems can be used to test the code. Furthermore Summit is included as it is, at the time of writing this thesis, one of the most capable supercomputers in the world.
 
 \small
 \begin{table}[H]
@@ -893,21 +903,42 @@ For Piz Daint, Summit and Eige all relevant hardware metrics were collected and 
 
 \subsection{Roofline Performance Model} \label{sec:roof}
 
-In a first step it is determined weather the computations are bound by memory bandwidth or the actual performance of the computing unit. The most costly computation is line 6 of the cut method (figure \ref{proc:cut}) with a runtime of $O(32 \times N)$. Oftentimes when an algorithm iterates over a large dataset performing only very little calculations on its individual elements, the limiting factor is the memory. To support this claim make roofline models for all three systems and check weather they are really memory bound. A roofline model compares arithmetic intensity in flops per byte against the actual performance of the computing chip in flops. 
+In a first step it is determined weather the computations are bound by memory bandwidth or the actual performance of the computing unit. The most costly computation is line 6 of the cut method (figure \ref{proc:cut}) with a runtime of $O(32 \times N)$. Oftentimes when an algorithm iterates over a large dataset performing only very little calculations on its individual elements, the limiting factor is the memory. To support this claim, a roofline models for all three systems is established. A roofline model compares arithmetic intensity in flops per byte against the actual performance of the computing chip in flops and can provide insights weather an application is memory or performance bound. 
 
 \subsubsection{Estimating Flops}
 
 For modern hardware, its fairly uncommon to release flops (floating point operations per second) values. Steadily evolving SIMD instruction sets result in varying performance for different implementation details, which in turn are compiled into different assembly instructions. Depending on the algorithm, implementation details and compilation flags the c++ compiler tries to compile ideal assembly instruction sets. SIMD instructions can only be used when there is a contiguous memory access, thus in some cases a poor memory layout choice may lead to a much lower flops. 
 
-For most modern CPU chip architectures AVX is the fastest SIMD instruction set available. The common AVX2 enables the processing of 8 floating point operations per instruction with a  CPI (cycles per instructions) of 0.5. The CPI can also vary depending on chip architecture, all relevant CPU's from figure \ref{fig:datapoints} indeed support a CPI of 0.5 along with AVX2. A lower CPI results in a higher efficiency, as several instructions can be completed in a single cycle. 
+For most modern CPU chip architectures AVX is the fastest SIMD instruction set available. The common AVX2 enables the processing of 8 floating point operations per instruction with a cpi (cycles per instructions) of 0.5. The $cpi$ varies depending on the chip architecture, however all relevant CPU's from figure \ref{fig:datapoints} support a CPI of 0.5 along with AVX2. A lower $cpi$ results in a higher efficiency, as several instructions can be completed in a single cycle. 
 
-Equation \ref{eq:avx} defines a function to estimate the number of gigaflops for a given hardware. GHZ is the number of gigahertz which can be reached by the CPU, meanwhile $NF$ is the number of floats which can be processed simultaneously using AVX. $CPI$ is as mentioned the cycles per instructions for the AVX instruction set. Finally $np$ represents the number of processors, where a perfect parallelization is assumed, meaning 100\% of the code can be parallelized.
+Equation \ref{eq:avx} defines a function to estimate the number of gigaflops for a given hardware. $hz$ is the number of cycles which can be completed within a single second by a processing unit, meanwhile $nf$ is the number of floats which can be processed simultaneously in a single instruction using SIMD. Finally $np$ represents the number of processors, where a perfect parallelization is assumed, meaning 100\% of the code can be parallelized.
+
+\small
+\begin{table}[H]
+	\begin{center}
+			\begin{tabular}{@{} c | c | c }
+				Variable & Meaning & Unit\\ 
+				\hline
+				s & second \\
+				cl & processor cycle \\
+				f & floating point operation \\
+				i & instruction \\
+				(g)hz & ($10^{12}$) processor cycles per second & ($10^{12}$) cl / s\\
+				nf & floating point operations per instruction & f / i\\
+				cpi & cycles per instruction & cl / i \\
+				(g)flops &  ($10^{12}$) floating point operations per second & ($10^{12}$) f / s\\
+				np & number of processors \\
+			
+		\end{tabular}
+	\end{center}
+	\caption{Variables to estimate gflops}
+	\label{fig:gflops}
+\end{table}
 
 \begin{center}
-	\begin{equation}
-		gflops = GHZ * NF * CPI^{-1} * np
+	\begin{equation}\label{eq:avx}
+		gflops = ghz * nf * cpi^{-1} * np
 	\end{equation}
-\label{eq:avx}
 \end{center}
 
 Since peak flops benchmarks are available for \textit{NVIDIA} P100 and V100s no estimations need to be made on the GPU side.
@@ -937,30 +968,30 @@ Note that SIMD instructions do not influence the arithmetic intensity, as the nu
 
 \subsubsection{The Plots}
 
-The maximally achievable gflops for Piz Daint are computed as follows: The datapoints from figure \ref{fig:datapoints} are plugged into the formula \ref{eq:avx} for $np = 1, 2$ and $3$.
+The maximally achievable gflops for Piz Daint are computed as follows: The datapoints from figure \ref{fig:datapoints} are plugged into the formula \ref{eq:avx} for $np = 2, 4$ and $8$.
 
 \begin{center}
 	\begin{equation}
-		3.8 * 8 * \frac{1}{0.5} * 2 = 121.6 gflops
+		3.8 \times 10^{12} cl/s \times 8 f/i \times \frac{1}{0.5} i/cl \times 2  = 121.6 gflops
 	\end{equation}
 	\label{eq:daintp1}
 \end{center}
 
 \begin{center}
 	\begin{equation}
-		3.8 * 8 * \frac{1}{0.5} * 4 = 243.2 gflops
+		3.8 \times 10^{12} cl/s \times 8 f/i \times \frac{1}{0.5} i/cl \times 4 = 243.2 gflops
 	\end{equation}
 	\label{eq:daintp2}
 \end{center}
 
 \begin{center}
 	\begin{equation}
-		3.8 * 8 * \frac{1}{0.5} * 8 = 486.4 gflops
+	3.8 \times 10^{12} cl/s \times 8 f/i \times \frac{1}{0.5} i/cl \times 8 = 486.4 gflops
 	\end{equation}
 	\label{eq:daintp3}
 \end{center}
 
-The results are depicted as horizontal lines in \ref{fig:roofdaint}. The memory bandwidth is plotted as a line with an equivalent slope. Finally a dotted line represents the arithmetic intensity of the Count Left procedure. 
+The results are depicted as horizontal lines in figure \ref{fig:roofdaint}. The memory bandwidth is plotted as a line with an equivalent slope. Finally a dotted line represents the arithmetic intensity of the Count Left procedure. 
 To interpret the roofline mode, one has to follow the dotted line starting from the bottom. Weather it intersect with line representing the maximal performance or the memory bandwidth first, gives an indication weather the program is performance or memory bound. 
 
 \begin{figure}[H]
@@ -981,19 +1012,19 @@ To interpret the roofline mode, one has to follow the dotted line starting from 
 						3.8 * 8 * 2 * 2
 					};	
 					
-					\addlegendentryexpanded{3.8 GHZ \& np=2};
+					\addlegendentryexpanded{3.8 ghz \& np=2};
 					
 					\addplot+[name path = A, domain = 0.125:64, mark=none] {
 						3.8 * 8 * 2 * 4
 					};	
 					
-					\addlegendentryexpanded{3.8 GHZ \& np=4};
+					\addlegendentryexpanded{3.8 ghz \& np=4};
 					
 					\addplot+[name path = A, domain = 0.125:64, mark=none] {
 						3.8 * 8 * 2 * 8
 					};	
 					
-					\addlegendentryexpanded{3.8 GHZ \& np=8};
+					\addlegendentryexpanded{3.8 ghz \& np=8};
 					
 					\addplot+[name path = A, domain = 0.125:64, mark=none] {
 						68 * \x
@@ -1070,21 +1101,21 @@ As it can be seen in figure \ref{fig:roofdaint} and \ref{fig:roofdaintGPU} both 
 					4 * 8 * 2 * 2
 				};	
 				
-				\addlegendentryexpanded{4 GHZ \& np=2};
+				\addlegendentryexpanded{4 ghz \& np=2};
 				
 				\addplot+[name path = A, domain = 0.125:64, mark=none] {
 					4 * 8 * 2 * 4
 				};	
 				
 				
-				\addlegendentryexpanded{4 GHZ \& np=4};
+				\addlegendentryexpanded{4 ghz \& np=4};
 				
 				\addplot+[name path = A, domain = 0.125:64, mark=none] {
 					4 * 8 * 2 * 8
 				};	
 				
 				
-				\addlegendentryexpanded{4 GHZ \& np=8};
+				\addlegendentryexpanded{4 ghz \& np=8};
 				
 				\addplot+[name path = A, domain = 0.125:64, mark=none] {
 					170 * \x
@@ -1163,19 +1194,19 @@ As visible in figure \ref{fig:roofsummit} and \ref{fig:roofsummitGPU} the same a
 					3.4 * 8 * 2 * 2
 				};	
 				
-				\addlegendentryexpanded{3.4 GHZ \& np=2};
+				\addlegendentryexpanded{3.4 ghz \& np=2};
 				
 				\addplot+[name path = A, domain = 0.125:64, mark=none] {
 					3.4 * 8 * 2 * 4
 				};	
 				
-				\addlegendentryexpanded{3.4 GHZ \& np=4};
+				\addlegendentryexpanded{3.4 ghz \& np=4};
 				
 				\addplot+[name path = A, domain = 0.125:64, mark=none] {
 					3.4 * 8 * 2 * 8
 				};	
 				
-				\addlegendentryexpanded{3.4 GHZ \& np=8};
+				\addlegendentryexpanded{3.4 ghz \& np=8};
 				
 				\addplot+[name path = A, domain = 0.125:64, mark=none] {
 					204.8 * \x
@@ -1193,11 +1224,11 @@ As visible in figure \ref{fig:roofsummit} and \ref{fig:roofsummitGPU} the same a
 	\label{fig:roofalps}
 \end{figure}
 
-Finally alps, which has the highest memory bandwidth compared to its flops, also becomes limited by the bandwidth after using more than four processors.
+Finally alps, which has the highest memory bandwidth compared to its flops, also becomes limited by the memory bandwidth after using more than four processors.
 
 \subsubsection{Empirical Verification}
 
-A minimal C++ code is considered to verify the theoretical model. The -S flag along with the g++ compiler is used to generate assembly code from the c++ source code. For testing purposes all entries in the array are set to random values between 0 and 1, and cut is set to 0.5.
+A minimal C++ code is considered to verify the theoretical model. The -S flag along with the g++ compiler is used to generate assembly code from the c++ source code. For testing purposes all entries in the array are set to random values between 0 and 1, and $cut$ is set to 0.5.
 
 In a first test, only $O3$ is enabled. The generated assembly code is depicted in listing \ref{assembler}.
 
@@ -1212,7 +1243,7 @@ In a first test, only $O3$ is enabled. The generated assembly code is depicted i
 
 \end{lstlisting}
 
-$psubd$ is a packaged instruction, meaning it already uses some form of SIMD instructions. The command is used in the MME and later the SSE2 instruction set. Since the $xmm$ registers are used, is follows that it is an AVX instruction.\ref{assembler-avx}.
+$psubd$ is a packaged instruction, meaning it already uses some form of SIMD instructions. The command is used in the MME and later the SSE2 instruction set. Since the $xmm$ registers are used, it follows that it is an AVX instruction.
 
 If the compile flag $-march=native$ is added, the instructions as depicted in listing \ref{assembler-avx} are the result of the compilation.
 
@@ -1242,7 +1273,7 @@ A precision $p$ of 32 is assumed, which is general standard for both integers an
 
 Each time the leaf cells of the SPTDS are split into two child cells and appended to the tree, the tree ends up with twice the number of cells. As the goal is to construct a tree with $d$ leaf cells, the cut algorithm needs to be performed $\lceil log_2(d) \rceil$ times over all leaf cells. 
 
-Consequently the runtime estimate sums over all $\lceil log_2(d) \rceil$ iterations, where in each iteration a cut has to be found for $i$ cells. The cut for a single cell is found in $p$ iterations, where the number of particle to be iterated over for a single cell is divided by two in each iteration. 
+Consequently the runtime estimate sums over all $\lceil log_2(d) \rceil$ iterations, where in each iteration a cut has to be found for $i$ cells. The cut for a single cell is found in $p$ iterations, where the number of particles to be iterated over for a single cell is divided by two in each iteration. 
 
 \begin{center}
 	\begin{equation}
@@ -2387,9 +2418,11 @@ To make sure the GPU version scales good the total runtimes..
 
 
 
+
 % Use for reduction explanation https://texample.net/tikz/examples/database-decimation-process/
 %\bibliographystyle{unsrt}
-\printbibliography
+\newpage
+\bibliography{reference}
 
 
 \listoffigures

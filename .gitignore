@@ -10,6 +10,8 @@
 *.xdp-*
 *.toc
 .xml
+*.bcf
+*run.xml
 
 # Editor files
 .vscode/
