@@ -102,7 +102,7 @@ extern __global__ void reduce2(
         val += (g_idata[i] <= cut);
         i += blockSize;
     }
-    __syncthreads();
+    __syncwarp();
 
     for (int offset = 16; offset > 0; offset /= 2)
         val += __shfl_down_sync(FULL_MASK, val, offset);
@@ -110,11 +110,16 @@ extern __global__ void reduce2(
     s_data[tid] = val;
     __syncthreads();
 
+    // All warps but first one are not needed anymore
+    if (tid >= 32 ) {
+        return;
+    }
+
     val = 0;
-    if (tid < 32 && tid * 32 < blockSize) {
+    if (tid * 32 < blockSize) {
         val += s_data[tid * 32];
     }
-    __syncthreads();
+    __syncwarp();
 
     for (int offset = 16; offset > 0; offset /= 2)
         val += __shfl_down_sync(FULL_MASK, val, offset);
@@ -166,7 +171,7 @@ int ServiceCountLeftGPUAxis::Service(PST pst,void *vin,int nIn,void *vout, int n
     //CUDA_CHECK(cudaMemset, (lcl->d_index, 0, sizeof(unsigned int)));
 
     // Execute the kernel
-    reduce2<N_THREADS><<<
+    reduce<N_THREADS><<<
             nBlocks,
             N_THREADS,
             N_THREADS * sizeof (unsigned int),
