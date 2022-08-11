@@ -893,7 +893,7 @@ For Piz Daint, Summit and Eiger all relevant hardware metrics were collected and
 			Max $GHZ_C$ & 3.8 GHZ & 4 GHZ & 3.4 GHZ\\
 			\# Cores & 12 & 22 & 64 \\
 			Architexture & Haswell & POWER9 & AMD Infinity Architecture \\
-			SIMD & AVX2 & ? & AVX2 \\ 
+			SIMD & AVX2 & VSX & AVX2 \\ 
 			\# GPUs & 1 & 6 & 0 \\
 			GPU Model & NVIDIA P100 \cite{TESLAP100} &NVIDIA V100s \cite{NVIDIA} & - \\
 			GPU Mem. Cap. & 16 GB & 16 GB $\times$ 6 & -\\
@@ -1276,7 +1276,7 @@ The following results were obtained on $2^{27}$ particles with a thread count of
 
 A runtime estimation for the CPU version and two different GPU implementations is constructed. In the first GPU implementation \textit{GPU Counting}, an array of particles is sent to the GPU, where counting is then performed. In a more advanced variant \textit{GPU Counting and Partitioning} the particles are sent from the CPU to GPU only once and the partitioning is performed on the GPU as well.  
 
-A precision $p$ of 32 is assumed, which is general standard for both integers and floats and its a sensible assumption for astrophysical simulations. The total storage required for all particle positions is $32 \times 3 \times N bits = 4 \times 3 \times N Bytes = 12 \times N Bytes$. Furthermore $d = 1024$ and $N=10^9$ are assumed.
+A precision $p$ of 32 is assumed, which is a sensible assumption for astrophysical simulations. The total storage required for all particle positions is $32 \times 3 \times N bits = 4 \times 3 \times N Bytes = 12 \times N Bytes$. Furthermore $d = 1024$ and $N=10^9$ are assumed.
  
 \subsubsection{CPU Version}
 
@@ -1472,15 +1472,14 @@ The computations for Eiger and Summit can be performed analogously to the ones f
 
 In this section the stand-alone implementation of the ORB algorithm using CPU acceleration only is described. Building on the CPU version, GPU accelerated alternatives to selected parts of the code are proposed. 
 
-The code is developed somewhat separately from the PKDGrav codebase in order to keep the project smaller and more easy to understand. However the machine dependent layer (MDL) from PKDGrav is used, which provides a system to distribute the workload among processors. This reduces the complexity of the implementation and communication methods and CPU parallelism are abstracted away from the code. Furthermore it makes integration into PKDGrav simple. Note that processors might be located in different nodes, but MDL is general enough to abstract node and processor level communication and parallelization away.
-
+The code is developed somewhat separately from the PKDGrav codebase in order to keep the project smaller and more easy to understand. However the machine dependent layer (MDL) from PKDGrav is used, which provides a system to distribute the workload among processors. This reduces the complexity of the implementation because communication and CPU parallelism are abstracted away from the code. Furthermore it makes integration into PKDGrav simple.
 Not every part of the code is described in detail, however any details crucial to performance are outlined. Furthermore, special attention is paid to the CUDA kernels and memory management strategies for two reasons: minor implementation details can have a big impact upon the performance and increased replicability.
 
 For this project C++ 17 along with CUDA 11.3, OpenMPI 4.1.0 and Blitz++ 1.0.2  \cite{blitzcpp} is used. 
 
 \subsection{MDL and PKDGrav}
 
-MDL, the machine dependent layer provides an abstraction layer around the parallel primitives introduced by PKDGrav. The Master layer is responsible to coordinate the flow of the program. It does so by calling the PST (Processor Set Tree), which distributes the tasks and gets processors to work on them. As the name suggests, the PST is organized as a binary tree where intermediate nodes contains a pointer to a consecutive processor as well as a next lower node. Each leaf cell of the graph then correspond to an individual processor.
+MDL, the machine dependent layer provides an abstraction layer around the parallel primitives introduced by PKDGrav. The Master layer is responsible to coordinate the flow of the program. It does so by calling the PST (Processor Set Tree), which distributes the tasks and gets processors to work on them. As the name suggests, the PST is organized as a binary tree where intermediate nodes contain a pointer to a consecutive processor as well as a next lower node. Each leaf cell of the graph then correspond to an individual core.
 
 Parallel processes are dispatched by descending the PST until they reach all processors. There computations are performed and the results are combined by passing them back up the PST until they reach the master.
 A parallel process can be programmed by implementing the service interface as explained in section \ref{services}.
@@ -1489,9 +1488,9 @@ Each processor has its own local data, which can be accessed by calling $pst->lc
 
 \subsection{Particles}
 
-The particles array has ownership over all particle objects. It has a (N,3) shape where each row represents a single particle. To enable coalesced memory access when iterating over a single axis i.e. $x_{:, axis}$, a column major storage order is chosen. Even though row accesses patterns i.e. $x_{i,:}$ are used as well, they happen less frequently. Most importantly there are cases where entire section of a row have to copied, which is by magnitude faster with row major storage.
+The particles array has ownership over all particle objects. It has a (N,3) shape where as each row represents a single particle. To enable coalesced memory access when iterating over a single axis i.e. $x_{:, axis}$, a column major storage order is chosen, meaning that each column is stored in a range of consecutive array addresses. Even though row accesses patterns i.e. $x_{i,:}$ are used as well, they happen less frequently. Most importantly there are cases where where entire sections of a row has to be copied. This is by magnitudes faster with a row major storage.
 
-C-style arrays are used interchangeably with Blitz++ arrays to store all particles. Blitz++ is an open source wrapper class around C-style arrays, which helps with pointer management and can speed up the debugging process by keeping track of the array boundaries. Furthermore it features array slicing and does its own memory management. In certain cases the actual C-style array needs to be accessed, which can be accessed with $array.data()$. For example when iterating over the Blitz++ array, non optimal assembly code was observed, not reflecting optimal SIMD instructions available to the hardware. 
+C-style arrays are used interchangeably with Blitz++ arrays to store all particles. Blitz++ is an open source wrapper class around C-style arrays, which helps with pointer management and can speed up the debugging process by keeping track of the array boundaries. Furthermore, it features array slicing and does its own memory management. In certain cases the actual C-style arrays needs to be accessed, which can be accessed by calling $array.data()$. For example when iterating over the Blitz++ array, non optimal assembly code was observed, not reflecting optimal SIMD instructions available to the hardware. 
 
 The particle data is loaded into the local data storage of each processor, meaning each processor owns a different unique set of particles.
 
@@ -1501,7 +1500,7 @@ The cell class is a structure keeping track of the fundamental cell information.
 
 Quickly building and accessing elements of the SPTDS generated by ORB requires a suitable data structure. Instead of a tree with pointers, a heap can be used since the necessary conditions for a nearly complete binary tree are met. Elements within a heap can be accessed and added in constant runtime. Depicted in figure \ref{fig:treeheap} is the finished SPTDS of the sample dataset stored as a heap.
 
-The SPTDS and thus the cells are constructed on the master alone, cells are only distributed when dispatching services on the PST.
+The SPTDS and thus the cells are constructed on the master alone. Cells are only distributed when dispatching services on the PST.
 
 \begin{figure}[H]
 	\begin{center}
@@ -1534,8 +1533,8 @@ The SPTDS and thus the cells are constructed on the master alone, cells are only
 	\label{fig:treeheap}
 \end{figure}
 
-An array can be used as an efficient storage medium for the heap, since in this case $d$ can be set at compile time and the maximum number of cells in the SPTDS can be derived from that. Meaning the array can be allocated statically.
-Because MDL communicates data as arrays between the threads, another advantage of the array storage is the absence of any costly data structure conversion. 
+An array can be used as an efficient storage medium for the heap, since in this case $d$, the number of leafs cells in the final SPTDS, can be set at compile time and the maximum number of cells in the SPTDS can be derived from that. Meaning the array can be allocated statically.
+Because MDL communicates data as arrays between threads, another advantage of the array storage is the absence of any costly data structure conversion. 
 
 Since the STPDS is only a nearly complete binary tree and not a complete binary tree, special attention has to be paid when performing the ORB algorithm in an iterative way. But because $d$ is known, many attributes of the SPTDS can be determined deterministically.
 
@@ -1543,9 +1542,9 @@ Since the STPDS is only a nearly complete binary tree and not a complete binary 
 As with all heap data-structures the following conditions are given:
 
 \begin{itemize}
-	\item The root cell has index 1
-	\item The left child of cell at index $i$ can be accessed at the index $i\times2$. 
-	\item The left child of cell at index $i$ can be accessed at the index $i\times2 + 1$. 
+	\item The root cell has an index 1
+	\item The left child of a cell at index $i$ can be accessed at the index $i\times2$. 
+	\item The left child of a cell at index $i$ can be accessed at the index $i\times2 + 1$. 
 \end{itemize}
 
 \begin{figure}[H]
@@ -1575,44 +1574,43 @@ In the example tree depicted in figure \ref{fig:extree} the depth corresponds to
 Among the fields in the cell are the following variables:
 
 \begin{itemize}
-	\item $id$: Unique identification of the cell instance. Corresponds to its index in the heap array plus one. The plus one comes from the different indexing for heap constraints, starting with 1, and the classic array indexing starting with 0. It can be used to compute  indices of both child cells and parent cells using the above shown formulas.
-	\item $nLeafCells$: Equivalent to  $d_{cell}$ and depicts the number of leaf cells to be found in all of its successors. Its used when building the tree, to track weather a cell needs to be split or not. 
-	\item $lower$: 3D point coordinate representing the lower boundary corner of the 3D volume $V_{cell}$ which is encompassed by this cells.
-	\item $upper$: Represents the upper boundary corner of the volume.	
-	\item $cutAxis$: Axis where the cell is to be cut. 
+	\item $id$ is the unique identification of the cell instance. It corresponds to its index in the heap array plus one. The plus one comes from the different indexing for heap constraints, starting with 1, and the classic array indexing starting with 0. It can be used to compute  indices of both child cells and parent cells using the above shown formulas.
+	\item $nLeafCells$ is equivalent to  $d_{cell}$ and depicts the number of leaf cells to be found in all of its successors. Its used when building the tree, to track weather a cell needs to be split or not. 
+	\item $lower$ is a 3D point coordinate representing the lower boundary corner of the 3D volume $V_{cell}$ which is encompassed by this cells.
+	\item $upper$ represents the upper boundary corner of the volume.	
+	\item $cutAxis$ is the axis where the cell is to be cut. 
 \end{itemize}
 
 To support and simplify common operations, a further abstraction layer is given with the following functions:
 
 
 \begin{itemize}
-	\item $setCutAxis()$: Evaluates the proper $cutAxis$ given the $upper$ and $lower$ variables.
-	\item $cut()$: Cuts the cell and returns two new cells. 
-	\item $lower$: 3D point coordinate representing the lower boundary corner of the 3D volume $V_{cell}$ which is encompassed by this cells.
-	\item $getLeftChildId()$: Returns the ID of the left child cell, meaning its volume is in the cut axis smaller than the cut plane. 
-	\item $getRightChildId()$: The equivalent for the right child. 
+	\item $setCutAxis()$ evaluates the proper $cutAxis$ given the $upper$ and $lower$ variables.
+	\item $cut()$ cuts the cell and returns two new cells. 
+	\item $getLeftChildId()$ returns the ID of the left child cell, meaning its volume is in the cut axis smaller than the cut plane. 
+	\item $getRightChildId()$ is the equivalent for the right child. 
 \end{itemize} 
 
 \subsection{Mapping Cells to Particles}
 
-As SPTDS heap is stored on the master but the particles are distributed among the local storages of the processors, its is crucial to know which particles are encompassed in the volume of which cell. Thus a data structure to keep track of the relation between cells and its particles is introduced.
-Thanks to the partitioning algorithm all particles belonging to a single cell can be found in a consecutive section of the particles array. A 2D array is used to keep track of the relation,  which again is stored in the local data of the processor, where for each cell the corresponding range is stored as a tuple. Making the size of the array equivalent to the total number of cells $2 \times d -1$ multiplied by two. Naturally the data structure needs to be updated across all processors whenever a partition is performed.
+As the SPTDS heap is stored on the master but the particles are distributed among the local storages of the processors, its is crucial to know which particles are encompassed in the volume of which cell. Thus a data structure to keep track of the relation between cells and its particles is introduced.
+Thanks to the partitioning algorithm all particles belonging to a single cell can be found in a consecutive section of the particles array. A 2D array is used to keep track of the relation, which again is stored in the local data of the processor. For each cell the corresponding section is stored as a tuple of begin and end indices. Naturally the data structure needs to be updated across all processors whenever a partition is performed.
 
 \subsection{Services}\label{services}
 
-A service implementation consists of a $Service()$ function as well as a $Combine()$ function. Parameters include an $PST$ object which stores information about the process location as well as the local data. Furthermore two void pointers providing storage for the input and output data called $in$ and $out$ along with their respective sizes are passed. The reason void pointers are used, is the variability of the input data structure but c++ does not offer dynamic typing. Data stored inside the void pointers can be converted into their respective classes using casting. 
+A service implementation consists of a $Service()$ function as well as a $Combine()$ function. Parameters include an $PST$ object which stores information about the process location as well as the local data. Furthermore two void pointers providing storage for the input and output data called $in$ and $out$ along with their respective sizes are passed. The reason void pointers are used, is the variability of the input data structures. C++ does not offer dynamic typing. Data stored inside the void pointers can be converted into their respective classes using casting. 
 
 In the $Combine()$ function two output void pointers $vout$ and $vout2$ and the sizes of the underlying arrays are given as parameters. A combination strategy of the elements can be chosen and implemented, where the results is to be stored in $vout$. For example in a service which returns the sum of all particles, the combine function would simply store the sum of $vout$ and $vout2$ in $vout$.
 
 \subsubsection{Init and Finalize Service}
 
-All data stored as local data, which is not managed by Blitz++, must be allocated when initializing and after the program has finished, the memory is freed to avoid any leaks. Allocation and freeing is not free of cost, thus it makes sense to reuse memory whenever possible. 
+All data stored in the local memory of a PST, must be allocated when initializing the program. After the program has finished, the memory is freed to avoid any leaks. Allocation and freeing comes with some overhead, thus it makes sense to reuse memory whenever possible. 
 
 The initialize service is also responsible to load the particle data into the local memory of each PST. 
 
 \subsubsection{Count Left Service}
 
-As mentioned, counting the elements smaller than the cut position is computationally intensive. T
+As mentioned, counting the elements smaller than the cut position is computationally intensive. 
 The $Service()$ function which performs the actual computations, $in$ points to an array of cells and as the length of the array is known, its possible to simply iterate over all of its elements and cast them to the correct cell data structure as shown in listing \ref{ctl} on line 1-2. In case the $foundCut$ flag of cell was set to true, its known that the ideal cut was already found and the cell can be skipped (line 4-6).
 Then the begin and end indices of the particles array corresponding to the range of objects contained within the cells volume are read and respectively a slice of the local particles array (lines 7-11) is made. Start and end pointers are computed and the cut position to be tested is fetched (lines 13 -17). Finally the number of particles smaller than the cut are counted and written back to the output array (lines 18-23). As the results for each cell needs to be stored individually, its written to the output with an offset equivalent to the $cellPtrOffset$. This offset however does not corresponds to the $cell.id$, its rather a sequential indexing over all leaf cells of the same depth in the SPTDS. 
 
@@ -1827,14 +1825,14 @@ The Master schedules all other processors but also performs tasks by itself. The
 \newpage
 \section{GPU Implementation}\label{sec:gpuimpl}
 
-CUDA is a parallel computing platform and programming model developed by \textit{NVIDIA}. It allows software developers and programmers to use a CUDA-enabled graphics processing unit (GPU) for general purpose processing.
+CUDA is a parallel computing platform and programming model developed by \textit{NVIDIA}. \cite{CUDAGuide} It allows software developers and programmers to use a CUDA-enabled graphics processing unit (GPU) for general purpose processing.
 The CUDA platform is designed to work with programming languages such as C, C++, and Fortran and gives direct access to the GPU's virtual instruction set and parallel computational elements.
 
 \subsection{Relevant CUDA Concepts}
 
 CUDA gives us the ability to launch kernels, which are written in C with some additional CUDA specific syntax. These kernel can be run from the CPU, commonly refereed to as the host, and are then executed on the GPU, also known as the device. The device and host have a separate memory and as seen in section \ref{sec:gmm} the transfer $I_{CG}$ rates between the GPU and CPU are generally slower, under performing $I_{C}$ and $I_G$ speeds. Therefore one of key the challenges when rewriting CPU code to GPU code is to limit data transfers between the GPU and CPU as much as possible. Furthermore the problems have to be divided into smaller subproblem, such that each of them fits a single block. CUDA cannot give any guarantees considering the order of execution of these blocks greatly limiting the possibilities of communication between blocks. Algorithms have to be fundamentally redesigned when porting them from CPU to GPU code. Generally problems which are applied on large data arrays are well suited where less connection between computations is suitable  the easier it is to implement an GPU version of the computation. Furthermore it can be assumed that problems with less branching work better.
 
-The location of a thread within a block can be accessed using $threadIdx.x$. The block ID among all other blocks associated with the same kernel is stored in $blockIdx.x$. Finally the number of blocks are stored in the variable $gridDim.x$. 
+The location of a thread within a block can be accessed using $threadIdx.x$. The block ID among all other blocks associated with the same kernel is stored in $blockIdx.x$. Finally the number of blocks are stored in the variable $gridDim.x$. \cite{CUDAGuide}
 
 Building a tree is therefore a rather challenging problem as there are many computations which influence another and building a tree involves a lot of branching, at least when it is done in a conventional manner.
 
@@ -1857,21 +1855,21 @@ A kernel is executed exactly once for every kernel, where a block consists of ma
 
 \subsubsection{Warps}
 
-Each consecutive grouping of 32 threads form a warp. All threads within a warp are executed in parallel, given that there is no warp divergence. Because warps are executed in parallel, there is no need for synchronization between the threads of the same warp. A warp divergence can occur, if there is a control statements, where two or more threads from the same warp execute a different code. This leads to a decrease in performance and should be avoided whenever possible.
+Each consecutive grouping of 32 threads form a warp. All threads within a warp are executed in parallel, given that there is no warp divergence. Because warps are executed in parallel, there is no need for synchronization between the threads of the same warp. A warp divergence can occur, if there is a control statements, where two or more threads from the same warp execute a different code. This leads to a decrease in performance and should be avoided whenever possible. \cite{CUDAGuide}
 
 \subsubsection{Memory}
 
-Each block has access to shared memory register, where the capacity of this register can be defined at runtime by the host as seen in figure \ref{cuda:call} on line 4. The maximum shared memory size depends depending on the architecture ranges between 48 and 96kB. \cite{CUDAGuide} There are also upper limits for the number of threads per block which is usually between 512 and 1024. \cite{CUDAGuide} With a shared memory size of 48kb and 1024 threads per block there is $\frac{48000B}{1024} = 46B$ of memory available per thread, which is roughly equivalent to 11 32 bit precision numbers per thread. However as the thread counts per block is usually not maxed out, there is more shared memory space available per thread. 
+Each block has access to shared memory register, where the capacity of this register can be defined at runtime by the host as seen in figure \ref{cuda:call} on line 4. The maximum shared memory size depends depending on the architecture ranges between 48 and 96kB. \cite{CUDAGuide} There are also upper limits for the number of threads per block which is usually between 512 and 1024. \cite{CUDAGuide} With a shared memory size of 48kb and 1024 threads per block there is $\frac{48000B}{1024} = 46B$ of memory available per thread, which is roughly equivalent to 11 32 bit precision numbers per thread. However as the thread counts per block is usually not maxed out, there is more shared memory space available per thread. Shared memory latency is roughly 100 times lower than global memory latency. \cite{sharedMem}
 
 Data in the shared memory exists only as long as the kernel exists and it cannot be accessed across different blocks. Race conditions do apply to shared memory, but threads in a block can be synchronized, therefore it is not safe to have writes from multiple threads on the same shared memory address. There exists a CUDA command $\_\_synchtreads()$ which allows us to synchronize all threads within a block, enabling us to control the execution order of individual statements.
 
-Additionally to the shared memory, there exists global memory. Global memory is persistent even after a block or a kernel has finished and is the only way to send data between the device and the host. Since the data is not deleted after a kernel has finished, the data can and should be reused whenever possible. Global memory is significantly slower than shared memory and it is best practice to copy data from global memory to shared memory before performing actual computations on it, thus reducing the total number of memory accesses on global memory. After the computations have finished, the results can be written back from shared to global memory.
+Additionally to the shared memory, there exists global memory. Global memory is persistent even after a block or a kernel has finished and is the only way to send data between the device and the host. Since the data is not deleted after a kernel has finished, the data can and should be reused whenever possible. Global memory is significantly slower than shared memory and it is best practice to copy data from global memory to shared memory before performing actual computations on it, thus reducing the total number of memory accesses on global memory. After the computations have finished, the results can be written back from shared to global memory. \cite{gMem}
 
 \subsubsection{Memory Access Patterns}
 
-Global memory is fetched from memory in 32 Byte packages, which translates to $\frac{32}{4} = 8$ floats. A simple aligned sequential memory access pattern, where each tread reads a single float from global memory, results in 4 transaction per warp (32 threads). Unaligned memory access can have minor performance penalties because more memory banks have to be loaded per warp. 
+Global memory is fetched from memory in 32 Byte packages, which translates to $\frac{32}{4} = 8$ floats. A simple aligned sequential memory access pattern, where each tread reads a single float from global memory, results in 4 transaction per warp (32 threads). Unaligned memory access can have minor performance penalties because more memory banks have to be loaded per warp. \cite{gMem}
 
-For shared memory each bank consists of 32 bits, which translates to a 32 bit precision number. If 32 unique threads access 32 different banks, then its considered an ideal access pattern, because the banks can be loaded in parallel. If however multiple threads access the same memory, a bank conflict is introduced and the access speed is greatly reduced.
+Each 32th entry in shared memory is stored in the same memory bank. If from the same half warp, multiple threads access the same memory bank in shared memory, it results in a bank conflict. If 16 consecutive threads access 16 different banks, then there is no bank conflict and all the data can be fetched in parallel.
 
 
 \begin{figure}[H]
@@ -2016,22 +2014,24 @@ In a first step on lines 18-20 each thread ID $tid$ is associated with an index 
 
 There exists an optimum in terms of number of operation performed by a single thread. In order to adapt the number of ops dynamically, the while loop ensures that each thread iterates over a certain number of elements as seen in lines 25-28. The input parameter $n$ defines the total number of particles. Therefore if the total number of blocks is reduced by a factor of $r$, the while loop will iterate over $r$ elements. Inside the while loop on line 27 the index $i$ is incremented by $gridSize$ in each iteration. The grid size is equivalent to the total number of threads associated with the kernel. Therefore when launching the kernel, the number of blocks can be divided by $r$ which then results in $r$ iterations performed in the while loop. $r$ to 16 as more or less items per thread result in a lower performance.
 
-The rest of the kernel code performs the actual reduction, where in each step two elements from the shared memory are summed together. Given a block size of 256, after line 37 exactly 256 sums are stored in shared memory. In a next step as seen on line 37 (lines 31-36 are not relevant as the size is smaller than 512) the left half threads in the block add their value together with the values stored in a position offset by 128. This step reduces the total number of elements to be considered to 128, and the step can be repeated as seen on lines 42 to 46. 
+The rest of the kernel code performs the actual reduction, where in each step two elements from the shared memory are summed together. The exact pattern is chosen, because this way shared memory bank conflicts can be avoided. ....  Given a block size of 256, after line 37 exactly 256 sums are stored in shared memory. In a next step as seen on line 37 (lines 31-36 are not relevant as the size is smaller than 512) the left half threads in the block add their value together with the values stored in a position offset by 128. This step reduces the total number of elements to be considered to 128, and the step can be repeated as seen on lines 42 to 46. 
 
 The reduction is optimized by using a template, which indicates the total number of thread per block, which is equivalent to the blockSize. Since the template is evaluated at compile time, all the if statements taking blockSize as a parameter in figure do not cause any performance loss. In fact, because  the reduction loops are unrolled (31-52) the the performance of the kernel is increased. 
 
 Each time there is a control statement involving non template arguments, a branch divergence is introduced. On the GPU these divergences become problematic bad when they are introduced inside a warp. Meaning if any of the 32 within a warp execute a different code from the other threads, the warp cannot function optimally anymore. For this reason, the $warpReduce$ method as seen on line 2-9 is introduced. This method is only executed when there are 64 elements in shared memory which are still to be summed, which requires only 32 threads as every thread in each iteration sums two elements together. Inside the warp reduce method, there are more unrolled loops continuing the same patterns as described above. However in this case there are no control statements that could introduce a warp divergence, which means there are computations performed which are not actually necessary, however as the computations inside a warp are executed in parallel anyways, this comes with no performance penalties. Inside a warp there is no need for synchronization as all threads are executed in parallel. 
 
 \begin{lstlisting}[language=c++, caption=Conditional Reduction in CUDA, label=cuda:reduction]
+#define FULL_MASK 0xffffffff
 template <unsigned int blockSize>
-extern __device__ void warpReduce(
-	volatile int *sdata, unsigned int tid) {
-	if (blockSize >= 64) sdata[tid] += sdata[tid + 32];
-	if (blockSize >= 32) sdata[tid] += sdata[tid + 16];
-	if (blockSize >= 16) sdata[tid] += sdata[tid + 8];
-	if (blockSize >= 8) sdata[tid] += sdata[tid + 4];
-	if (blockSize >= 4) sdata[tid] += sdata[tid + 2];
-	if (blockSize >= 2) sdata[tid] += sdata[tid + 1];
+extern __device__ void warpReduce(volatile unsigned int *s_data, unsigned int tid) {
+    if (blockSize >= 64) s_data[tid] += s_data[tid + 32];
+	__syncwarp();
+	if (tid < 32) {
+		unsigned int val = s_data[tid];
+		for (int offset = 16; offset > 0; offset /= 2)
+		val += __shfl_down_sync(FULL_MASK, val, offset);
+		s_data[tid] = val;
+	}
 }
 
 template <unsigned int blockSize>

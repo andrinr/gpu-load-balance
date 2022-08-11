@@ -11,6 +11,7 @@ static_assert(std::is_void<ServiceCountLeftGPUAxis::output>() || std::is_trivial
 template <unsigned int blockSize>
 extern __device__ void warpReduce2(volatile unsigned int *s_data, unsigned int tid) {
     if (blockSize >= 64) s_data[tid] += s_data[tid + 32];
+    __syncwarp();
     if (tid < 32) {
         unsigned int val = s_data[tid];
         for (int offset = 16; offset > 0; offset /= 2)
