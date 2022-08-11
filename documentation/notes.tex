@@ -2175,7 +2175,7 @@ The kernel code as seen in listing \ref{ctlocuda} largely remains the same. New 
 \begin{figure}[H]
 	\begin{lstlisting}[language=c++, caption=Kernel Optimized GPU Count Left, label = ctlocuda]
 template <unsigned int blockSize>
-extern __global__ void reduce(
+extern __global__ void reduce2(
 float * g_idata,
 unsigned int * g_begins,
 unsigned int * g_ends,
@@ -2292,7 +2292,11 @@ unsigned int * g_odata) {
 	\label{cuda:reduction3}
 \end{figure}
 
+Against some assumption that kernel3 from listing \ref{cuda:reduction3} might outperform kernel2 from listing \ref{cuda:reduction2}, when testing the two kernel on Piz Daint both had a very similar performance. The effective bandwidth of a kernel can be evaluated with the following formula: 
 
+\begin{equation}
+	
+\end{equation}
 
 \subsection{GPU Accelerated Partitioning}
 
