@@ -685,13 +685,13 @@ Finally $cell_2$ is cut divided into $cell_4$ and $cell_5$ with the cut position
 	\end{center}
 \end{figure}
 
-Note how all particles from $cell_4$ are contained in the range of 0-1. The particles of $cell_5$ in 2-3 and finally the particles contained in the volume of $cell_3$ can be found in 4-7.
+Note how all particles from $cell_4$ are contained in the range of 0-1. The particles of $cell_5$ in 2-3 and finally the particles contained in the volume of $cell_3$ can be found in rows 4-7.
 
 
 \newpage
 \section{Theoretical Analysis}
 
-The main goal of this thesis, is to improve the runtime of the ORB algorithm by leveraging the graphics processing unit over the central processing unit. Before implementing, it makes sense to explore if and tp which degree the performance benefits could in theory manifest themselves. For this purpose a simplified model is proposed, this model is then used to compare the runtime of the CPU version against two different GPU variants. As GPU programming is very low level, the knowledge gained while developing the model also builds a solid theoretical foundation.
+The main goal of this thesis, is to improve the runtime of the ORB algorithm by leveraging the graphics processing unit over the central processing unit. Before implementing, it makes sense to explore if and to which degree the performance benefits could in theory manifest themselves. For this purpose a simplified model is proposed, this model is then used to compare the runtime of the CPU version against two different GPU variants. As GPU programming is very low level, the knowledge gained while developing the model also builds a solid theoretical foundation.
 
 \subsection{General Memory Model}\label{sec:gmm}
 
@@ -872,7 +872,7 @@ For Piz Daint, Summit and Eiger all relevant hardware metrics were collected and
 	\begin{center}
 		\resizebox{\textwidth}{!}{%
 		\begin{tabular}{|@{} c | c | c | c | }
-			Constant & Piz Daint \cite{piz_daint} & Summit\cite{summit} & Alps (Eiger) \\ 
+			Constant & Piz Daint \cite{piz_daint} & Summit \cite{summit} & Alps (Eiger) \\ 
 			\hline
 			\# Nodes & 5704 & 4608 & 1024\\
 			\# CPUs & 1 & 2 & 2\\
@@ -903,13 +903,15 @@ For Piz Daint, Summit and Eiger all relevant hardware metrics were collected and
 
 \subsection{Roofline Performance Model} \label{sec:roof}
 
-In a first step it is determined weather the computations are bound by memory bandwidth or the actual performance of the computing unit. The most costly computation is line 6 of the cut method (figure \ref{proc:cut}) with a runtime of $O(32 \times N)$. Oftentimes when an algorithm iterates over a large dataset performing only very little calculations on its individual elements, the limiting factor is the memory. To support this claim, a roofline models for all three systems is established. A roofline model compares arithmetic intensity in flops per byte against the actual performance of the computing chip in flops and can provide insights weather an application is memory or performance bound. 
+In a first step it is determined wether the computations are bound by memory bandwidth or the actual performance of the computing unit. This can be done using a roofline model. It compares arithmetic intensity in flops per byte against the actual performance of the computing chip in flops and can provide insights wether an application is memory or performance bound. 
+
+The most costly computation is line 6 of the bisection method (figure \ref{proc:cut}) with a runtime of $O(32 \times N)$. Oftentimes when an algorithm iterates over a large dataset performing only very little calculations on its individual elements, the limiting factor is the memory. To support this claim, a roofline model for all three systems is established. 
 
 \subsubsection{Estimating Flops}
 
-For modern hardware, its fairly uncommon to release flops (floating point operations per second) values. Steadily evolving SIMD instruction sets result in varying performance for different implementation details, which in turn are compiled into different assembly instructions. Depending on the algorithm, implementation details and compilation flags the c++ compiler tries to compile ideal assembly instruction sets. SIMD instructions can only be used when there is a contiguous memory access, thus in some cases a poor memory layout choice may lead to a much lower flops. 
+For modern hardware, it is fairly uncommon to release flops (floating point operations per second) values. Steadily evolving SIMD instruction sets result in varying performance for different implementation details, which in turn are compiled into different assembly instructions. Depending on the algorithm, implementation details and compilation flags the c++ compiler tries to compile ideal assembly instruction sets. SIMD instructions can only be used when there is a contiguous memory access, thus in some cases a poor memory layout choice may lead to a much lower flops. 
 
-For most modern CPU chip architectures AVX is the fastest SIMD instruction set available. The common AVX2 enables the processing of 8 floating point operations per instruction with a cpi\footnote{cycles per instruction} of 0.5. The $cpi$ varies depending on the chip architecture, however all relevant CPU's from figure \ref{fig:datapoints} support a CPI of 0.5 along with AVX2. A lower $cpi$ results in a higher efficiency, as several instructions can be completed in a single cycle. 
+For most modern CPU chip architectures AVX is the fastest SIMD instruction set available. The common AVX2 enables the processing of 8 floating point operations per instruction with a cpi\footnote{cycles per instruction} of 0.5. The $cpi$ varies depending on the chip architecture, however all relevant CPU's from table \ref{fig:datapoints} support a CPI of 0.5 along with AVX2. A lower $cpi$ results in a higher efficiency, as several instructions can be completed in a single cycle. 
 
 Equation \ref{eq:avx} defines a function to estimate the number of gigaflops for a given hardware. $hz$ is the number of cycles which can be completed within a single second by a processing unit, meanwhile $nf$ is the number of floats which can be processed simultaneously in a single instruction using SIMD. Finally $np$ represents the number of processors, where a perfect parallelization is assumed, meaning 100\% of the code can be parallelized.
 
@@ -960,7 +962,7 @@ Where $p$ is a C-style array which stores the particles position and $nLeft$ sto
 	\item Compare pointer $p$ with $endPtr$
 \end{enumerate}
 
-Which results in a total of 4 operations. Since a single float is stored using 4 bytes, this computes to 1.0 operations per byte or an arithmetic intensity of four. 
+Which results in a total of 4 operations. Since a single float is stored using 4 bytes, this computes to $\frac{4 flops}{4 bytes} = 1.0$ operations per byte or an arithmetic intensity of one. 
 
 Estimating the arithmetic intensity for the GPU is a lot more complicated as it can vary a lot depending on the specific implementation details. But for now the same arithmetic intensity is assumed for both CPU and GPU. 
 
@@ -991,8 +993,8 @@ The maximally achievable gflops for Piz Daint are computed as follows: The datap
 	\label{eq:daintp3}
 \end{center}
 
-The results are depicted as horizontal lines in figure \ref{fig:roofdaint}. The memory bandwidth is plotted as a line with an equivalent slope. Finally a dotted line represents the arithmetic intensity of the Count Left procedure. 
-To interpret the roofline mode, one has to follow the dotted line starting from the bottom. Weather it intersect with line representing the maximal performance or the memory bandwidth first, gives an indication weather the program is performance or memory bound. 
+The results are depicted as horizontal lines in figure \ref{fig:roofdaint}. The memory limit is plotted as a line with a slope equivalent to its respective bandwidth. Finally a dotted line represents the arithmetic intensity of the Count Left procedure. 
+To interpret the roofline mode, one has to follow the dotted line starting from the bottom. Wether it intersect with line representing the maximal performance or the memory bandwidth first, gives an indication weather the program is performance or memory bound. 
 
 \begin{figure}[H]
 	\begin{center}
@@ -1079,7 +1081,7 @@ To interpret the roofline mode, one has to follow the dotted line starting from 
 	\end{center}
 \end{figure}
 
-As it can be seen in figure \ref{fig:roofdaint} and \ref{fig:roofdaintGPU} both the GPU and CPU version running on Piz Daint are memory bound, but due to its much higher memory bandwidth limit, a GPU version should be favored. 
+As seen in figure \ref{fig:roofdaint} and \ref{fig:roofdaintGPU} both the GPU and CPU versions running on Piz Daint are memory bound. When tracing the vertical line representing the arithmetic intensity of the Count Left procedure, it crosses the memory limit before the processing unit limit. However the memory limit on the GPU is much higher, therefore it should be favored over the CPU. 
 
 \begin{figure}[H]
 	\begin{center}
@@ -1260,41 +1262,40 @@ If the compile flag $-march=native$ is added, the instructions as depicted in li
 
 $vmovups$, $vcomplpts$ and $vpsubd$ are AVX2 commands since they are using the $ymm$ registers.
 
-The following results were obtained on $2^{27}$ particles with a thread count of 16 on Piz Daint. The reduction takes 2.3 milliseconds, resulting in a throughput of $2^{27} / 10^{9} * 10^3 / 2.3 = 58 gflops$. This is close to the memory bandwidth (68 GB/s) and far below the performance maximum of the CPU, which even for ($np = 1$) is $3.8 * 8 * 2 * 1 * 16 = 972.8 gflops$. Thus the algorithm is assumed to be memory bound for the CPU and most probably memory bound for the GPU. 
+The following results were obtained on $2^{27}$ particles with a thread count of 16 on Piz Daint. The reduction takes 2.3 milliseconds, resulting in a throughput of $2^{27} / 10^{9} * 10^3 / 2.3 = 58 gflops$. This is close to the memory bandwidth (68 GB/s) and far below the performance maximum of the CPU, which even for ($np = 1$) is $3.8 * 8 * 2 * 1 * 16 = 972.8 gflops$. It concludes that the algorithm is from a theoretical and empirical point of view memory bound on the GPU. The evidence for the GPU is not as clear as the arithmetic density cannot be estimated as well, however when assuming a similar density as the CPU variant, the algorithm is also on the GPU bound by memory.
 
 
 \subsection{Runtime Estimates}
 
 A runtime estimation for the CPU version and two different GPU implementations is constructed. In the first GPU implementation \textit{GPU Counting}, an array of particles is sent to the GPU, where counting is then performed. In a more advanced variant \textit{GPU Counting and Partitioning} the particles are sent from the CPU to GPU only once and the partitioning is performed on the GPU as well.  
 
-A precision $p$ of 32 is assumed, which is a sensible assumption for astrophysical simulations. The total storage required for all particle positions is $32 \times 3 \times N bits = 4 \times 3 \times N Bytes = 12 \times N Bytes$. Furthermore $d = 1024$ and $N=10^9$ are assumed.
+A precision $p$ of 32 is assumed, which is a sensible assumption for astrophysical simulations. The total storage required for all particle positions is $32 \times 3 \times N bits = 4 \times 3 \times N Bytes = 12 \times N Bytes$. Furthermore $d = 4096$ and $N=10^9$ are assumed. The sizes are realistic, considering Piz Daint has a GPU memory limited to 16 GB and 5704 nodes. 
  
+ \small
+ \begin{table}[H]
+ 	\begin{center}
+ 		\begin{tabular}{@{} c | c | c }
+ 			Variable & Meaning & Unit\\ 
+ 			\hline
+ 			$d$ & number of leafs cells in the final SPTDS \\
+ 			$p$ & precision of each coordinate (number of bits) \\
+ 			$s$ & data size of all particle coordinates \\
+ 			$B_C$ & memory bandwidth between the CPU and its memory & GB/s \\
+ 			$B_G$ & memory bandwidth between the GPU and its memory & GB/s \\
+ 			$B_G$ &	memory bandwidth between the CPU and the GPU & GB/s \\
+ 			
+ 			
+ 		\end{tabular}
+ 	\end{center}
+ 	\caption{Variables used for runtime estimates}
+ 	\label{tab:runtime}
+ \end{table}
+
 \subsubsection{CPU Version}
 
 Each time the leaf cells of the SPTDS are split into two child cells and appended to the tree, the tree ends up with twice the number of cells. As the goal is to construct a tree with $d$ leaf cells, the cut algorithm needs to be performed $\lceil log_2(d) \rceil$ times over all leaf cells. 
 
-\small
-\begin{table}[H]
-	\begin{center}
-		\begin{tabular}{@{} c | c | c }
-			Variable & Meaning & Unit\\ 
-			\hline
-			$d$ & number of leafs cells in the final SPTDS \\
-			$p$ & precision of each coordinate (number of bits) \\
-			$s$ & data size of all particle coordinates \\
-			$B_C$ & memory bandwidth between the CPU and its memory & GB/s \\
-			$B_G$ & memory bandwidth between the GPU and its memory & GB/s \\
-			$B_G$ &	memory bandwidth between the CPU and the GPU & GB/s \\
-	
-			
-		\end{tabular}
-	\end{center}
-	\caption{Variables used for runtime estimates}
-	\label{tab:runtime}
-\end{table}
-
 Consequently the runtime estimate sums over all $\lceil log_2(d) \rceil$ iterations, where in each iteration a cut has to be found for $i$ cells. The cut for a single cell is found in $p$ iterations, where the number of particles to be iterated over for a single cell is divided by two in each iteration. 
-
 
 
 \begin{center}
@@ -1358,20 +1359,20 @@ Another variant is to perform the partitioning on the GPU, meaning there is no n
 Lets plugin the values from figure \ref{fig:datapoints} into the corresponding formulas \ref{eq:cpu}, \ref{eq:gpu} and \ref{eq:gputree} for Piz Daint.
 The following values and consequently speed up can be computed for CPU only version:
 
-\pgfmathsetmacro\cpuPiz{ln(1024) / ln(2) * (\p * \s / 68)}
+\pgfmathsetmacro\cpuPiz{ln(4096) / ln(2) * (\p * \s / 68)}
 
 \begin{center}
 	\begin{equation}
-		\lceil log(1024) \rceil \times \left ( \p \times \frac{ \s GB }{68 GB/s} \right )  = \cpuPiz s
+		\lceil log(4096) \rceil \times \left ( \p \times \frac{ \s GB }{68 GB/s} \right )  = \cpuPiz s
 	\end{equation}
 \end{center}
 
 
 Whereas a GPU accelerated Count Left results in the following runtime:
-\pgfmathsetmacro\gpuPizN{ ln(1024) / ln(2) * (\p * \s / 732 + \s / 32)}
+\pgfmathsetmacro\gpuPizN{ ln(4096) / ln(2) * (\p * \s / 732 + \s / 32)}
 \begin{center}
 	\begin{equation}
-		\lceil log(1024) \rceil \times \left ( 32 \times \frac{12 GB}{732 GB/s} + \frac{12 GB}{32 GB/s} \right )=  \gpuPizN s
+		\lceil log(4096) \rceil \times \left ( 32 \times \frac{12 GB}{732 GB/s} + \frac{12 GB}{32 GB/s} \right )=  \gpuPizN s
 	\end{equation}
 \end{center}
 
@@ -1385,10 +1386,10 @@ This yields in a speed-up of the GPU over the CPU only version:
 
 
 When considering the GPU Counting and Partitioning the results are:
-\pgfmathsetmacro\gpuPizT{ ln(1024)/ln(2) * (\p * \s / 732)  + \s / 32}
+\pgfmathsetmacro\gpuPizT{ ln(4096)/ln(2) * (\p * \s / 732)  + \s / 32}
 \begin{center}
 	\begin{equation}
-		\lceil log(1024) \rceil \times \left ( \p \times \frac{\s GB}{732 GB/s} \right ) + \times \frac{\s GB}{32 GB/s} = \gpuPizT s
+		\lceil log(4096) \rceil \times \left ( \p \times \frac{\s GB}{732 GB/s} \right ) + \times \frac{\s GB}{32 GB/s} = \gpuPizT s
 	\end{equation}
 \end{center}
 
@@ -1402,15 +1403,15 @@ This yields in a speed-up over the CPU obly version of:
 
 \vspace{5mm}
 
-\pgfmathsetmacro\cpuSummit{ln(1024) / ln(2) * (\p * \s / (170 * 2)}
-\pgfmathsetmacro\gpuSummitN{ln(1024) / ln(2) * (
+\pgfmathsetmacro\cpuSummit{ln(4096) / ln(2) * (\p * \s / (170 * 2)}
+\pgfmathsetmacro\gpuSummitN{ln(4096) / ln(2) * (
 	(\p * \s / (900 * 6) + 
 	\s / (50 * 6)
 	)}
-\pgfmathsetmacro\gpuSummitT{ln(1024) / ln(2) * 
+\pgfmathsetmacro\gpuSummitT{ln(4096) / ln(2) * 
 	(\p * \s / (900 * 6))
 	+  \s / (50 * 6)}
-\pgfmathsetmacro\cpuEiger{ln(1024) / ln(2) * (\p * \s / (204.8 * 2)}
+\pgfmathsetmacro\cpuEiger{ln(4096) / ln(2) * (\p * \s / (204.8 * 2)}
 
 
 \subsection{Conclusion}
@@ -1426,7 +1427,7 @@ The computations for Eiger and Summit can be performed analogously to the ones f
 				bar width=0.8cm,
 				enlarge x limits=0.2,
 				ymin = 0,
-				ymax = 60,
+				ymax = 70,
 				symbolic x coords={Piz, Summit, Eiger},
 				legend columns=1,
 				legend entries={CPU, Hybrid Naive, Hybrid Tree},
@@ -1479,7 +1480,7 @@ Each processor has its own local data, which can be accessed by calling $pst->lc
 
 \subsection{Particles}
 
-The particles array has ownership over all particle objects. It has a (N,3) shape where as each row represents a single particle. To enable coalesced memory access when iterating over a single axis i.e. $x_{:, axis}$, a column major storage order is chosen, meaning that each column is stored in a range of consecutive array addresses. Even though row accesses patterns i.e. $x_{i,:}$ are used as well, they happen less frequently. Most importantly there are cases where where entire sections of a row has to be copied. This is by magnitudes faster with a row major storage.
+The particles array has ownership over all particle objects. It has a (N,3) shape where as each row represents a single particle. To enable coalesced memory access when iterating over a single axis i.e. $x_{:, axis}$, a column major storage order is chosen, meaning that each column is stored in a range of consecutive array addresses. Even though row accesses patterns i.e. $x_{i,:}$ are used as well, they happen less frequently. Most importantly there are cases where where entire columns have to be copied, which is by a magnitudes faster with a column major storage.
 
 C-style arrays are used interchangeably with Blitz++ arrays to store all particles. Blitz++ is an open source wrapper class around C-style arrays, which helps with pointer management and can speed up the debugging process by keeping track of the array boundaries. Furthermore, it features array slicing and does its own memory management. In certain cases the actual C-style arrays needs to be accessed, which can be accessed by calling $array.data()$. For example when iterating over the Blitz++ array, non optimal assembly code was observed, not reflecting optimal SIMD instructions available to the hardware. 
 
@@ -1526,9 +1527,6 @@ The SPTDS and thus the cells are constructed on the master alone. Cells are only
 
 An array can be used as an efficient storage medium for the heap, since in this case $d$, the number of leafs cells in the final SPTDS, can be set at compile time and the maximum number of cells in the SPTDS can be derived from that. Meaning the array can be allocated statically.
 Because MDL communicates data as arrays between threads, another advantage of the array storage is the absence of any costly data structure conversion. 
-
-Since the STPDS is only a nearly complete binary tree and not a complete binary tree, special attention has to be paid when performing the ORB algorithm in an iterative way. But because $d$ is known, many attributes of the SPTDS can be determined deterministically.
-
 \subsubsection{Heap Conditions}
 As with all heap data-structures the following conditions are given:
 
@@ -1602,7 +1600,7 @@ The initialize service is also responsible to load the particle data into the lo
 \subsubsection{Count Left Service}
 
 As mentioned, counting the elements smaller than the cut position is computationally intensive. 
-The $Service()$ function which performs the actual computations, $in$ points to an array of cells and as the length of the array is known, its possible to simply iterate over all of its elements and cast them to the correct cell data structure as shown in listing \ref{ctl} on line 1-2. In case the $foundCut$ flag of cell was set to true, its known that the ideal cut was already found and the cell can be skipped (line 4-6).
+The $Service()$ function which performs the actual computations, $in$ points to an array of cells which is given by a void pointer and as the length of the array is known, its possible to simply iterate over all of its elements and cast them to the correct cell data structure as shown in listing \ref{ctl} on line 1-2. In case the $foundCut$ flag of cell was set to true, its known that the ideal cut was already found and the cell can be skipped (line 4-6).
 Then the begin and end indices of the particles array corresponding to the range of objects contained within the cells volume are read and respectively a slice of the local particles array (lines 7-11) is made. Start and end pointers are computed and the cut position to be tested is fetched (lines 13 -17). Finally the number of particles smaller than the cut are counted and written back to the output array (lines 18-23). As the results for each cell needs to be stored individually, its written to the output with an offset equivalent to the $cellPtrOffset$. This offset however does not corresponds to the $cell.id$, its rather a sequential indexing over all leaf cells of the same depth in the SPTDS. 
 
 
@@ -1655,7 +1653,7 @@ Counting the total number of particles contained within a cell is trivial with t
 
 \subsubsection{Partition}
 
-The Partitioning Service is a direct implementation of the hoare partition and can be seen in listing \ref{partition}. Again the service receives a buffer with a given number of cells, which are then iterated over using the outer for loop. Each cell from the buffer is then casted to the proper struct (line 2). Using the id of the cell, the start and end indices of the corresponding particles stored in local storage can be accessed (lines 4-5). Lines 7-37 search for pairs located on the wrong side of the cut and then swap them using a simple $swap()$ helper function. $i$ has to be initialized using $beginInd -1$ as the $i++$ operation happens before a read on the array (line 15). For the same reason $j$ is initialized to $endInd$ and not $endInd -1$. Then the while loop terminates, $i$ points to the first index in the array where the value is greater than the cut, therefore $cellToRangeMap$ can be updated using $i$, as for the left child cell the start remains equal but the end is now $i$ and for the right child cell its vice versa. 
+The Partitioning Service is a direct implementation of the Hoare partition and can be seen in listing \ref{partition}. Again the service receives a buffer with a given number of cells, which are then iterated over using the outer for loop. Each cell from the buffer is then casted to the proper struct (line 2). Using the id of the cell, the start and end indices of the corresponding particles stored in local storage can be accessed (lines 4-5). Lines 7-37 search for pairs located on the wrong side of the cut and then swap them using a simple $swap()$ helper function. $i$ has to be initialized using $beginInd -1$ as the $i++$ operation happens before a read on the array (line 15). For the same reason $j$ is initialized to $endInd$ and not $endInd -1$. Then the while loop terminates, $i$ points to the first index in the array where the value is greater than the cut, therefore $cellToRangeMap$ can be updated using $i$, as for the left child cell the start remains equal but the end is now $i$ and for the right child cell its vice versa. 
 Note that the implementation is not ideal for two reasons:
 
 \begin{enumerate}
@@ -1710,12 +1708,12 @@ for (int cellPtrOffset=0; cellPtrOffset<nCells; ++cellPtrOffset){
 
 \subsubsection{Make Axis}
 
-As mentioned in section \ref{sec:multipole} the relevant axis to search for the cut position differs for each cell. Therefore the algorithm cannot simply iterate over a single array. In order to simplify the process the Make Axis service is introduced which iterates over all cells and copies the slices of coordinates which are encompassed the respective volumes and lie on the cells cut axis to a temporary array.
+As mentioned in section \ref{sec:multipole} the relevant axis to search for the cut position differs for each cell. Therefore the algorithm cannot simply iterate over a single array. In order to simplify the process the Make Axis service is introduced. For each cell it copies the a single axis of particle coordinates encompassed in the respective volumes. Consequently the axis is equivalent to the cut axis, meaning the axis where a cut plane is to be found. 
 
 \subsection{Parallel Schedule}\label{sec:parellize-orb}
 
 In the context of parallelization, the number of processors is defined as $np$ and $p_0$ is the processor executing the master layer. 
-Initially it is assumed that each processor has a random unique subset of all the particles stored in its local memory.
+Initially each processor has a random unique subset of all the particles stored in its local memory.
 
 In the running example this might look as follows:
 
@@ -1821,48 +1819,6 @@ The CUDA platform is designed to work with programming languages such as C, C++,
 
 \subsection{Relevant CUDA Concepts}
 
-CUDA gives us the ability to launch kernels, which are written in C with some additional CUDA specific syntax. These kernel can be run from the CPU, commonly refereed to as the host, and are then executed on the GPU, also known as the device. The device and host have a separate memory and as seen in section \ref{sec:gmm} the transfer $I_{CG}$ rates between the GPU and CPU are generally slower, under performing $I_{C}$ and $I_G$ speeds. Therefore one of key the challenges when rewriting CPU code to GPU code is to limit data transfers between the GPU and CPU as much as possible. Furthermore the problems have to be divided into smaller subproblem, such that each of them fits a single block. CUDA cannot give any guarantees considering the order of execution of these blocks greatly limiting the possibilities of communication between blocks. Algorithms have to be fundamentally redesigned when porting them from CPU to GPU code. Generally problems which are applied on large data arrays are well suited where less connection between computations is suitable  the easier it is to implement an GPU version of the computation. Furthermore it can be assumed that problems with less branching work better.
-
-The location of a thread within a block can be accessed using $threadIdx.x$. The block ID among all other blocks associated with the same kernel is stored in $blockIdx.x$. Finally the number of blocks are stored in the variable $gridDim.x$. \cite{CUDAGuide}
-
-Building a tree is therefore a rather challenging problem as there are many computations which influence another and building a tree involves a lot of branching, at least when it is done in a conventional manner.
-
-
-\begin{lstlisting}[language=c++, caption=Calling a CUDA Kernel, label=cuda:call]
-add<<<
-	nBlocks,
-	nThreads,
-	nThreads * bytesPerThread,
-	stream
->>>(
-	param1,
-	param2
-);
-\end{lstlisting}
-
-
-A kernel is executed exactly once for every kernel, where a block consists of many kernels. The number of kernels per block and the total number of blocks can be defined by the user as seen in the kernel call syntax in figure \ref{cuda:call} on line 2 and 3. 
-
-
-\subsubsection{Warps}
-
-Each consecutive grouping of 32 threads form a warp. All threads within a warp are executed in parallel, given that there is no warp divergence. A warp divergence can occur, if there is a control statements, where two or more threads from the same warp execute a different code. This leads to a decrease in performance and should be avoided whenever possible. \cite{warps}
-
-Additionally warp level primitives can be accessed on a warp level, where they can operate on local instead of shared memory. The primitives enable a safe communication between local memory of threads within the same warp, which is not possible otherwise. \cite{CUDAGuide} \cite{warps}
-
-\subsubsection{Memory}
-
-Each block has access to shared memory register, where the capacity of this register can be defined at runtime by the host as seen in figure \ref{cuda:call} on line 4. The maximum shared memory size depends depending on the architecture ranges between 48 and 96kB. \cite{CUDAGuide} There are also upper limits for the number of threads per block which is usually between 512 and 1024. \cite{CUDAGuide} With a shared memory size of 48kb and 1024 threads per block there is $\frac{48000B}{1024} = 46B$ of memory available per thread, which is roughly equivalent to 11 32 bit precision numbers per thread. However as the thread counts per block is usually not maxed out, there is more shared memory space available per thread. Shared memory latency is roughly 100 times lower than global memory latency. \cite{sharedMem}
-
-Data in the shared memory exists only as long as the kernel exists and it cannot be accessed across different blocks. Race conditions do apply to shared memory, but threads in a block can be synchronized, therefore it is not safe to have writes from multiple threads on the same shared memory address. There exists a CUDA command $\_\_synchtreads()$ which allows us to synchronize all threads within a block, enabling us to control the execution order of individual statements.
-
-Additionally to the shared memory, there exists global memory. Global memory is persistent even after a block or a kernel has finished and is the only way to send data between the device and the host. Since the data is not deleted after a kernel has finished, the data can and should be reused whenever possible. Global memory is significantly slower than shared memory and it is best practice to copy data from global memory to shared memory before performing actual computations on it, thus reducing the total number of memory accesses on global memory. After the computations have finished, the results can be written back from shared to global memory. \cite{gMem}
-
-\subsubsection{Memory Access Patterns}
-
-Global memory is fetched from memory in 32 Byte packages, which translates to $\frac{32}{4} = 8$ floats. A simple aligned sequential memory access pattern, where each tread reads a single float from global memory, results in 4 transaction per warp (32 threads). Unaligned memory access can have minor performance penalties because more memory banks have to be loaded per warp. \cite{gMem}
-
-Each 32th entry in shared memory is stored in the same memory bank. If from the same half warp, multiple threads access the same memory bank in shared memory, it results in a bank conflict. If 16 consecutive threads access 16 different banks, then there is no bank conflict and all the data can be fetched in parallel.
 
 
 \begin{figure}[H]
@@ -1915,7 +1871,52 @@ Each 32th entry in shared memory is stored in the same memory bank. If from the 
 			
 		\end{tikzpicture}
 	\end{center}
+\caption{Concepts of CUDA}
 \end{figure}
+
+CUDA gives the ability to launch kernels, which are written in C with some additional CUDA specific syntax. These kernel can be run from the CPU, commonly refereed to as the host, and are then executed on the GPU, also known as the device. The device and host have a separate memory and as seen in section \ref{sec:gmm} the transfer $I_{CG}$ rates between the GPU and CPU are generally slower, under performing $I_{C}$ and $I_G$ speeds. Therefore one of key the challenges when rewriting CPU code to GPU code is to limit data transfers between the GPU and CPU as much as possible. Furthermore the problems have to be divided into smaller subproblem, such that each of them fits a single block. CUDA cannot give any guarantees considering the order of execution of these blocks greatly limiting the possibilities of communication between blocks. Algorithms have to be fundamentally redesigned when porting them from CPU to GPU code. Generally problems which can be vectorized, meaning the same computation is applied to every element in an array are well suited. Usually vectorization is accomplished by mapping each thread associated with a kernel to a value in the array where it performs the respective calculations. As communication is costly and cross block communication is strongly discouraged, computation where threads are less dependent of results from other threads are better suited. Finally problems with less control statements work better, as control statements can cause significant overhead.
+
+The location of a thread within a block can be accessed using $threadIdx.x$. The block ID among all other blocks associated with the same kernel is stored in $blockIdx.x$. Finally the number of blocks are stored in the variable $gridDim.x$. \cite{CUDAGuide}
+
+Building a tree is therefore a rather challenging problem as there are many computations which influence another and building a tree involves a lot of branching, at least when it is done in a conventional manner.
+
+
+\begin{lstlisting}[language=c++, caption=Calling a CUDA Kernel, label=cuda:call]
+add<<<
+	nBlocks,
+	nThreads,
+	nThreads * bytesPerThread,
+	stream
+>>>(
+	param1,
+	param2
+);
+\end{lstlisting}
+
+
+A kernel is executed exactly once for every kernel, where a block consists of many kernels. The number of kernels per block and the total number of blocks can be defined by the user as seen in the kernel call syntax in listing \ref{cuda:call} on line 2 and 3. 
+
+
+\subsubsection{Warps}
+
+Each consecutive grouping of 32 threads form a warp. All threads within a warp are executed in parallel, given that there is no warp divergence. A warp divergence can occur, if there is a control statements, where two or more threads from the same warp execute a different code. This leads to a decrease in performance and should be avoided whenever possible. \cite{warps}
+
+Additionally warp level primitives can be accessed on a warp level, where they can operate on local instead of shared memory. The primitives enable a safe communication between local memory of threads within the same warp, which is not possible otherwise. \cite{CUDAGuide} \cite{warps}
+
+\subsubsection{Memory}
+
+Each block has access to shared memory register, where the capacity of this register can be defined at runtime by the host as seen in figure \ref{cuda:call} on line 4. The maximum shared memory size depends depending on the architecture ranges between 48 and 96kB \cite{CUDAGuide}. There are also upper limits for the number of threads per block which is usually between 512 and 1024 \cite{CUDAGuide}. With a shared memory size of 48kb and 1024 threads per block there is $\frac{48000B}{1024} = 46B$ of memory available per thread, which is roughly equivalent to 11 32 bit precision numbers per thread. However as the thread counts per block is usually not maxed out, there is more shared memory space available per thread. 
+
+Data in the shared memory exists only as long as the kernel exists and it cannot be accessed across different blocks. Race conditions do apply to shared memory, but threads in a block can be synchronized, therefore it is not safe to have writes from multiple threads on the same shared memory address. There exists a CUDA command $\_\_synchtreads()$ which allows us to synchronize all threads within a block, enabling us to control the execution order of individual statements.
+
+Additionally to the shared memory, there exists global memory. Global memory is persistent even after a block or a kernel has finished and is the only way to send data between the device and the host. Since the data is not deleted after a kernel has finished, the data can and should be reused whenever possible. Shared memory latency is roughly 100 times lower than global memory latency. \cite{sharedMem} and it is best practice to copy data from global memory to shared memory before performing actual computations on it. Reducing the total number of memory accesses on global memory. After the computations have finished, the results can be written back from shared to global memory. \cite{gMem}
+
+\subsubsection{Memory Access Patterns}
+
+Global memory is fetched from memory in 32 Byte packages, which translates to $\frac{32}{4} = 8$ floats. A simple aligned sequential memory access pattern, where each tread reads a single float from global memory, results in 4 transaction per warp (32 threads). Unaligned memory access can have minor performance penalties because more memory banks have to be loaded per warp. \cite{gMem}
+
+Each 32th entry in shared memory is stored in the same memory bank. If from the same half warp, multiple threads access the same memory bank in shared memory, it results in a bank conflict. If 16 consecutive threads access 16 different banks, then there is no bank conflict and all the data can be fetched in parallel.
+
 
 \subsubsection{Asynchronous Operations} \label{sec:async}
 
