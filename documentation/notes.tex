@@ -102,11 +102,14 @@
 
 The N-Body technique has been used for decades to simulate the Universe to compare theory with observations. It uses "particles'' to represent objects of a certain mass and computes the forces by applying the gravity equation. As the forces operate over an infinite distance it is necessary to consider all pairwise interactions, making a naive implementation $\mathcal{O}(n^2)$. This does not scale with large particle counts, in fact the problem becomes computationally infeasible at some point.
 
-A common solution is to partition the space, in which the particles are contained, into a set of subspaces, also called cells. These cells are then stored in a space partitioning tree data structure (SPTDS) in order to speed up the simulation with the Fast Multipole Method (FMM) to $O(n)$. 
-Building the data structure uses a significant percentage of the overall simulation time. As of now this was usually done on the CPU, not leveraging GPU acceleration. 
-In this thesis an upper limit for the speedup of GPU accelerated SPTDS building algorithms over its CPU only counterpart is established. An efficient method for building the SPTDS on the CPU and the GPU is then proposed and implemented in C++ and CUDA.
+A common solution is to partition the space, in which the particles are contained, into a set of subspaces, also called cells using an algorithm called Orthogonal Recurisve Bisection (ORB). These cells are then stored in a space partitioning tree data structure (SPTDS) in order to speed up the simulation with the Fast Multipole Method (FMM) to $O(n)$. 
+Building the data structure uses a significant percentage of the overall simulation time. As of now this was done on the CPU, not leveraging GPU acceleration.
+ 
+In this thesis I establish an upper limit for the speedup of a GPU ORB implementation over its fully parallelized CPU only counterpart. In order to so I establish a runtime estimate for both version, where its crucial to take into account hardware specific details and even some analysis of compiled assembly code. The results numbers pointed to a possible speedup of the GPU over the CPU version of factor $6.2$.
 
-\TODO{Describe measurement results here}
+Using the machine dependent layer (mdl) from PKDGRAV, which is used to distribute workload among cores and processors, I have implemented a fully parallelized CPU version of ORB. In the thesis I explain the most important concepts of CUDA which are used to program the so called kernels. Kernels are essentially functions which are executed on the GPU and can leverage GPU acceleration, however many hardware related limitations have to be considered which pose a set of completely new challenges when compared to traditional C++ programming.
+I used the gained knowledge to implement the most performance critical part of ORB using CUDA. The identified part is essentially a simple summation elements in an array. I iteratively increase the performance of the kernels and describe each version in detail. Finally a possible method to accelerate the partitioning part of ORB using CUDA, where an input particle is rearranged such that only elements smaller than a given value are found in the first section of the array. The proposed implementation could possibly further decrease the runtime of ORB when implemented.
+After performing measurements on Piz Daint, the GPU accelerated version turned out be $5.4$ times faster than its CPU only counterpart. 
 
 \newpage
 \section{Background}
@@ -122,11 +125,8 @@ In mathematics, a multipole is a concept used to approximate the shape of a dist
 
 To keep force integration within a reasonable error margin, in most cases it is not necessary to compute all $N$ to $N$ interactions. The fast multipole method can compute gravity in $O(N)$ runtime by leveraging the SPTDS. \cite{Stadel2001}
 
-On a more intuitive level, one can imagine a large cluster of objects far away from planet Earth. To compute the interactions between every single object of the cluster and Earth, $O(N^2)$ have to be computed computations. However, since the object is reasonably far away, it does not make sense to compute every interaction. Instead, the cluster can be summarized into a single object and compute the gravity acting between planet Earth and the group. Consequently, objects within our own solar system would be too close to planet Earth to approximate its effects using a multipole. In such cases, it is necessary to perform all computations, however they can be hidden within a constant and do not affect the total runtime. 
+On a more intuitive level, one can imagine a large cluster of objects far away from planet Earth. To compute the interactions between every single object of the cluster and Earth, the gravity equation needs to be solved $O(N^2)$ times. However, since the object is reasonably far away, it does not make sense to compute every interaction. Instead, the cluster can be summarized into a single object and compute the gravity acting between planet Earth and the group. Consequently, objects within our own solar system would be too close to planet Earth to approximate its effects using a multipole. In such cases, it is necessary to perform all computations, however they can be hidden within a constant and do not affect the total runtime. 
 Note that this example does not directly translate to the simulations, as a particle is not equivalent to a planet or a star. More on that in section \ref{sec:target-data}.
-
-
-\subsubsection{Advantage of Cubic Bounding Volumes}\label{sec:cubic}
 
 The distance between the center of mass of a cell and its most distant corner correlate with the error ratio \cite{Stadel2001}, which in turn influences how many timesteps have to be performed. Of the family of rectangular cuboids, the cube is the shape where the average distance between any point and its most distant corner point is the smallest. 
 
