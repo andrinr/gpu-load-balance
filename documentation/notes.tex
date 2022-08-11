@@ -102,7 +102,7 @@
 
 The N-Body technique has been used for decades to simulate the Universe to compare theory with observations. It uses "particles'' to represent objects of a certain mass and computes the forces by applying the gravity equation. As the forces operate over an infinite distance it is necessary to consider all pairwise interactions, making a naive implementation $\mathcal{O}(n^2)$. This does not scale with large particle counts, in fact the problem becomes computationally infeasible at some point.
 
-A common solution is to partition the space, in which the particles are contained, into a set of subspaces, also called cells using an algorithm called Orthogonal Recurisve Bisection (ORB). These cells are then stored in a space partitioning tree data structure (SPTDS) in order to speed up the simulation with the Fast Multipole Method (FMM) to $O(n)$. 
+A common solution is to partition the space, in which the particles are contained, into a set of subspaces, also called cells using an algorithm called Orthogonal Recurisve Bisection (ORB). These cells are then stored in a space partitioning tree data structure (SPTDS) in order to speed up the simulation with the Fast Multipole Method (FMM) to $O(n)$. In order to balance the load of the computations and the data across nodes and processors in a system, a load balancing is necessary. The same tree, which is used for FMM can be leveraged to generate groupings of the particles which are then distributed among processing units.
 Building the data structure uses a significant percentage of the overall simulation time. As of now this was done on the CPU, not leveraging GPU acceleration.
  
 In this thesis I establish an upper limit for the speedup of a GPU ORB implementation over its fully parallelized CPU only counterpart. In order to so I establish a runtime estimate for both version, where its crucial to take into account hardware specific details and even some analysis of compiled assembly code. The results numbers pointed to a possible speedup of the GPU over the CPU version of factor $6.2$.
@@ -130,16 +130,15 @@ Note that this example does not directly translate to the simulations, as a part
 
 The distance between the center of mass of a cell and its most distant corner correlate with the error ratio \cite{Stadel2001}, which in turn influences how many timesteps have to be performed. Of the family of rectangular cuboids, the cube is the shape where the average distance between any point and its most distant corner point is the smallest. 
 
-\subsection{ORB vs. K-d Trees}
+\subsection{ORB Compared to other Space Partitioning Methods}
 
-A number of methods exist to create SPTDS, however since each cell on the same depth of the tree is required to encompass an almost equal number of particles, methods like octrees are not suitable as they do not produce balanced groups. The k-d tree construction method however is strikingly similar to the ORB method, however there is a slight difference in the construction process. 
-The Orthogonal Recursive Bisection method constructs a SPTDS where all resulting cells represent subspaces, or volumes, similar to cubes. K-d construction methods generate SPTDS as well, but shapes of the resulting subspaces can be strongly skewed and are thus ill suited for FMM. Both algorithms start with a single cell and iteratively construct the SPTDS by searching for axis aligned planes cutting the volume of each leaf cell of the current SPTDS into two. From the resulting two volumes, two new cells are generated and appended to the SPTDS. 
+A number of methods exist to create SPTDS, however since the generated tree should be usable for load balancing and FMM, it necessary to have a load in terms of either work or memory on each computing unit. Naturally the reasonable solution is to use the exact same particles contained within cells for load balancing and FMM, which rules out many space partitioning algorithms such as octrees. In octreess the resulting subspace are equal of size, but not equal in terms of memory and workload of the contained objects. The k-d tree construction method however is strikingly similar to the ORB method but there is a crucial difference in the construction process: The Orthogonal Recursive Bisection method constructs a SPTDS where all resulting cells represent subspaces, or volumes, similar to cubes. K-d construction methods generate SPTDS as well, but shapes of the resulting subspaces can be strongly skewed and are thus ill suited for FMM. Both algorithms start with a single cell and iteratively construct the SPTDS by searching for axis aligned planes cutting the volume of each leaf cell of the current SPTDS into two. From the resulting two volumes, two new cells are generated and appended to the SPTDS. 
 
 In k-d tree construction, the axis lying orthogonal to the cut plane is chosen periodically, meaning all cells with an equal distance (depth) to the root of the SPTDS are cut with planes orthogonal to the same axis. In the case of ORB, the axis where a cell's volume is largest is picked to compute an orthogonal plane. Therefore cells with the same depth can have cut planes of variable orientations. This makes ORB special as it combines a balanced distribution with near cubic shapes.  
 
 \subsection{Rise of the GPU}
 
-Most if not all state of the art supercomputers are hybrid, meaning each node has a CPU as well as a GPU\cite{TOP500}. GPU accelerated code can increase the speed of many computations, where in most cases CUDA is used to fully leverage the hardware. 
+Most if not all state of the art supercomputers are hybrid, meaning each node has a CPU as well as a GPU \cite{TOP500}. GPU accelerated code can increase the speed of many computations, where in most cases CUDA is used to fully leverage the hardware. 
 
 The computational effort required in PKDGrav and most modern astrophysical N-Body simulations can be divided into three categories:
 
@@ -149,28 +148,18 @@ The computational effort required in PKDGrav and most modern astrophysical N-Bod
 	\item \textbf{Force Calculation and Integration:} The STPDS constructed in step 1. and 2. combined with FMM is used to compute force integration. 
 \end{enumerate}
 
-In PKDG each category is about one third of the total calculation time \cite{Stadel2001}. Making Global (1.) and Local Tree Building (2.) subject to possible performance improvements, as GPU acceleration is as of now only exploited in Force Calculation(3.).
+In PKDG each category is about one third of the total calculation time \cite{Stadel2001}. Making Global (1.) and Local Tree Building (2.) subject to possible performance improvements, as GPU acceleration is as of now only exploited in Force Calculation (3.).
 
 The main objective is to improve the runtime of astrophysical simulations, or more specifically PKDGrav. Simultaneously penalties with regards to $N$, the total number of particles, should be kept as low as possible. Simulation accuracy benefits from large $N$ as well as an increased number of time steps. As GPU accelerations are low level, hardware specific details are relevant. Thus the algorithms should be adapted and optimized with regards to the target hardware Piz Daint.
 
 \subsection{Related Work}
 
 
-A number of GPU accelerated k-d tree construction algorithms exist, however the methods cannot simply be translated to ORB due to different axis choosing methods. For example in the master thesis of Voglsam \cite{rrt} a k-d tree is computed on the GPU and used to improve ray tracing for 3D graphics. However it makes use of a binning algorithm to find an optimal cut across cells of the same depth, which can be done in a single iteration. However in this case the axes for cells of the same depth vary.
+A number of GPU accelerated k-d tree construction algorithms exist, however the methods cannot simply be translated to ORB due to different axis choosing methods. For example in the master thesis of Voglsam \cite{rrt} a k-d tree is computed on the GPU and used to improve ray tracing for 3D graphics. However it uses a method to find an optimal cut across cells of the same depth, which does not translate when the have to be found in variable axis.
 
-When subdividing ORB into its individual components as shown below, some subroutines can be computed using fairly general algorithms, which have already been implemented and optimized for the GPU in many open source libraries. 
-
-\begin{outline}[enumerate]
-	\1 Cut cells on last level in tree
-	\2 Make cut plane position guess
-	\2 Count number of particles left to the cut plane
-	\2 Repeat 1. till correct plane was found
-	\1 Partition particles
-	\1 Repeat till desired depth was reached
-\end{outline}
-
-Thrust by \textit{NVIDIA} \cite{thrust} has an implementation of a reduction, which can be used to perform step 1.b), a binary search is equivalent to the entire step 1. and finally it also exposes a partition interface. The library is very high level and does not allow us to control memory operations, which are very crucial to a highly efficient implementation of ORB. 
-Furthermore CUB \cite{cub}, also developed by \textit{NVIDIA}, exposes a more low level API of the equivalent elements but the implementation is not general enough to deal with some critical performance issues. As the SPTDS grows, so do the number of leaf cells and thus the number of cells for which a cut plane has to be found simultaneously. When initializing a kernel for each cell, the number of kernels initialized grow exponentially, resulting in kernel invocation overheads dominating the actual computational costs. The problem is almost equivalent to a \textit{Device Segmented Reduce}\cite{cubSeg} where CUB provides an API, however unfortunately the reduction operator is set to be the same across all segments, which is not true in this case as for each cell the particle coordinates are compared to a different value. 
+ORB can be subdivided into components which have been implemented in existing libraries.
+Thrust by \textit{NVIDIA} \cite{thrust} has an implementation of a reduction and a partition, both are crucial components of ORB. However the library is very high level and expose memory management, which is crucial to a highly efficient implementation of ORB. 
+Furthermore CUB \cite{cub}, also developed by \textit{NVIDIA}, exposes a more low level API of the components found in ORB but the implementation is not general enough to deal with some critical performance issues. As the SPTDS grows, so do the number of leaf cells and subsequently the number of cells for which a cut plane has to be found simultaneously. When initializing a kernel for each cell, the number of kernels initialized grow exponentially, resulting in kernel invocation overheads dominating the actual computational costs. The problem is almost equivalent to a \textit{Device Segmented Reduce} \cite{cubSeg} where CUB provides an API, however the reduction operator is set to be the same across all segments, which is not true in this case as for each cell the particle coordinates are compared to a different value. 
 
 
 \newpage
@@ -185,7 +174,7 @@ Each cell in the SPTDS is enriched with the following properties:
 
 \begin{itemize}
 	\item \textbf{$V_{cell}$} 3D volume where all corresponding particles are contained within.
-	\item \textbf{$d_{cell}$} Number of leaf cells to be found among all subsequent cells.
+	\item \textbf{$d_{cell}$} Number of leaf cells to be found in the subtree of the cell.
 	\item \textbf{$N_{cell}$} Number of particles encompassed in the volume of the cell. 
 \end{itemize}
 
@@ -201,10 +190,10 @@ A modified random Gaussian distribution is used to generate the target dataset, 
 	\item The corner coordinates of the root volume are defined as $\vec{lower}, \vec{upper}$ where $\vec{lower}, \vec{upper} \in \mathbb{B}_p^3$. 
 	\item The coordinates of a particle $i$ are defined as $\vec{x_i}$ for which holds $\{\vec{x} | \vec{lower} \leq \vec{x} \leq \vec{upper}, \vec{x} \in \mathbb{B}_p^3 \}$.
 	When referring to a single coordinate of a particle object, it is done by writing $\vec{x}_{i,j}$. Finally the array of all particle positions in a single axis is denoted as $\vec{x}_{:,j}$. 
-	
+	$N$ defines the total number of particles in the entire data set.
 \end{itemize}
 
-It lies in the nature of the universe, that large clusters of particles are found in some places, whereas other areas may be vastly empty of any objects. This is a very crucial characterization and differentiates this dataset from many other applications of FMM, where the distribution is more uniform.
+It lies in the nature of the universe, that large clusters of particles are found in some places, whereas other areas may be vastly empty of any objects. This is a very crucial characterization and differentiates the target data set from many other applications of FMM, where the distribution is more uniform.
 
 \begin{figure}[H]
 	\begin{center}
@@ -227,14 +216,14 @@ The aim of this thesis is to improve the runtime of ORB. In terms load balancing
 
 To reduce the force integration error across all particles, some particles require more timesteps than others. This is caused by the vastly variant forces which are exerted on the particles. Whilst some follow a straight path with an almost constant velocity requiring little computational effort for great precision, others are influenced by strong gravitational poles resulting in highly curved movement paths and correlating with higher numbers of timesteps required.
 
-The workload for a particle $p_i$ is defined as the weighting function $w(p_i)$. The workload correlates with the number of simulation steps that need to be computed for a single particle. In an optimally parallelized system balanced in terms of computational effort, the workload should be very similar among computing units. Where ideally the sum over all the particles considered by a thread is equal to the sum of all others. With strongly varying weights among particles, perfectly balancing the computational effort, results in an unbalanced distribution in terms of memory. 
+The workload for a particle $p_i$ is defined as the weighting function $w(p_i)$. The workload correlates with the number of simulation steps that need to be computed for a single particle. In an optimally parallelized system balanced in terms of computational effort, the workload should be very similar among computing units. Ideally each core processes a set of particles, such that all cores finish nearly instantaneously. In this case, there is little to no waiting time when synchronizing the results with all involved parallelized cores. With strongly varying weights among particles, perfectly balancing the computational effort yields an unbalanced distribution in terms of memory load.
 
 \begin{comment}
 Lets consider a simple example to illustrate the point. Given the set of particles $A = \{p_1, p_2, .., p_{2m/3}\}$ and respectively $B = \{p_{2m/3 + 1}, p_2, .., p_{m}\}$. This yields a total number of particles equivalent to $N = m$. Assuming that $\forall p \in A : w(p) = 1$ and $\forall p \in B : w(p) = 2$. 
 All particles from set $A$ are assigned to processor rank 0 and the particles from B to rank 1. It follows $\sum_{p\in A} w(p) = \sum_{p\in B} w(p)$. Thus the two processors are balanced in terms of computing costs, but not in terms of memory size. In fact, process with rank 0 has $2m/3$ elements and rank 1 has $m/3$ elements. Assuming each process has a memory size of $2m/3$, then clearly this configuration is not optimal. When favoring memory balancing, $2m/3$ could be assigned to each processor and $(4/3) \times m$ as many particles could be processed in total, which is larger than the original $N$ and therefore favorable.
 \end{comment}
 
-To which degree its ideal favor memory over workload balancing is difficult to answer. For now parametrize the workload using the weighting function. The workload balancing can also be completely ignored by setting $w(p_i) = 1$ for all particles.
+The degree to which work or memory load balancing is targeted, can be chosen by adjusting the variance in values of the weighting function. Assuming workload balancing should be totally ignored, the weighting function is just set to a constant value for all particles such as $w(p_i) = 1$.
 
 \subsection{ORB}
 
