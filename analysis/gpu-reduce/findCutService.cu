@@ -269,7 +269,7 @@ int main(int argc, char** argv) {
     printf("reduced data\n");
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
-    printf("Effective Bandwidth (GB/s): %fn \n", n*4*3/milliseconds/1e6);
+    printf("Effective Bandwidth (GB/s): %fn \n", n*4/milliseconds/1e6);
 
     printf("milliseconds %f \n",milliseconds);
 
