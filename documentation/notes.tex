@@ -190,7 +190,8 @@ A modified random Gaussian distribution is used to generate the target dataset, 
 	\item The corner coordinates of the root volume are defined as $\vec{lower}, \vec{upper}$ where $\vec{lower}, \vec{upper} \in \mathbb{B}_p^3$. 
 	\item The coordinates of a particle $i$ are defined as $\vec{x_i}$ for which holds $\{\vec{x} | \vec{lower} \leq \vec{x} \leq \vec{upper}, \vec{x} \in \mathbb{B}_p^3 \}$.
 	When referring to a single coordinate of a particle object, it is done by writing $\vec{x}_{i,j}$. Finally the array of all particle positions in a single axis is denoted as $\vec{x}_{:,j}$. 
-	$N$ defines the total number of particles in the entire data set.
+	\item $N$ defines the total number of particles in the entire data set. In simulations the number is usually larger than one billion. 
+	\item $d$ defines the number of leaf cells the finished SPTDS should have. In the case of load balancing it can be assumed to be no larger than $4096$ as most supercomputers do not exceed such a range.
 \end{itemize}
 
 It lies in the nature of the universe, that large clusters of particles are found in some places, whereas other areas may be vastly empty of any objects. This is a very crucial characterization and differentiates the target data set from many other applications of FMM, where the distribution is more uniform.
@@ -251,7 +252,9 @@ When a cell is cut into two child cells, the children are referred to as $leftCe
 	\end{equation}
 \end{center}
 
-Defining $d_{cell}$ for each cell is especially important, since its crucial to ensure the final tree is a nearly complete binary tree. The way $d_{leftCell}$ and $d_{rightCell}$ is defined, guarantees that on the last level of the tree the cells are filled from the left to the right. This way no gaps are present and the tree can be stored as a heap in an array. 
+Defining $d_{cell}$ for each cell is especially important, since its crucial to ensure the final tree is a nearly complete binary tree. The way $d_{leftCell}$ and $d_{rightCell}$ is defined, guarantees that on the last level of the tree the cells are filled from the left to the right. 
+
+ This way no gaps are present and the tree can be stored as a heap in an array. 
 
 \begin{center}
 	\begin{equation} \label{eq:d1}
@@ -259,19 +262,17 @@ Defining $d_{cell}$ for each cell is especially important, since its crucial to 
 	\end{equation}
 \end{center}
 
-\begin{center}
-	\begin{equation}  \label{eq:d2}
-		d_{rightCell} = \max \{ d_{cell} - 2^{depth_{cell} -1}, 2^{depth_{cell} - 2}\}
-	\end{equation}
-\end{center}
-
-Which is equal to:
+Equation \ref{eq:d1} can be explained as follows: When $d$ is a power of two, a perfectly balanced tree can be generated and naturally $d_{leftCell}$ and $d_{rightCell}$ are equal to $\frac{d}{2}$ or $2^{cell_{depth} - 1}$. If $d$ is incremented by one so is $depth$ due to the ceiling operator. To have a tree with one more leaf, a cell which has been a leaf node before needs to divided into two leaf cells and becomes an intermediate cell. The only appropriate choice for this leaf cell, is the one on the very left, otherwise the result would be an unbalanced tree.
+The number of leaf cells in the subtree of $leftCell$ is subsequently incremented by one as well, resulting in a number of cells equal to $2^{cell_{depth} - 2} + 1$ which is equal to $d - 2^{cell_{depth} - 2}$. The equation holds until all leaf cells in left subtree are divided into two child leaf cells and converted into intermediate cells. As this corresponds to a doubling of the number of leaf cells, it can be calculated with $2^{depth_{cell} - 1}$. Consequently we limit the number of particles by using a min function and setting $2^{depth_{cell} - 1}$ as the second parameter. After $2^{depth_{cell} - 1}$ is reached, the subtree of $rightCell$ is enlarged until a $d$ corresponding to the next power of two is reached. 
 
 \begin{center}
 	\begin{equation}  \label{eq:d22}
 		d_{rightCell} = d_{cell} - d_{leftCell}
 	\end{equation}
 \end{center}
+
+Equation \ref{eq:d22} for $d_{righCell}$ can also be derived but the more simple variant is just taking the difference between the absolute number of desired leaf cells and the ones that are assigned to the left subtree. 
+
 
 
 Finally the number of particles encompassed in $V_{leftCell}$ and $V_{rigtCell}$ are defined as follows:
@@ -449,7 +450,7 @@ The algorithm is explained visually using the following example data set:
 	\label{fig:orb11}
 \end{figure}
 
-Depicted in figure \ref{fig:orb1} \&  \ref{fig:orb11} is the SPTDS after initialization: there is only one $cell_1$ which is root and $V_{cell_1}$ encompasses the entire domain which in this case is the rectangle ranging from 0 to 1 in both the x and y axis. $d_{cell_1}$ is equivalent to 3 and $N_{cell_1}$ is 7. 
+Depicted in figure \ref{fig:orb1} \&  \ref{fig:orb11} is the SPTDS after initialization: there is only one $cell_1$ which is root and $V_{cell_1}$ encompasses the entire domain which in this case is the rectangle ranging from 0 to 1 in both the x and y axis. $d_{cell_1}$ is chosen to be equivalent to 3 and $N_{cell_1}$ is 7. Note that $d$ could be any other number, but clearly it is limited by $N$. 
 
 \begin{figure}[H]
 	\begin{center}
@@ -544,7 +545,7 @@ A cut plane, which translates to a cut line in the simplified 2D example is cons
 	\caption{Tree with ORB at recursion depth 2}
 \end{figure}
 
-Again the procedure is repeated for $cell_2$ but not for $cell_3$ as there recursion is terminated by the stopping condition. Finally $cell_4$ and $cell_5$ is computed, where the stopping condition is met as well. The resulting SPTDS has 3 leaf cells and partitions the space into three subspaces.
+Again the procedure is repeated for $cell_2$ but not for $cell_3$ as there recursion is terminated by the stopping condition. Finally $cell_4$ and $cell_5$ are computed, where the stopping condition is met as well. The resulting SPTDS has 3 leaf cells and partitions the space into three subspaces.
 
 
 \subsection{Root finding} \label{sec:root}
@@ -552,7 +553,7 @@ Again the procedure is repeated for $cell_2$ but not for $cell_3$ as there recur
 
 The $cut$ algorithm takes an array of particle positions $x$, an $axis$, $left$ and $right$ boundaries and a $percentage$. Its goal is to return a position along the cut axis such that the particles less or equal to the a $cut$ value are equivalent to the percentage multiplied by the length of the $x$ array.
 
-The problem is related to a selection algorithm and a quick select\cite{algorithms} could be used. However quick select has a worst case runtime of $O(n^2)$. Furthermore median algorithms could be explored as well, but they are mostly approximation algorithms with bad worst case runtimes. The problem can be reformulated as a root finding problem. To do so a function $f(c)$ is defined which evaluates the number of elements smaller than the cut value minus half \footnote{Or any other desired percentage} the number of total particles. When the function evaluates to zero, a an axis aligned cut plane is found, where exactly half the particles are located on the left side. There exist many different solvers for the root-finding problem, but the most stable and easiest to implement is the bisection method. Some solver combine approximate solver with the stable bisection method to generate fast but stable root finding methods. Such algorithms could be explored in later work.
+The problem is related to a selection algorithm, as selection algorithms are capable of finding the $k$th smallest element in an array of numbers. To adapt it for ORB one can set $k = f \times N_{cell}$, where $f$ is the desired percentage of particles which should be assigned to the $leftCell$ of $cell$. A quick select \cite{algorithms} could be used, however quick select has a worst case runtime of $O(n^2)$. Furthermore median algorithms could be explored as well, but they are mostly approximation algorithms with bad worst case runtimes. The problem can be reformulated as a root finding problem. To do so a function $f(c)$ is defined which evaluates the number of elements smaller than the cut value minus half\footnote{Or any other desired percentage} the number of total particles. When the function evaluates to zero, an axis aligned cut plane is found, where exactly half the particles are located on the left side. There exist many different solvers for the root-finding problem, but the most stable and easiest to implement is the bisection method. Some solver combine approximate solver with the stable bisection method to generate fast but stable root finding methods. Such algorithms could be explored in later work.
 
 Since the algorithm operates on binary numbers with a limited precision, the bisection method is guaranteed to terminate after $p$ steps.
 
@@ -613,13 +614,14 @@ In this case there exists no ideal cut in the x axis\footnote{X axis is horizont
 
 On line 5, the number of particles to the left of the cut plane are summed. As the array is unordered, all coordinates of one axis need to be read once, resulting in a runtime of $O(N)$. All other operations inside the for loop can be computed in a negligible constant time. The loop itself is repeated $p$ number of times, where $p$ corresponds to the precision of $x$ coordinates.
 
-To proof that the loop concludes after $p$ iterations for integer numbers. With each iteration the range of possible solutions is divided by two. The same goes for integer numbers, each time a bit is removed, the size of the range of numbers which can be represented is reduced by two. Thus after $p$ iterations the precision limit is reached and the cut cannot be improved. The proof does not hold analogously for float numbers as the precision is uniformly distributed there, however its also limited. 
+The algorithm must terminate after $p$ iterations for integer numbers. With each iteration the range of possible solutions is divided by two. The same goes for integer numbers, each time a bit is removed, the size of the range of numbers which can be represented is reduced by two. Thus after $p$ iterations the precision limit is reached and the cut cannot be improved. The proof does not hold analogously for float numbers as the precision is uniformly distributed there, however its also limited. 
 
 \subsection{Partition Algorithm}\label{sec:part}
 
 Its desired to continuously update the array storing the positions of the particles and in the words used before, have a direct correlation between $x_i$ and $i$. This enables grouping particles within a cell in a fixed range of two indexes of the particles array. The advantages of this are two fold: Access all particles within a cell in constant time, manipulate particles within a cell using a slice of the array. 
+Another option is to store the assigned leaf cell for each particle, this however requires a much larger array of size $N$. 
 
-As seen in the pseudo code in algorithm \ref{proc:part}, the algorithm looks for a pair of particles, where for both the coordinate along the relevant axis are  on the wrong side of the cut plane. In this case the particles can be swapped (line 8) resulting in the correct position of both particles. Correctness and a more detailed explanation of the algorithm can be found in the book  \cite{algorithms}. \TODO{citations}
+As seen in the pseudo code in algorithm \ref{proc:part}, the algorithm looks for a pair of particles, where for both the coordinate along the relevant axis are  on the wrong side of the cut plane. In this case the particles can be swapped (line 8) resulting in the correct position of both particles. Correctness and a more detailed explanation of the algorithm can be found in the book \cite{algorithms}.
 
 \algnewcommand\And{\textbf{and} }
 
