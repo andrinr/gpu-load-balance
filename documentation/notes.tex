@@ -1949,7 +1949,7 @@ Several strategies are used to improve the performance of memory allocation:
 
 \subsection{GPU Accelerated Count Left}
 
-To solve the problem on the GPU essentially a general reduction can be taken as a basis and adapted to sum elements, which fulfill a certain condition. The condition is weather an element is than a given value, which in this case is the position of the cut plane. The code is based on the reduction as its explained in a Webinar from \textit{NVIDIA}. \cite{reduction}
+A reduction problems is fairly similar to the Count Left Procedure. In this case a compare against the cut value is made on all elements, when smaller an int value of 0 results otherwise 1. Then all the results of the compare are summed to a single result. This is a map reduce problem, where the compare maps each input to a desired value, where the values are then reduced across all elements and stored. 
 
 \subsubsection{Schedule}
 
@@ -2075,8 +2075,7 @@ extern __global__ void reduce(
 
 
 
-Initializing the kernel once for each cell is a simple solution, however as the number of cells is increased, more calls to the kernel are made. Calls are not free of cost, as there is some overhead with each initialization of a kernel. Thus the performance degrades gradually as the tree is built, because on each level the number of cells for which the bisection method is executed doubles. At some point, the overhead even dominates over the actual computations by a lot. 
-
+Initializing the kernel once for each cell is a simple solution, however as the number of cells is increased, more calls to the kernel are made. Calls are not free of cost, as there is some overhead with each initialization of a kernel. Thus the performance degrades gradually as the tree is built, because on each level the number of cells for which the bisection method is executed doubles. Some performance evaluations have shown that the runtime in the last iteration of ORB, finding a cut for all cells took around 100 times longer than the very first iteration for the root cell. 
 
 \subsection{Improved GPU Accelerated Count Left} \label{imprctl}
 
@@ -2118,7 +2117,7 @@ To solve the degrading performance problem some changes are made to the kernel a
 	\end{center}
 \end{figure}
 
-The improved Count Left service works as follows on a simple example: Given $cell_2$ with a volume that encompasses particles in the range 0 - 10240 and $cell_3$ encompasses particles in the range 10240 - 20480.  A block size of 256 threads is given and the number of elements per thread is set to 16, thus each block processes $256 * 16 = 4096$ elements. In this case two blocks are allocated to each cell, where the first block processes elements 0 - 4096 and the second one 4096 - 10240. By assigning more work to the second block, the threads will perform more work as others, however this is more favorable than threads which perform less work. Furthermore blocks where not even all the threads are occupied can be avoided that way. Consequently the third and fourth block respectively process particles 10240 to 14446 and 14446 to 20480. Since the number of required blocks for cell is known as well as the exact range of particles for which the reduction has to be computed, all this information can be copied to the GPU in advance and a kernel with the total block sum can be launched. 
+The improved Count Left is explained with a simple example: Given $cell_2$ with a volume that encompasses particles in the range 0 - 10240 and $cell_3$ encompasses particles in the range 10240 - 20480.  A block size of 256 threads is given and the number of elements per thread is set to 16, thus each block processes $256 * 16 = 4096$ elements. In this case two blocks are allocated to each cell, where the first block processes elements 0 - 4096 and the second one 4096 - 10240. By assigning more work to the second block, each thread in the second block performs more than in the first. However this is a simple solution to avoid blocks, where not even all threads are mapped to an input element, because the number of input elements is smaller than the number of threads. Consequently the third and fourth block respectively process particles 10240 to 14446 and 14446 to 20480. Since the number of required blocks for cell is known as well as the exact range of particles for which the reduction has to be computed, all this information can be copied to the GPU in advance and a kernel with the total block sum can be launched. 
 Each kernel stores its information in an output array where the assignment between the output and the actual cell is known. The service therefore needs to iterate over all the output which have been computed by the blocks associated with a kernel and output them at a single cell specific location in the output $ou$ array of the service.
 
 \subsubsection{Schedule}
@@ -2294,7 +2293,7 @@ unsigned int * g_odata) {
 
 A GPU accelerated Count Left service is implemented successfully. Since the particles are still partitioned on the CPU, the data needs to be copied to GPU each time the SPTDS is expanded. As the Make Axis service is used to compress the axes into a single array, only $N$ elements need to be copied, but this needs to be repeated $\lceil \log_2 d \rceil$ times. 
 If the particles are partitioned on the GPU, it needs to be copied only once, but in this case all three coordinates have to be copied, thus $
-N \times 3$. Nevertheless this corresponds a fraction of the total data transfer: $\frac{3}{\lceil \log_2 d \rceil \times}$. In figure \ref{fig:transfer} its observable that a GPU partition becomes feasible, at least in terms of data transfer, after $d$ exceeds 16. 
+N \times 3$. Nevertheless this corresponds to a fraction of the total data transfer: $\frac{3}{\lceil \log_2 d \rceil \times}$. In figure \ref{fig:transfer} it is observable that a GPU partition becomes feasible, at least in terms of data transfer, after $d$ exceeds 16. 
 
 \begin{figure}[H]
 	\begin{center}
@@ -2437,7 +2436,7 @@ All measurements where performed on Piz Daint where the performance of system ca
 In figure \ref{fig:analy2} the final measurements are plotted. The total runtime of the ORB is around 43 seconds when performed only on the CPU, for the GPU accelerated version it comes down to 18 seconds. However a large part of the execution time can be attributed to the Partitioning, where its overhead remains equal for both versions. Even the CPU Partitioning can be improved a lot and the GPU version might increase the performance even further. 
 If the time lost during the partitioning is subtracted, the GPU version is about $5.6$ times faster, which is slightly worse than the expected speedup of $6.2$. The difference can be explained by additional overheads, especially as the GPU kernel has to touch the elements more than once due to the way it was implemented. 
 
-When looking at the absolute number there is a stark difference: $56.47s$ predicted for the CPU version were $31.83$ was the actual timing. Similarly the GPU was expected to execute ORB\footnote{Excluding the time required for the partition} in $8.99s$, however it only took $5.6s$. The theoretical model considers an upper bound for the total number of iterations which the bisection method takes to converge. In reality this number is closer to 20 than to $p$ which is 32 in the measured data. When considering this, the measurements are also in an absolute term relatively close to the theoretical model. $56.47s \times \frac{20}{32} = 37s$ against the actual $31.83s$ and $8.99s \times \frac{20}{32} =5.99s$ compared to $5.6s$.
+When looking at the absolute number there is a stark difference: $56.47s$ were predicted for the CPU version were $31.83$ was the actual timing. Similarly the GPU was expected to execute ORB\footnote{Excluding the time required for the partition} in $8.99s$, however it only took $5.6s$. The theoretical model considers an upper bound for the total number of iterations which the bisection method takes to converge. In reality this number is closer to 20 than to $p$ which is 32 in the measured data. When considering this, the measurements are also in an absolute term relatively close to the theoretical model. $56.47s \times \frac{20}{32} = 37s$ against the actual $31.83s$ and $8.99s \times \frac{20}{32} =5.99s$ compared to $5.6s$.
 \subsection{Scaling}
 
 To make sure the GPU version scales well the runtime were evaluated for different number of particles. 
