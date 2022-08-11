@@ -273,6 +273,11 @@ The number of leaf cells in the subtree of $leftCell$ is subsequently incremente
 
 Equation \ref{eq:d22} for $d_{righCell}$ can also be derived but the more simple variant is just taking the difference between the absolute number of desired leaf cells and the ones that are assigned to the left subtree. 
 
+The reason why equation \ref{eq:d1} and \ref{eq:d22} work when applied recursively can explained as follows: In a nearly complete tree there exists maximally one subtree of the same depth which is not a complete subtree. By definition of $d_{leftCell} and d_{rightCell}$ either the left or the right subtree is complete. Furthermore we know that the number of cells in the left subtree are more or equal to the ones on the right subtree. Thus we can make a case distinction:
+
+\begin{itemize}
+	\item \textbf{case A} The left subtree is not a complete binary tree. Then the number of leaf cells in the left subtree ar larger 
+\end{itemize}
 
 
 Finally the number of particles encompassed in $V_{leftCell}$ and $V_{rigtCell}$ are defined as follows:
