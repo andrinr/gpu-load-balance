@@ -1,4 +1,3 @@
-#include <blitz/array.h>
 #include "../../src/utils/condReduce.cuh"
 #include "../../src/constants.h"
 #include <thrust/partition.h>
