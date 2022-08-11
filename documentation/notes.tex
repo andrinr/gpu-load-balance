@@ -2233,61 +2233,62 @@ unsigned int * g_odata) {
 
 \subsection{Improved GPU Accelerated Count Left with Warp Level Primitives} \label{imprctlwrp}
 
-A feature of CUDA which has not been leveraged as of now in this thesis are warp level primitives. The primitives enable performing operations on local data of threads across each warp. In theory this can increase the runtime as local data is even faster than shared memory. 
-The Improved Count Left service as proposed before does not have to be rewritten entirely, in fact only the kernel itself is rewritten and even simplified.
+The above described kernel code can also be rewritten where warp level primitives are leveraged to the full extent. Lines 1-14 are identical as in the previous kernel as proposed in listing \ref{ctlocuda}.
+On lines 16 and 17 we fetch the lane $id$ and the $warpId$. The $lane$ defines the index of a thread inside each warp. The operation $tid \& (32 - 1)$ is equivalent to $tid \% 32$ but significantly faster \cite{bestp}.
+When incrementally assigning an index to each warp the index can be fetched by dividing the $tid$ by the number of threads in a warp, which is then implicitly floored when converted into an integer. The operation $tid >> 5$ is equivalent to $tid / 32$ \cite{bestp}.
 
+Instead of iterating over elements and storing them in global memory, the data is stored in local memory as seen on lines 19 to 24. Furthermore, at this stage there is no need to sync all threads within the block but only the threads within a warp, therefore the command \textit{\_syncthreads()} can be replaced with \textit{\_syncwarp()}.
+On lines 26 - 27 a warp level reduction is performed, which is equivalent to the one we have explained with the previous kernel. Now each tread with a $lane$ equivalent to 0 has stored the sum of 31 next consecutive threads. In the case of 256 threads this means that there are 8 elements left to be summed up, however this step cannot be performed on a warp level as all the elements are stored in threads from distinct warps or unique $warpId$. Therefore the $val$ stored in local memory is stored to shared memory at the $warpId$ index and a \textit{\_syncthreads()} call is made (line 29-32). In this case it necessary to synchronize all threads, as the storing of elements happens across warps.
+Finally all threads within the very first warp, meaning the ones with a $warpId$ of 0, reload the data from shared to local memory and a final warp level reduction can be performed (lines 34-41). A single element on thread 0 stores now the entire sum across all input data elements and it can be written to global memory and later fetched from the CPU.
 
 \begin{figure}[H]
 	\begin{lstlisting}[language=c++, caption=Kernel Optimized GPU Count Left,
 		label = ctlocudawrp]
- template <unsigned int blockSize>
-extern __global__ void reduce2(
-	float * g_idata,
-	unsigned int * g_begins,
-	unsigned int * g_ends,
-	float * g_cuts,
-	unsigned int * g_odata) {
-	
-	__shared__ unsigned int s_data[blockSize];
-	
+template <unsigned int blockSize>
+extern __global__ void reduce3(
+float * g_idata,
+unsigned int * g_begins,
+unsigned int * g_ends,
+float * g_cuts,
+unsigned int * g_odata) {
+	__shared__ unsigned int s_data[32];
 	unsigned int tid = threadIdx.x;
 	const unsigned int begin = g_begins[blockIdx.x];
 	const unsigned int end = g_ends[blockIdx.x];
 	const float cut = g_cuts[blockIdx.x];
-	
 	unsigned int i = begin + tid;
 	s_data[tid] = 0;
 	
+	const unsigned int lane = tid & (32 - 1);
+	const unsigned int warpId = tid >> 5;
+	
 	unsigned int val = 0;
-	// unaligned coalesced g memory access
 	while (i < end) {
 		val += (g_idata[i] <= cut);
 		i += blockSize;
 	}
 	__syncwarp();
 	
-	for (int offset = 16; offset > 0; offset /= 2)
-	val += __shfl_down_sync(FULL_MASK, val, offset);
+	for (int offset = 16; offset > 0; offset >>= 1)
+		val += __shfl_down_sync(FULL_MASK, val, offset);
 	
-	s_data[tid] = val;
+	if (lane == 0) {
+		s_data[warpId] = val;
+	}
 	__syncthreads();
 	
-	// All warps but first one are not needed anymore
-	if (tid >= 32 ) {
-		return;
-	}
-	
-	val = 0;    
-	if (tid * 32 < blockSize) {
-		val += s_data[tid * 32];
-	}
-	__syncwarp();
-	
-	for (int offset = 16; offset > 0; offset /= 2)
-	val += __shfl_down_sync(FULL_MASK, val, offset);
-	
-	if (tid == 0) {
-		g_odata[blockIdx.x] = val;
+	if (warpId == 0) {
+		val = 0;
+		if (tid < 32 && tid * 32 < blockSize) {
+			val += s_data[tid];
+		}
+		
+		for (int offset = 16; offset > 0; offset >>= 1)
+			val += __shfl_down_sync(FULL_MASK, val, offset);
+		
+		if (tid == 0) {
+			g_odata[blockIdx.x] = val;
+		}
 	}
 }
 	\end{lstlisting}
@@ -2447,7 +2448,7 @@ If the time lost during the partitioning is subtracted, the GPU version is about
 When looking at the absolute number there is a stark difference: $56.47s$ predicted for the CPU version were $31.83$ was the actual timing. Similarly the GPU was expected to execute ORB\footnote{Excluding the time required for the partition} in $8.99s$, however it only took $5.6s$. The theoretical model considers an upper bound for the total number of iterations which the bisection method takes to converge. In reality this number is closer to 20 than to $p$ which is 32 in the measured data. When considering this, the measurements are also in an absolute term relatively close to the theoretical model. $56.47s \times \frac{20}{32} = 37s$ against the actual $31.83s$ and $8.99s \times \frac{20}{32} =5.99s$ compared to $5.6s$.
 \subsection{Scaling}
 
-To make sure the GPU version scales good the total runtimes..
+To make sure the GPU version scales well the runtime were evaluated for different number of particles. 
 
 
 \begin{filecontents*}{results0.csv}
@@ -2518,7 +2519,8 @@ To make sure the GPU version scales good the total runtimes..
 \newpage
 \section{Conclusion}
 
-In the thesis I explored how the ORB method works in detail, I established solid knowledge about different ways to estimate the performance of computer. Using the foundation I have built estimates for a CPU and two GPU accelerated versions of ORB. Furthermore I have bolstered my experience in c++ programming and learned the most important theoretical foundations about CUDA. Using all the gained knowledge I have looked at numbers CUDA source Codes and blog articles to come up with an efficient reduction kernel which works well with segmented problems where each segment requires a different reduction strategy. I have implemented a GPU partitioning where early results and time constraints lead to an unfinished implementation, nevertheless the concept should work. 
+In the thesis I explored how the ORB method works in detail, I established solid knowledge about different ways to estimate the performance of computer. Using the foundation I have built estimates for a CPU and two GPU accelerated versions of ORB. Furthermore I have bolstered my experience in C++ programming and learned the most important theoretical foundations about CUDA. Using all the gained knowledge I have looked at numbers CUDA source codes and blog articles to come up with an efficient reduction kernel which works well with segmented problems where each segment requires a different reduction strategy. I have implemented a GPU partitioning where early results and time constraints lead to an unfinished implementation, nevertheless the concept should work and could potentially lead to further performance improvement in ORB. 
+When isolating the time it takes to compute a cut, without considering the time used for partitioning, the GPU accelerated version I have implemented runs about 5.6 times faster than a fully optimized and parallelized CPU version. 
  
 
 

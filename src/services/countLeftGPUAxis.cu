@@ -144,7 +144,8 @@ extern __global__ void reduce3(
     const unsigned int begin = g_begins[blockIdx.x];
     const unsigned int end = g_ends[blockIdx.x];
     const float cut = g_cuts[blockIdx.x];
-
+    const unsigned int lane = tid & (32 - 1);
+    const unsigned int warpId = tid >> 5;
     unsigned int i = begin + tid;
     s_data[tid] = 0;
 
@@ -154,34 +155,29 @@ extern __global__ void reduce3(
         val += (g_idata[i] <= cut);
         i += blockSize;
     }
-    printf("%d %i\n", tid, val);
     __syncwarp();
 
     for (int offset = 16; offset > 0; offset >>= 1)
         val += __shfl_down_sync(FULL_MASK, val, offset);
 
-    printf("%d %d %d %i\n", tid, tid & (32 - 1), (tid) >> 5, val);
-    if (tid & (32 - 1) == 0) {
-        s_data[(tid) >> 5] = val;
+    if (lane == 0) {
+        s_data[warpId] = val;
     }
-
     __syncthreads();
 
     // All warps but first one are not needed anymore
-    if (tid >= 32 ) {
-        return;
-    }
+    if (warpId == 0) {
+        val = 0;
+        if (tid < 32 && tid * 32 < blockSize) {
+            val += s_data[tid];
+        }
 
-    val = 0;
-    if (tid < 32 && tid * 32 < blockSize) {
-        val += s_data[tid ];
-    }
+        for (int offset = 16; offset > 0; offset >>= 1)
+            val += __shfl_down_sync(FULL_MASK, val, offset);
 
-    for (int offset = 16; offset > 0; offset >>= 1)
-        val += __shfl_down_sync(FULL_MASK, val, offset);
-
-    if (tid == 0) {
-        g_odata[blockIdx.x] = val;
+        if (tid == 0) {
+            g_odata[blockIdx.x] = val;
+        }
     }
 }
 
