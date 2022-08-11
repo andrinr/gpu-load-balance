@@ -6,4 +6,4 @@
 #SBATCH --partition=debug
 #SBATCH --nodes=1 --ntasks-per-node=1 --cpus-per-task=12 --ntasks-per-core=1
 
-srun a.out >> results
+srun ./a.out >> results

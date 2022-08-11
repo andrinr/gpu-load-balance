@@ -1,6 +1,5 @@
-#include <blitz/array.h>
 #include <vector>
-
+#include <iostream>
 
 #define FULL_MASK 0xffffffff
 template <unsigned int blockSize>
@@ -254,7 +253,7 @@ int main(int argc, char** argv) {
     printf("copied data to device\n");
 
     cudaEventRecord(start);
-    reduce3<nThreads><<<
+    reduce2<nThreads><<<
             nBlocks,
             nThreads,
             nThreads * sizeof (unsigned int) >>>
@@ -270,8 +269,9 @@ int main(int argc, char** argv) {
     printf("reduced data\n");
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
+    printf("Effective Bandwidth (GB/s): %fn \n", n*4/milliseconds/1e6);
 
-    std::cout << milliseconds << "\n";
+    printf("milliseconds %f \n",milliseconds);
 
     cudaMemcpy(h_sums, d_sums, sizeof (int ) * nBlocks, cudaMemcpyDeviceToHost);
 
