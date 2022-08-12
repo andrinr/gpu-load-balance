@@ -2433,7 +2433,7 @@ All measurements were performed on Piz Daint where the performance of the system
 		\end{tikzpicture}
 	\end{center}
 	
-	\caption{Execution times of different strategies}
+	\caption{Execution times of different strategies on a uniform dataset}
 	\label{fig:analy2}
 \end{figure}
 
@@ -2441,6 +2441,41 @@ In figure \ref{fig:analy2} the final measurements are plotted. The total runtime
 If the time lost during the partitioning is subtracted, the GPU version is about $5.6$ times faster, which is slightly worse than the expected speedup of $6.2$. The difference can be explained by additional overheads, especially as the GPU kernel has to touch the elements more than once due to the way it was implemented. 
 
 When looking at the absolute number there is a stark difference: $56.47s$ were predicted for the CPU version where $31.83$ was the actual timing. Similarly the GPU was expected to execute ORB\footnote{Excluding the time required for the partition} in $8.99s$, however it only took $5.6s$. The theoretical model considers an upper bound for the total number of iterations which the bisection method takes to converge. In reality this number is closer to 20 than to $p$ which is 32 in the measured data. When considering this, the measurements are also in an absolute term relatively close to the theoretical model. $56.47s \times \frac{20}{32} = 37s$ against the actual $31.83s$ and $8.99s \times \frac{20}{32} =5.99s$ compared to $5.6s$.
+
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+			
+			\begin{axis}
+				[
+				enlargelimits=0.4,
+				ybar stacked,
+				bar width=40pt,
+				nodes near coords,
+				legend style={at={(0.5,-0.20)},
+					anchor=north,legend columns=-1},
+				ylabel={seconds},
+				symbolic x coords={cpu, gpu},
+				xtick=data,
+				x tick label style={rotate=45,anchor=east}]
+				ymin=0,
+				ymax=50
+				]
+				\addplot+[ybar] plot coordinates {(cpu, 31.83) (gpu, 5.60)};
+				\addplot+[ybar] plot coordinates {(cpu, 12.83) (gpu, 12.87)};
+				
+				\legend{\strut Count and Copy, \strut Partition}
+			\end{axis}
+			
+			
+		\end{tikzpicture}
+	\end{center}
+	
+	\caption{Execution times of different strategies}
+	\label{fig:analy2}
+\end{figure}
+
 \subsection{Scaling}
 
 To make sure the GPU version scales well the runtime were evaluated for different number of particles. 

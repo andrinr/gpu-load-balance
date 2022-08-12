@@ -2,8 +2,7 @@
 #include <blitz/array.h>
 #include <limits>
 #include "../constants.h"
-#include "../data/tipsy.h"
-
+#include "../tipsy/tipsy.h"
 // Make sure that the communication structure is "trivial" so that it
 // can be moved around with "memcpy" which is required for MDL.
 static_assert(std::is_void<ServiceInit::input>()  || std::is_trivial<ServiceInit::input>());
@@ -45,13 +44,18 @@ int ServiceInit::Service(PST pst,void *vin,int nIn,void *vout, int nOut) {
             blitz::deleteDataWhenDone,
             storage);
 
-    srand(pst->idSelf);
-    int c = 0;
-    for (int i = 0; i < in.nParticles; i++) {
-        for (int d = 0; d < 3; d++) {
-            particles(i,d) = xorshf96();
-            if (particles(i,d) < 0.0) c++;
+    if (in.generate) {
+        for (int i = 0; i < in.nParticles; i++) {
+            for (int d = 0; d < 3; d++) {
+                particles(i,d) = xorshf96();
+            }
         }
+    }
+    else {
+        TipsyIO io;
+        io.open("../tipsy/b0-final.std");
+        printf("Count %d n %d\n", io.count(), in.nParticles);
+        io.load(particles);
     }
     lcl->particles.reference(particles);
 

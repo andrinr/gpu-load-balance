@@ -70,7 +70,8 @@ add_executable(
         src/services/partition.cpp
         src/services/partitionGPU.cu
         src/services/finalize.cu
-        src/services/makeAxis.cpp)
+        src/services/makeAxis.cpp
+        src/tipsy/tipsy.cxx)
 
 set(SOURCE_FILES
         src/constants.h

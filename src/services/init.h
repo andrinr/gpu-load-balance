@@ -7,6 +7,7 @@ public:
     struct input {
         int nParticles;
         int d;
+        bool generate;
         META_PARAMS params;
     };
     typedef int output;

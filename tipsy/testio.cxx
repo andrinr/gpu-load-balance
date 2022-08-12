@@ -1,4 +1,4 @@
-#include "tipsy.h"
+#include "../src/tipsy/tipsy.h"
 
 int main() {
     TipsyIO io;

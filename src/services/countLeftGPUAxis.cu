@@ -129,7 +129,6 @@ extern __global__ void reduce2(
     }
 }
 
-
 template <unsigned int blockSize>
 extern __global__ void reduce3(
         float * g_idata,
@@ -138,16 +137,22 @@ extern __global__ void reduce3(
         float * g_cuts,
         unsigned int * g_odata) {
 
-    __shared__ unsigned int s_data[32];
+    static __shared__ unsigned int s_data[blockSize];
+    static __shared__ unsigned int begin;
+    static __shared__ unsigned int end;
+    static __shared__ float cut;
 
     unsigned int tid = threadIdx.x;
-    const unsigned int begin = g_begins[blockIdx.x];
-    const unsigned int end = g_ends[blockIdx.x];
-    const float cut = g_cuts[blockIdx.x];
     const unsigned int lane = tid & (32 - 1);
     const unsigned int warpId = tid >> 5;
+
+    if (tid == 0) {
+        begin = g_begins[blockIdx.x];
+        end = g_ends[blockIdx.x];
+        cut = g_cuts[blockIdx.x];
+    }
+    __syncthreads();
     unsigned int i = begin + tid;
-    s_data[tid] = 0;
 
     unsigned int val = 0;
     // unaligned coalesced g memory access
@@ -157,8 +162,9 @@ extern __global__ void reduce3(
     }
     __syncwarp();
 
-    for (int offset = 16; offset > 0; offset >>= 1)
+    for (int offset = 16; offset > 0; offset /= 2) {
         val += __shfl_down_sync(FULL_MASK, val, offset);
+    }
 
     if (lane == 0) {
         s_data[warpId] = val;
@@ -167,13 +173,11 @@ extern __global__ void reduce3(
 
     // All warps but first one are not needed anymore
     if (warpId == 0) {
-        val = 0;
-        if (tid < 32 && tid * 32 < blockSize) {
-            val += s_data[tid];
-        }
+        val = (tid < blockDim.x / warpSize) ? s_data[lane] : 0;
 
-        for (int offset = 16; offset > 0; offset >>= 1)
+        for (int offset = blockSize / 32 ; offset > 0; offset /= 2) {
             val += __shfl_down_sync(FULL_MASK, val, offset);
+        }
 
         if (tid == 0) {
             g_odata[blockIdx.x] = val;

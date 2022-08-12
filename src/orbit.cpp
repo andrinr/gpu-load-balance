@@ -80,7 +80,7 @@ int master(MDL vmdl,void *vpst) {
 
     cellHeap(0) = root;
 
-    ServiceInit::input iInit {N/mdl->Threads(), d, params};
+    ServiceInit::input iInit {N/mdl->Threads(), d, true, params};
     ServiceInit::output oInit[1];
     mdl->RunService(PST_INIT, sizeof (ServiceInit::input), &iInit, oInit);
 
@@ -190,7 +190,7 @@ int master(MDL vmdl,void *vpst) {
 
             for (int i = 0; i < nCells; ++i) {
                 if (cells(i).foundCut) continue;
-                printf(
+                /*printf(
                         "counted left: %u, of %u. cut %f, axis %d, level %u, cell %u \n",
                         oCountsLeft[i],
                         oCounts[i] / 2,
@@ -198,7 +198,7 @@ int master(MDL vmdl,void *vpst) {
                         cells(i).cutAxis,
                         l,
                         cells(i).id
-                        );
+                        );*/
                 //CellHelpers::log(cells(i));
 
                 float ratio = ceil(cells(i).nLeafCells / 2.0) / cells(i).nLeafCells;
