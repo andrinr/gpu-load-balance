@@ -100,19 +100,19 @@
 \section{Introduction}
 
 
-The N-Body technique has been used for decades to simulate the Universe to compare theory with observations. It uses "particles'' to represent objects of a certain mass and computes the forces by applying the gravity equation. As the forces operate over an infinite distance it is necessary to consider all pairwise interactions, making a naive implementation $\mathcal{O}(n^2)$. This does not scale with large particle counts, in fact the problem becomes computationally infeasible at some point.
+The N-Body technique has been used for decades to simulate the Universe to compare theory with observations. It uses \textit{particles} to represent objects of a certain mass and computes the interacting forces by applying the gravity equation. As the forces operate over an infinite distance it is necessary to consider all pairwise interactions, making a naive implementation $\mathcal{O}(N^2)$ where $N$ is the number of particles in the system. This does not scale with large $N$'s, in fact the problem becomes computationally infeasible at some point.
 
 A common solution is to partition the space, in which the particles are contained, into a set of subspaces using the Orthogonal Recursive Bisection (ORB) algorithm. These subspaces, or cells, are then stored in a space partitioning tree data structure (SPTDS). The data structure is then leveraged in combination with the Fast Multipole Method (FMM) to speed up the particle simulation to $O(n)$. In order to balance the load of work and memory across nodes and processors in a computing system, a load balancing is necessary. The same tree, which is used for FMM can be leveraged to generate groupings of the particles which are then distributed among processing units. Building the SPTDS with ORB uses a significant percentage of the overall simulation time, \cite{Stadel2001} where as of now this was done on the CPU, not leveraging GPU acceleration.
  
-In this thesis I establish an upper limit for the speedup of a GPU ORB implementation over its fully parallelized CPU only counterpart. In order to do so, I propose a runtime estimate for both versions. As hardware specific details and some knowledge about compilers and Assembly instructions are crucial for a reliable estimate, I explored the theoretical foundations of memory bandwidth and processing power. 
+In this thesis I established an upper limit for the speedup of a GPU ORB implementation over its fully parallelized CPU only counterpart. In order to do so, I proposed a runtime estimate for both versions. As hardware specific details and some knowledge about compilers and Assembly instructions are crucial for a reliable estimate, I explored the theoretical foundations of memory bandwidth and processing power. 
 
-Based on encouraging figures from the runtime estimates I proceeded with the actual implementation. Using the machine dependent layer (MDL) from PKDGRAV \cite{Stadel2001}, which is used to distribute workload among cores and processors, I implemented a fully parallelized CPU version of ORB. In the thesis I explain the most important concepts of CUDA which are used to program the so called kernels. Kernels are essentially functions which are executed on the GPU and can leverage GPU acceleration, however many hardware related limitations have to be considered which pose a set of completely new challenges when compared to traditional C++ programming.
+Based on encouraging figures from the runtime estimates I proceeded with the actual implementation. Using the machine dependent layer (MDL) from PKDGRAV \cite{Stadel2001}, which is used to distribute workload among cores and processors, I implemented a fully parallelized CPU version of ORB. In preparation of advancing parts of the code to a GPU accelerated implementation, I have summarized the most important and relevant concepts of CUDA, a popular graphics programming language developed by NVIDIA. Compared to traditional C++ code, many hardware related limitations have to be considered and a fundamentally different paradigms is required.
 
-With the gained knowledge I implemented the most performance critical part of ORB using CUDA. The identified part is essentially a map and reduce on the particles coordinates. I iteratively increase the performance of the kernels and describe each version in detail.
+With the gained knowledge I implemented the most performance critical part of ORB using CUDA \cite{CUDAGuide}. The identified part is essentially a map and reduce on the particles coordinates. I iteratively increased the performance of the kernels and describe each version in detail.
 
-I propose a possible method to accelerate the partitioning part of ORB using CUDA, where an input particle is rearranged such that only elements smaller than a given value are found in the first section of the array. The proposed implementation could possibly further decrease the runtime of ORB when implemented.
+Moreover I propose a possible method to accelerate the partitioning part of ORB with specific details. The proposed implementation could possibly further decrease the runtime of ORB when implemented.
 
-Finally I have performed runtime a runtime analysis on Piz Daint, which proof a significant speedup of the newly GPU accelerated ORB over its CPU only counterpart.
+Finally, I have performed a runtime analysis on Piz Daint \cite{piz_daint}, a powerful super computer in Switzerland. A significant speedup of the GPU accelerated ORB over its CPU counterpart was found. 
 
 \newpage
 \section{Background}
@@ -2421,8 +2421,8 @@ All measurements were performed on Piz Daint where the performance of the system
 				ymin=0,
 				ymax=50
 				]
-				\addplot+[ybar] plot coordinates {(cpu, 31.83) (gpu, 5.60)};
-				\addplot+[ybar] plot coordinates {(cpu, 12.83) (gpu, 12.87)};
+				\addplot+[ybar] plot coordinates {(cpu, 38.46) (gpu, 6.84)};
+				\addplot+[ybar] plot coordinates {(cpu, 15.77) (gpu, 15.78)};
 
 			\legend{\strut Count and Copy, \strut Partition}
 			\end{axis}
@@ -2431,41 +2431,50 @@ All measurements were performed on Piz Daint where the performance of the system
 		\end{tikzpicture}
 	\end{center}
 	
-	\caption{Execution times of different strategies on a uniform dataset}
+	\caption{Runtimes for $N = 2^{30}$ and $d=4096$ on a single Piz Daint node}
 	\label{fig:analy2}
 \end{figure}
 
-In figure \ref{fig:analy2} the final measurements are plotted. A uniform random distribution was used instead of a the target data, because at time of estimating the runtime there was no dataset available with the proper distribution. The results should however be comparable as the only thing, which can vary is the number of iterations taken to find a cut for each cell.
+In figure \ref{fig:analy2} the final measurements are plotted for $N = 2^{30}$ and $d=4096$ on a single Piz Daint node. The reason why the measurements were not performed on multiple nodes, is that the thesis does not propose any changes to the internode communication strategies, therefore these results are not of importance. A uniform random distribution was used instead of the target data, because at time of estimating the runtime there was no dataset available with the proper distribution. The results should however be comparable as solely the exact number of iterations taken to find a cut for each cell varies on different datasets.
 
-The total runtime of the CPU only version of ORB is around 43, the GPU accelerated variant takes 18 seconds. However a large part of the execution time can be attributed to the Partitioning, where its overhead remains equal for both versions. 
-If the time lost during the partitioning is subtracted, the GPU version is about $5.6$ times faster, which is slightly worse than the expected speedup of $6.2$. The difference can be explained by the GPU reduction kernel which is slightly worse than than the memory bandwidth would allow. 
+A large portion of the total ORB runtime is attributed to the partition part. If the time lost during the partitioning is subtracted, the GPU version is about $5.6$ times faster than the CPU implementation, which is slightly worse than the expected speedup of $6.2$. The difference can be explained by the GPU reduction kernel which is slightly worse than the memory bandwidth would allow as described in section \ref{imprctlwrp}. The theoretical model on the other assumes an implementation which performs just as well as the memory bandwidth would allow. 
 
-When looking at the absolute number there is a stark difference: $56.47s$ were predicted for the CPU version where $31.83$ was the actual timing. Similarly the GPU was expected to execute ORB\footnote{Excluding the time required for the partition} in $8.99s$, however it only took $5.6s$. The theoretical model considers an upper bound for the total number of iterations which the bisection method takes to converge. In reality this number is closer to 20 than to $p$ which is 32 in the input data. When considering this, the measurements are also in an absolute term relatively close to the theoretical model. $56.47s \times \frac{20}{32} = 37s$ against the actual $31.83s$ and $8.99s \times \frac{20}{32} =5.99s$ compared to $5.6s$.
+When comparing the absolute runtimes there is a stark difference visible: $67.77s$ were predicted for the CPU version where $38.46s$ was the actual timing. Similarly the GPU was expected to execute ORB\footnote{Excluding the time required for the partition} in $10.79s$, however it only took $6.84s$. The theoretical model considers an upper bound for the total number of iterations which the bisection method takes to converge. In reality this number is closer to 20 than to $p$ which is 32 in the input data. When considering this, the measurements are also in an absolute term relatively close to the theoretical model. $67.47s \times \frac{20}{32} = 42.16s$ against the actual $38.46s$ and $10.79s \times \frac{20}{32} = 6.74s$ compared to the measured $6.84s$.
+Concluding the measured runtime are surprisingly similar to the expected ones, however they do not reach the theoretical maximum. The reduction kernel would need to be further improved to fully leverage the GPU bandwidth, however as of writing this thesis no better implementation variant is known. 
 
 
 \subsection{Scaling}
 
-To make sure the GPU version scales well the runtime were evaluated for different number of particles. 
-
+The CPU and GPU versions were also tested for different problem sizes $N$. The results were then compiled into speedups, enabling us to see how the speedup behaves for different problem sizes. 
 
 \begin{filecontents*}{results0.csv}
 	p, d, t, t2
-	1048576, 10, 0.027
-	4194304, 10, 0.085
-	16777216, 10, 0.37
-	67108864, 10, 1.65
-	268435456, 10, 7.2
-	1073741824, 10, 31.5, 
+	1048576, 10, 0.031
+	4194304, 10, 0.096
+	16777216, 10, 0.433
+	67108864, 10, 1.905
+	268435456, 10, 8.586
+	1073741824, 10, 38.465
 \end{filecontents*}
 
 \begin{filecontents*}{results1.csv}
 	p, d, t, t2
-	1048576 , 10, 0.022
-	4194304, 10, 0.036
-	16777216 , 10, 0.091
-	67108864 , 10, 0.328
-	268435456 , 10, 1.321
-	1073741824, 10, 5.704
+	1048576 , 10, 0.028
+	4194304, 10, 0.046
+	16777216 , 10, 0.114
+	67108864 , 10, 0.397
+	268435456 , 10, 1.593
+	1073741824, 10, 6.838
+\end{filecontents*}
+
+\begin{filecontents*}{speedups.csv}
+	p, d, s
+	1048576 , 10, 1.107
+	4194304, 10, 2.086
+	16777216 , 10, 3.798
+	67108864 , 10, 4.7984
+	268435456 , 10, 5.327
+	1073741824, 10, 5.625
 \end{filecontents*}
 
 \begin{figure}[H]
@@ -2474,15 +2483,14 @@ To make sure the GPU version scales well the runtime were evaluated for differen
 			
 			\begin{axis}
 				[
-				xlabel={number of particles},
-				ylabel={seconds},
+				xlabel={number of particles $N$},
+				ylabel={speedup},
 				nodes near coords,
 				xmin=1048576,
 				xmax=1073741824,
 				ymin=0,
-				ymax=64,
+				ymax=6,
 				xmode=log,
-				ymode=log,
 				log basis x={2},
 				log basis y={2},
 				legend style={at={(1.05,0.6)},anchor=west}]
@@ -2491,34 +2499,73 @@ To make sure the GPU version scales well the runtime were evaluated for differen
 				point meta=explicit symbolic
 				] table [
 				x=p, 
-				y=t, 
+				y=s, 
 				col sep=comma] 
-				{results0.csv};
-				\addlegendentryexpanded{CPU Only};
-				\addplot+[
-				point meta=explicit symbolic
-				] table [
-				x=p, 
-				y=t, 
-				col sep=comma] 
-				{results1.csv};
-				\addlegendentryexpanded{GPU Count Left};
+				{speedups.csv};
+	
 			\end{axis}
-			
 			
 		\end{tikzpicture}
 	\end{center}
 	
-	\caption{Execution times of different strategies}
-	\label{fig:analy}
+	\caption{Speedup of GPU over CPU version for different problem sizes and $d = 4096$}
+	\label{fig:analy3}
+\end{figure}
+
+In the resulting figure \ref{fig:analy3} it can be observed how the speedup is only minor for \textit{small} problem sizes. This is most certainly caused by an overhead introduced by the GPU implementation over its CPU counterpart, as kernel invocations and memory copying operations are not free of cost. 
+As soon as the problem size approaches a more realistic size, meaning closer to the number of particles which are to be expected on a single node, the speedup appears to converge to a factor of 6. This is a positive outcome, as it would be undesirable to have a degrading performance.
+
+Finally measurements were made where the problem size remains equivalent, however the number of desired leaf cells $d$ of the constructed SPTDS are varied. 
+
+
+
+\begin{figure}[H]
+	\begin{center}
+		\begin{tikzpicture}
+			
+			\begin{axis}
+				[
+				xlabel={number of particles $N$},
+				ylabel={speedup},
+				nodes near coords,
+				xmin=1048576,
+				xmax=1073741824,
+				ymin=0,
+				ymax=6,
+				xmode=log,
+				log basis x={2},
+				log basis y={2},
+				legend style={at={(1.05,0.6)},anchor=west}]
+				]
+				\addplot+[
+				point meta=explicit symbolic
+				] table [
+				x=p, 
+				y=s, 
+				col sep=comma] 
+				{speedups.csv};
+				
+			\end{axis}
+			
+		\end{tikzpicture}
+	\end{center}
+	
+	\caption{Speedup of GPU over CPU version for a problem size of $N = 2^{32}$}
+	\label{fig:analy4}
 \end{figure}
 
 \newpage
 \section{Conclusion}
 
-In the thesis I explored how the ORB method works in detail, I established solid knowledge about different ways to estimate the performance of computers. Using the foundation I have built estimates for a CPU and two GPU accelerated versions of ORB. Furthermore I have bolstered my experience in C++ programming and learned the most important theoretical foundations about CUDA. Using all the gained knowledge I have looked at numerous CUDA source codes and blog articles to come up with an efficient reduction kernel which works well with segmented problems where each segment requires a different reduction strategy. I have implemented a GPU partitioning where early results and time constraints lead to an unfinished implementation, nevertheless the concept should work and could potentially lead to further performance improvement in ORB. 
-When isolating the time it takes to compute a cut, without considering the time used for partitioning, the GPU accelerated version I have implemented runs about 5.6 times faster than a fully optimized and parallelized CPU version. 
- 
+This research aimed at improving the runtime of the ORB algorithm, which constructs a space partitioning tree data structure, using the GPU programming language CUDA. The SPTDS is used for the FMM method as well as load balancing. 
+
+In order to have an idea how large the speedup of an optimal GPU implementation against an optimal CPU version is, I have calculated runtime for both versions. In theory a maximal speedup of 6.2 was expected. 
+
+With extensive research about the CUDA programming language I have written three GPU reduction kernels, where kernel2 significantly outperformed the first one. The kernel essentially solves a segmented map reduce problem. NVIDIA's CUB \cite{cubSeg} exposes a similar function, however in the case of ORB, the map condition varies across segments which is not supported in CUB. 
+I have introduced another version, kernel3 which makes extensive use of warp level primitives and can reduce access to shared memory by a factor of 32, however it did not outperform kernel2 and measurements have shown that the throughput of kernel2 and kernel3 is close to GPU memory bandwidth.
+
+With the gained knowledge I have tried to accelerate the partitioning using CUDA. However due to time constraints I was not able to finish writing the required kernels. Thus I described the theoretical concepts, which can build a solid foundation for further research. However it is not clear wether the GPU partitioning could further improve the ORB runtime when implemented.
+Finally I have made time measurements on a single node of the Piz Daint supercomputer. When isolating the time it takes to compute a cut, without considering the time used for partitioning, the GPU accelerated version I have implemented runs about 5.6 times faster than a fully optimized and parallelized CPU version. Which comes close to the theoretical limit and the initial goal of improving the runtime of ORB is successful. 
 
 
 % Use for reduction explanation https://texample.net/tikz/examples/database-decimation-process/
