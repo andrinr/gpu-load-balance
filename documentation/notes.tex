@@ -102,14 +102,17 @@
 
 The N-Body technique has been used for decades to simulate the Universe to compare theory with observations. It uses "particles'' to represent objects of a certain mass and computes the forces by applying the gravity equation. As the forces operate over an infinite distance it is necessary to consider all pairwise interactions, making a naive implementation $\mathcal{O}(n^2)$. This does not scale with large particle counts, in fact the problem becomes computationally infeasible at some point.
 
-A common solution is to partition the space, in which the particles are contained, into a set of subspaces, also called cells using an algorithm called Orthogonal Recurisve Bisection (ORB). These cells are then stored in a space partitioning tree data structure (SPTDS) in order to speed up the simulation with the Fast Multipole Method (FMM) to $O(n)$. In order to balance the load of the computations and the data across nodes and processors in a system, a load balancing is necessary. The same tree, which is used for FMM can be leveraged to generate groupings of the particles which are then distributed among processing units.
-Building the data structure uses a significant percentage of the overall simulation time. As of now this was done on the CPU, not leveraging GPU acceleration.
+A common solution is to partition the space, in which the particles are contained, into a set of subspaces using the Orthogonal Recursive Bisection (ORB) algorithm. These subspaces, or cells, are then stored in a space partitioning tree data structure (SPTDS). The data structure is then leveraged in combination with the Fast Multipole Method (FMM) to speed up the particle simulation to $O(n)$. In order to balance the load of work and memory across nodes and processors in a computing system, a load balancing is necessary. The same tree, which is used for FMM can be leveraged to generate groupings of the particles which are then distributed among processing units. Building the SPTDS with ORB uses a significant percentage of the overall simulation time, \cite{Stadel2001} where as of now this was done on the CPU, not leveraging GPU acceleration.
  
-In this thesis I establish an upper limit for the speedup of a GPU ORB implementation over its fully parallelized CPU only counterpart. In order to do so, I establish a runtime estimate for both versions, where its crucial to take into account hardware specific details and even some analysis of compiled assembly code. The results pointed to a possible speedup of the GPU over the CPU version of factor $6.2$.
+In this thesis I establish an upper limit for the speedup of a GPU ORB implementation over its fully parallelized CPU only counterpart. In order to do so, I propose a runtime estimate for both versions. As hardware specific details and some knowledge about compilers and Assembly instructions are crucial for a reliable estimate, I explored the theoretical foundations of memory bandwidth and processing power. 
 
-Using the machine dependent layer (mdl) from PKDGRAV, which is used to distribute workload among cores and processors, I have implemented a fully parallelized CPU version of ORB. In the thesis I explain the most important concepts of CUDA which are used to program the so called kernels. Kernels are essentially functions which are executed on the GPU and can leverage GPU acceleration, however many hardware related limitations have to be considered which pose a set of completely new challenges when compared to traditional C++ programming.
-I used the gained knowledge to implement the most performance critical part of ORB using CUDA. The identified part is essentially a map and reduce on the particles coordinates. I iteratively increase the performance of the kernels and describe each version in detail. Finally a possible method to accelerate the partitioning part of ORB using CUDA, where an input particle is rearranged such that only elements smaller than a given value are found in the first section of the array. The proposed implementation could possibly further decrease the runtime of ORB when implemented.
-After performing measurements on Piz Daint, the GPU accelerated version turned out be $5.4$ times faster than its CPU only counterpart. 
+Based on encouraging figures from the runtime estimates I proceeded with the actual implementation. Using the machine dependent layer (MDL) from PKDGRAV \cite{Stadel2001}, which is used to distribute workload among cores and processors, I implemented a fully parallelized CPU version of ORB. In the thesis I explain the most important concepts of CUDA which are used to program the so called kernels. Kernels are essentially functions which are executed on the GPU and can leverage GPU acceleration, however many hardware related limitations have to be considered which pose a set of completely new challenges when compared to traditional C++ programming.
+
+With the gained knowledge I implemented the most performance critical part of ORB using CUDA. The identified part is essentially a map and reduce on the particles coordinates. I iteratively increase the performance of the kernels and describe each version in detail.
+
+I propose a possible method to accelerate the partitioning part of ORB using CUDA, where an input particle is rearranged such that only elements smaller than a given value are found in the first section of the array. The proposed implementation could possibly further decrease the runtime of ORB when implemented.
+
+Finally I have performed runtime a runtime analysis on Piz Daint, which proof a significant speedup of the newly GPU accelerated ORB over its CPU only counterpart.
 
 \newpage
 \section{Background}
@@ -273,12 +276,9 @@ The number of leaf cells in the subtree of $leftCell$ is subsequently incremente
 
 Equation \ref{eq:d22} for $d_{righCell}$ can also be derived but the more simple variant is just taking the difference between the absolute number of desired leaf cells and the ones that are assigned to the left subtree. 
 
-The reason why equation \ref{eq:d1} and \ref{eq:d22} work when applied recursively can explained as follows: In a nearly complete tree there exists maximally one subtree of the same depth which is not a complete subtree. By definition of $d_{leftCell} and d_{rightCell}$ either the left or the right subtree is complete. Furthermore we know that the number of cells in the left subtree are more or equal to the ones on the right subtree. Thus we can make a case distinction:
-
-\begin{itemize}
-	\item \textbf{case A} The left subtree is not a complete binary tree. Then the number of leaf cells in the left subtree ar larger 
-\end{itemize}
-
+\begin{comment}
+The reason why equation \ref{eq:d1} and \ref{eq:d22} work when applied recursively can explained as follows: In a nearly complete tree there exists maximally one subtree of the same depth which is not a complete subtree. By definition of $d_{leftCell}$ and $d_{rightCell}$ either the left or the right subtree is complete. Furthermore we know that the number of cells in the left subtree are more or equal to the ones on the right subtree. Thus we can make a recursive proof:
+\end{comment}
 
 Finally the number of particles encompassed in $V_{leftCell}$ and $V_{rigtCell}$ are defined as follows:
 
@@ -308,7 +308,6 @@ If $d$ is equal to 1, this means the reduction must not be continued, as the tar
 Line 6 describes a call to a method called $maxIndex()$, which essentially compares all provided values and returns the index of the maximum values. The result $i$ provides us with the axis where the cell volume is largest. 
 $d_depth$ and $d_{leftCell}$ are computed as described in equation \ref{eq:l}, \ref{eq:d1} and the results are stored $l$ and $d^\prime$ (line 7-8). All prerequisites are met to compute the actual cut with the $cut$ method which will be explained in more detail in section \ref{sec:root} (line 9). The return value stored in $cut$ is equivalent to the position of the cut plane along the cut axis. Using the $cut$ value, the array of particles is partitioned as described in \ref{sec:part} returning the $mid$ value which is the pivot index of the partitioning (line 10).
 Finally the original volume can be subdivided into two volumes as described on line 11-13 and the $ORB$ method is called recursively (lines 15-16) passing it two slices of the $x$ array.
-\TODO{Adapt lines numbers}
 
 \begin{algorithm}[H]
  	\begin{algorithmic}[1]
@@ -613,7 +612,7 @@ Considering the following example particle distribution where $particle_1$ and $
 	\end{center}
 \end{figure}
 
-In this case there exists no ideal cut in the x axis\footnote{X axis is horizontal, the Y is axis vertical}. As either there is 1 particle to the left or 3, but no cut can result in 2 particles to the left. If more particles are added along the same line, the method performs even worse. However since the algorithm uses a deterministic for loop, the algorithm will terminate anyways and puts either 3 particles to the left or the right.
+In this case there exists no ideal cut in the x axis\footnote{x axis is horizontal, the y is vertical}. As either there is 1 particle to the left or 3, but no cut can result in 2 particles to the left. If more particles are added along the same line, the method performs even worse. However since the algorithm uses a deterministic for loop, the algorithm will terminate anyways and puts either 3 particles to the left or the right.
 
 \subsubsection{Runtime Analysis}
 
@@ -1927,7 +1926,7 @@ Each 32th entry in shared memory is stored in the same memory bank. If from the 
 
 There are two types of engines that can be used to execute kernels in CUDA streams: copy engines and kernel engines. Copy engines are used to copy data between host and device memory, and between different types of memory on the device. Kernel engines are used to execute CUDA kernels. The number of individual engines depends on the actual hardware, lower end GPUs usually have a single kernel and a copy engine, more advanced architectures can have more than one copy or kernel engine.
 
-A CUDA stream is a sequence of commands that are executed in order on a CUDA device. Streams can be used to improve the runtime of a CUDA program by overlapping the execution of different kernels. For example, a copy kernel can be executed in one stream while a compute kernel is executed in another stream. This overlap can lead to a significant performance improvement.
+A CUDA stream is a sequence of commands that are executed in order on a CUDA device \cite{streams}. Streams can be used to improve the runtime of a CUDA program by overlapping the execution of different kernels. For example, a copy kernel can be executed in one stream while a compute kernel is executed in another stream. This overlap can lead to a significant performance improvement.
 
 
 \subsubsection{Synchronization}
@@ -1940,7 +1939,7 @@ There exists however a way to communicate between blocks in a safe way. Atomic o
 
 \subsection{Streams}
 
-As described in section \ref{sec:async}, streams can be leveraged to improve the runtime of a CUDA accelerated application. In the GPU accelerated ORB streams are used in a straightforward manner, each thread performs all its computations using its own unique stream. Since leveraging streams only improves the runtime in low numbers because the actual copy and kernel engines are not very numerous, this variant is very simple and effective. It was observed that using more streams on the individual threads does not improve the runtime, quite contrary it can have a negative impact. 
+As described in section \ref{sec:async}, streams can be leveraged to improve the runtime of a CUDA accelerated application \cite{CUDAGuide} \cite{streams}. In the GPU accelerated ORB streams are used in a straightforward manner, each thread performs all its computations using its own unique stream. Since leveraging streams only improves the runtime in low numbers because the actual copy and kernel engines are not very numerous, this variant is very simple and effective. It was observed that using more streams on the individual threads does not improve the runtime, quite contrary it can have a negative impact. 
 
 
 \subsection{Memory Management}
@@ -1948,7 +1947,7 @@ As described in section \ref{sec:async}, streams can be leveraged to improve the
 Several strategies are used to improve the performance of memory allocation: 
 
 \begin{enumerate}
-	\item \textbf{Pinned Memory} As the GPU cannot access the default paged memory directly, when copying memory from the host to the device, the memory must first be copied to pinned memory. This means when pinned memory is used directly with $cudaMallocHost()$, data transfers can be around twice as fast. Thus pinned memory is used for all data, which needs to be either sent from the host to the device or vice versa.
+	\item \textbf{Pinned Memory} As the GPU cannot access the default paged memory directly, when copying memory from the host to the device, the memory must first be copied to pinned memory. This means when pinned memory is used directly with $cudaMallocHost()$, data transfers can be around twice as fast. Thus pinned memory is used for all data, which needs to be either sent from the host to the device or vice versa \cite{pinned}. 
 	\item \textbf{Reuse Memory} Memory allocation and freeing can be avoided altogether by reusing previously allocated memory whenever possible. Since there exists a fixed number of particles as well as an upper limit for the number of cells, memory can be allocated when calling the Initialize service and finalized with the Finalize service.
 \end{enumerate}
 
@@ -2293,10 +2292,6 @@ unsigned int * g_odata) {
 \end{figure}
 
 Against some assumption that kernel3 from listing \ref{cuda:reduction3} might outperform kernel2 from listing \ref{cuda:reduction2}, when testing the two kernel on Piz Daint both had a very similar performance. The effective bandwidth of a kernel can be evaluated with the following formula: 
-
-\begin{equation}
-	
-\end{equation}
 
 \subsection{GPU Accelerated Partitioning}
 
