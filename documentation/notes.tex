@@ -102,7 +102,7 @@
 
 The N-Body technique has been used for decades to simulate the Universe to compare theory with observations. It uses \textit{particles} to represent objects of a certain mass and computes the interacting forces by applying the gravity equation. As the forces operate over an infinite distance it is necessary to consider all pairwise interactions, making a naive implementation $\mathcal{O}(N^2)$ where $N$ is the number of particles in the system. This does not scale with large $N$'s, in fact the problem becomes computationally infeasible at some point.
 
-A common solution is to partition the space, in which the particles are contained, into a set of subspaces using the Orthogonal Recursive Bisection (ORB) algorithm. These subspaces, or cells, are then stored in a space partitioning tree data structure (SPTDS). The data structure is then leveraged in combination with the Fast Multipole Method (FMM) to speed up the particle simulation to $O(n)$. In order to balance the load of work and memory across nodes and processors in a computing system, a load balancing is necessary. The same tree, which is used for FMM can be leveraged to generate groupings of the particles which are then distributed among processing units. Building the SPTDS with ORB uses a significant percentage of the overall simulation time, \cite{Stadel2001} where as of now this was done on the CPU, not leveraging GPU acceleration.
+A common solution is to partition the space, in which the particles are contained, into a set of subspaces using the Orthogonal Recursive Bisection (ORB) algorithm. These subspaces, or cells, are then stored in a space partitioning tree data structure (SPTDS). The data structure is then leveraged in combination with the Fast Multipole Method (FMM) to speed up the particle simulation to $O(N)$. In order to balance the load of work and memory across nodes and processors in a computing system, a load balancing is necessary. The same tree, which is used for FMM can be leveraged to generate groupings of the particles which are then distributed among processing units. Building the SPTDS with ORB uses a significant percentage of the overall simulation time, \cite{Stadel2001} where as of now this was done on the CPU, not leveraging GPU acceleration.
  
 In this thesis I established an upper limit for the speedup of a GPU ORB implementation over its fully parallelized CPU only counterpart. In order to do so, I proposed a runtime estimate for both versions. As hardware specific details and some knowledge about compilers and Assembly instructions are crucial for a reliable estimate, I explored the theoretical foundations of memory bandwidth and processing power. 
 
@@ -411,7 +411,7 @@ The algorithm is explained visually using the following example data set:
 			\end{tikzpicture}
 		\end{minipage}
 	\end{center}
-	\caption{Example distribution with $N$ = 7}
+	\caption{Example 2D particle distribution with $N$ = 7}
 \end{figure}
 
 \begin{figure}[H]
@@ -439,7 +439,7 @@ The algorithm is explained visually using the following example data set:
 			\node[below] at (0.5, 1){$cell_1$};
 		\end{axis}
 	\end{tikzpicture}
-	\caption{Example particles with ORB at recursion depth 0}
+	\caption{Volumes of SPTDS leaf cells generated from ORB at a depth of 0}
 	\label{fig:orb1}
 \end{figure}
 
@@ -450,8 +450,7 @@ The algorithm is explained visually using the following example data set:
 		[]  
 		]
 	\end{forest}    
-	\caption{Tree with ORB at recursion depth 0}
-	\label{fig:orb11}
+	\caption{SPTDS generated from ORB at a recursion depth of 0}
 \end{figure}
 
 Depicted in figure \ref{fig:orb1} \&  \ref{fig:orb11} is the SPTDS after initialization: there is only one $cell_1$ which is root and $V_{cell_1}$ encompasses the entire domain which in this case is the rectangle ranging from 0 to 1 in both the x and y axis. $d_{cell_1}$ is chosen to be equivalent to 3 and $N_{cell_1}$ is 7. Note that $d$ could be any other number, but clearly it is limited by $N$. 
@@ -485,7 +484,7 @@ Depicted in figure \ref{fig:orb1} \&  \ref{fig:orb11} is the SPTDS after initial
 			
 		\end{tikzpicture}
 	\end{center}
-	\caption{Example particles with ORB at recursion depth 1}
+	\caption{Volumes of SPTDS leaf cells generated from ORB at a depth of 1}
 	\label{fig:orb2}
 \end{figure}
 
@@ -496,7 +495,7 @@ Depicted in figure \ref{fig:orb1} \&  \ref{fig:orb11} is the SPTDS after initial
 		[$cell_2$][$cell_3$]  
 		]
 	\end{forest}    
-	\caption{Tree with ORB at recursion depth 1}
+	\caption{SPTDS generated from ORB at a recursion depth of 1}
 	\label{fig:orb22}
 \end{figure}
 A cut plane, which translates to a cut line in the simplified 2D example is constructed and $cell_2$ and $cell_3$ are generated accordingly.
@@ -535,7 +534,7 @@ A cut plane, which translates to a cut line in the simplified 2D example is cons
 			
 		\end{tikzpicture}
 	\end{center}
-	\caption{Example particles with ORB at recursion depth 2}
+	\caption{Volumes of SPTDS leaf cells generated from ORB at a depth of 2}
 	\label{fig:orb3}
 \end{figure}
 
@@ -546,7 +545,7 @@ A cut plane, which translates to a cut line in the simplified 2D example is cons
 		[$cell_2$ [$cell_4$] [$cell_5$]][$cell_3$]  
 		]
 	\end{forest}
-	\caption{Tree with ORB at recursion depth 2}
+	\caption{SPTDS generated from ORB at a recursion depth of 2}
 \end{figure}
 
 Again the procedure is repeated for $cell_2$ but not for $cell_3$ as there recursion is terminated by the stopping condition. Finally $cell_4$ and $cell_5$ are computed, where the stopping condition is met as well. The resulting SPTDS has 3 leaf cells and partitions the space into three subspaces.
@@ -864,7 +863,7 @@ Both the CPU and the GPU have their own memory which are connected by a data lin
 			
 		\end{tikzpicture}
 	\end{center}
-\caption{Illustration of the universal computing model}
+\caption{Computing model}
 \end{figure}
 
 \subsection{Supercomputers}
@@ -902,8 +901,6 @@ For Piz Daint, Summit and Eiger all relevant hardware metrics were collected and
 	\caption{Datapoints of Supercomputers}
 	\label{fig:datapoints}
 \end{table}
-
-
 
 \subsection{Roofline Performance Model} \label{sec:roof}
 
@@ -1043,7 +1040,7 @@ To interpret the roofline mode, one has to follow the dotted line starting from 
 					
 				\end{axis}
 			\end{tikzpicture}
-	\caption{Roofline Model for Piz Daint CPU}
+	\caption{Roofline Model for the isolated Count Left code on Piz Daint}
 	\label{fig:roofdaint}
 	\end{center}
 \end{figure}
@@ -1080,7 +1077,7 @@ To interpret the roofline mode, one has to follow the dotted line starting from 
 				
 			\end{axis}
 		\end{tikzpicture}
-		\caption{Roofline Model for Piz Daint GPU}
+		\caption{Roofline Model for the isolated Count Left code on Piz Daint using the GPU}
 		\label{fig:roofdaintGPU}
 	\end{center}
 \end{figure}
@@ -1136,7 +1133,7 @@ As seen in figure \ref{fig:roofdaint} and \ref{fig:roofdaintGPU} both the GPU an
 			\end{axis}
 		\end{tikzpicture}
 	\end{center}
-	\caption{Roofline Model for Summit}
+	\caption{Roofline Model for the isolated Count Left code on Piz Daint}
 	\label{fig:roofsummit}
 \end{figure}
 
@@ -1172,7 +1169,7 @@ As seen in figure \ref{fig:roofdaint} and \ref{fig:roofdaintGPU} both the GPU an
 				
 			\end{axis}
 		\end{tikzpicture}
-		\caption{Roofline Model for Summit GPU}
+		\caption{Roofline Model for the isolated Count Left code on Summit using the GPU}
 		\label{fig:roofsummitGPU}
 	\end{center}
 \end{figure}
@@ -1226,7 +1223,7 @@ As visible in figure \ref{fig:roofsummit} and \ref{fig:roofsummitGPU} the same a
 			\end{axis}
 		\end{tikzpicture}
 	\end{center}
-	\caption{Roofline Model for Alps}
+	\caption{Roofline Model for the isolated Count Left code on Alps}
 	\label{fig:roofalps}
 \end{figure}
 
@@ -1525,7 +1522,7 @@ The SPTDS and thus the cells are constructed on the master alone. Cells are only
 			[.cell_3 ]]
 		\end{figure}
 	\end{center}
-	\caption{Tree as heap}
+	\caption{Tree stored as an array heap}
 	\label{fig:treeheap}
 \end{figure}
 
@@ -1875,7 +1872,7 @@ The CUDA platform is designed to work with programming languages such as C, C++,
 			
 		\end{tikzpicture}
 	\end{center}
-\caption{Concepts of CUDA}
+\caption{Fundamental CUDA concepts}
 \end{figure}
 
 CUDA gives the ability to launch kernels, which are written in C with some additional CUDA specific syntax. These kernels can be run from the CPU, commonly referred to as the host, and are then executed on the GPU, also known as the device. The device and host have a separate memory and as seen in section \ref{sec:gmm} the transfer $I_{CG}$ rates between the GPU and CPU are generally slower, under performing $I_{C}$ and $I_G$ speeds. Therefore on of the key challenges when rewriting CPU code to GPU code is to limit data transfers between the GPU and CPU as much as possible. Furthermore the problems have to be divided into smaller subproblems, such that each of them fits a single block. CUDA cannot give any guarantees considering the order of execution of these blocks, greatly limiting the possibilities of communication between blocks. Algorithms have to be fundamentally redesigned when porting them from CPU to GPU code. Generally problems which can be vectorized, meaning the same computation is applied to every element in an array are well suited. Usually vectorization is accomplished by mapping each thread associated with a kernel to a value in the array where it performs the respective calculations. As communication is costly and cross block communication is strongly discouraged, computation where threads are less dependent on results from other threads are better suited. Finally problems with less control statements work better, as control statements can cause significant overhead.
@@ -1994,7 +1991,7 @@ The tree building loop is then repeated or if the desired size of the SPTDS is r
 			
 		\end{tikzpicture}
 	\end{center}
-	\caption{Parallelized ORB GPU version}
+	\caption{Master Layer schedule of a an improved GPU parallelized ORB}
 	\label{fig:orbgpup}
 \end{figure}
 
@@ -2116,7 +2113,7 @@ To solve the degrading performance problem some changes are made to the kernel a
 				
 			\end{axis}
 		\end{tikzpicture}
-		\caption{Kernel calls with GPU count left versions}
+		\caption{Kernel calls with GPU Count Left with two different versions}
 		\label{fig:degrading}
 	\end{center}
 \end{figure}
@@ -2162,7 +2159,7 @@ Only a single change is made to the schedule: A service called GPU Copy Cell Ser
 			
 		\end{tikzpicture}
 	\end{center}
-	\caption{Parallelized ORB GPU version 2}
+	\caption{Master Layer schedule of a an improved GPU parallelized ORB}
 	\label{fig:orbgpup2}
 \end{figure}
 
@@ -2573,8 +2570,10 @@ The section of ORB which could still be improved by a lot, is the choice of the 
 \newpage
 \bibliography{reference}
 
-
+\newpage
 \listoffigures
+\newpage
+
 \listoftables
 
 \end{document}
