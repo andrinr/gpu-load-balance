@@ -8,8 +8,9 @@ Read the [/documentation](https://github.com/andrinr/gpu-load-balance/tree/main/
 
 ## Get started
 
-1. Clone this repo and ``cd`` into its root directory
-2. Link mdl2 and blitz from the PKDGRAV repo using ``ln -s /path/to/mdl2`` ``ln -s /path/to/blitz``
+1. Clone https://bitbucket.org/dpotter/pkdgrav3/
+2. Clone this repo and ``cd`` into its root directory
+3. Link mdl2 and blitz from the PKDGRAV repo using ``ln -s /path/to/mdl2`` ``ln -s /path/to/blitz``
 
 ### Compile
 1. ``mkdir release && cd release``
@@ -17,7 +18,9 @@ Read the [/documentation](https://github.com/andrinr/gpu-load-balance/tree/main/
 4. `` cmake --build .``
 
 ### Run
-``./orbit``
+``./orbit`` <x> <y> <o>
+where x corresponds to the number of particles 2^x and y to the number of leaf cells in the final tree datastrucutre 2^d. o defines a gpu optimization level where 0 or empty is a cpu only version, 1 corresponds to gpu accelerated version where the bisection method is implented using kernels. Finally 2 further adds a GPU accelerated partitioning method, however this is is still in experimental stages and some bugs are still present.
+
 
 ### Compile for debugging
 1. ``mkdir debug && cd debug``
@@ -33,8 +36,4 @@ or
 
 ## Automized performance analysis
 
-todo
-
-## Open questions
-
--
+For slurm process manager run ``analysis/analysis.sh`` for a test with variable particle counts and ``analysis/analysis2.sh`` for a test with variable domain counts. 
