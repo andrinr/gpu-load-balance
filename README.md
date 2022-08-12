@@ -19,7 +19,7 @@ Read the [/documentation](https://github.com/andrinr/gpu-load-balance/tree/main/
 
 ### Run
 ``./orbit`` <x> <y> <o>
-where x corresponds to the number of particles 2^x and y to the number of leaf cells in the final tree datastrucutre 2^d. o defines a gpu optimization level where 0 or empty is a cpu only version, 1 corresponds to gpu accelerated version where the bisection method is implented using kernels. Finally 2 further adds a GPU accelerated partitioning method, however this is is still in experimental stages and some bugs are still present.
+where x corresponds to the number of particles 2^x and y to the number of leaf cells in the final tree datastrucutre 2^y. o defines a gpu optimization level where 0 or empty is a cpu only version, 1 corresponds to gpu accelerated version where the bisection method is implented using kernels. Finally 2 further adds a GPU accelerated partitioning method, however this is is still in experimental stages and some bugs are still present.
 
 
 ### Compile for debugging
