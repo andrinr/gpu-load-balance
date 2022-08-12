@@ -1544,7 +1544,7 @@ As with all heap data-structures the following conditions are given:
 		[$cell_2$ [$cell_4$] [$cell_5$]][$cell_3$]  
 		]
 	\end{forest}
-	\caption{Tree with $d$ = 3}
+	\caption{SPTDS constructed from example particle distribution tree with 3 leaf cells ($d$ = 3)}
 	\label{fig:extree}
 \end{figure}
 
@@ -1808,7 +1808,7 @@ The Master schedules all other processors but also performs tasks by itself. The
 			
 		\end{tikzpicture}
 	\end{center}
-	\caption{Parallelized ORB CPU version}
+	\caption{Master later schedule of a CPU only ORB implementation}
 	\label{fig:orbp}
 \end{figure}
 
@@ -1991,7 +1991,7 @@ The tree building loop is then repeated or if the desired size of the SPTDS is r
 			
 		\end{tikzpicture}
 	\end{center}
-	\caption{Master Layer schedule of a an improved GPU parallelized ORB}
+	\caption{Master later schedule of a GPU accelerated ORB implementation}
 	\label{fig:orbgpup}
 \end{figure}
 
@@ -2159,7 +2159,7 @@ Only a single change is made to the schedule: A service called GPU Copy Cell Ser
 			
 		\end{tikzpicture}
 	\end{center}
-	\caption{Master Layer schedule of a an improved GPU parallelized ORB}
+	\caption{Master later schedule of an improved GPU accelerated ORB implementation}
 	\label{fig:orbgpup2}
 \end{figure}
 
@@ -2218,8 +2218,6 @@ unsigned int * g_odata) {
 	}
 }
 	\end{lstlisting}
-	\caption{Reduction in CUDA}
-	\label{cuda:reduction2}
 \end{figure}
 
 
@@ -2281,8 +2279,6 @@ unsigned int * g_odata) {
 	}
 }
 	\end{lstlisting}
-	\caption{Reduction in CUDA}
-	\label{cuda:reduction3}
 \end{figure}
 
 Against the expectation that reduction3 from listing \ref{cuda:reduction3} might outperform reduction2 from listing \ref{cuda:reduction2}: Test results from Piza Daint of the two kernels showed very similar runtimes for both kernels. For a test set of $2^{27}$ uniformly random distributed particles, both kernels took 1.9 milliseconds to execute. From this figure an effective performance of $560$ GB/s can be evaluated using the formula $2^{27}\times 4 \times 10^6 / 1.9$ \cite{metrics}. In this case 4 is the number of bytes which are loaded per particle position\footnote{We only iterate over a single axis} and the factor $10^6$ is used to convert milliseconds to seconds. 
@@ -2371,7 +2367,7 @@ In the adapted schedule (figure \ref{fig:orbgpu3}) the Copy Particles To GPU ser
 			
 		\end{tikzpicture}
 	\end{center}
-	\caption{Parallelized ORB with GPU counting and GPU partitioning}
+	\caption{Master later schedule of a GPU accelerated ORB implementation with GPU partitioning}
 	\label{fig:orbgpu3}
 \end{figure}
 
@@ -2510,46 +2506,7 @@ The CPU and GPU versions were also tested for different problem sizes $N$. The r
 \end{figure}
 
 In the resulting figure \ref{fig:analy3} it can be observed how the speedup is only minor for \textit{small} problem sizes. This is most certainly caused by an overhead introduced by the GPU implementation over its CPU counterpart, as kernel invocations and memory copying operations are not free of cost. 
-As soon as the problem size approaches a more realistic size, meaning closer to the number of particles which are to be expected on a single node, the speedup appears to converge to a factor of 6. This is a positive outcome, as it would be undesirable to have a degrading performance.
-
-Finally measurements were made where the problem size remains equivalent, however the number of desired leaf cells $d$ of the constructed SPTDS are varied. 
-
-
-
-\begin{figure}[H]
-	\begin{center}
-		\begin{tikzpicture}
-			
-			\begin{axis}
-				[
-				xlabel={number of particles $N$},
-				ylabel={speedup},
-				nodes near coords,
-				xmin=1048576,
-				xmax=1073741824,
-				ymin=0,
-				ymax=6,
-				xmode=log,
-				log basis x={2},
-				log basis y={2},
-				legend style={at={(1.05,0.6)},anchor=west}]
-				]
-				\addplot+[
-				point meta=explicit symbolic
-				] table [
-				x=p, 
-				y=s, 
-				col sep=comma] 
-				{speedups.csv};
-				
-			\end{axis}
-			
-		\end{tikzpicture}
-	\end{center}
-	
-	\caption{Speedup of GPU over CPU version for a problem size of $N = 2^{32}$}
-	\label{fig:analy4}
-\end{figure}
+As soon as the problem size approaches a more realistic size, meaning closer to the number of particles which are to be expected on a single node, the speedup appears to converge to a factor of 6. This is a positive outcome, as it would be undesirable to have a degrading performance for larger problem sizes. 
 
 \newpage
 \section{Conclusion}
