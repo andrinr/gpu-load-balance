@@ -2273,10 +2273,7 @@ unsigned int * g_odata) {
 	__syncthreads();
 	
 	if (warpId == 0) {
-		val = 0;
-		if (tid < 32 && tid * 32 < blockSize) {
-			val += s_data[tid];
-		}
+		val = (tid < blockDim.x / warpSize) ? s_data[lane] : 0;
 		
 		for (int offset = 16; offset > 0; offset >>= 1)
 			val += __shfl_down_sync(FULL_MASK, val, offset);
@@ -2291,7 +2288,8 @@ unsigned int * g_odata) {
 	\label{cuda:reduction3}
 \end{figure}
 
-Against some assumption that kernel3 from listing \ref{cuda:reduction3} might outperform kernel2 from listing \ref{cuda:reduction2}, when testing the two kernel on Piz Daint both had a very similar performance. The effective bandwidth of a kernel can be evaluated with the following formula: 
+Against the expectation that reduction3 from listing \ref{cuda:reduction3} might outperform reduction2 from listing \ref{cuda:reduction2}: Test results from Piza Daint of the two kernels showed very similar runtimes for both kernels. For a test set of $2^{27}$ uniformly random distributed particles, both kernels took 1.9 milliseconds to execute. From this figure an effective performance of $560$ GB/s can be evaluated using the formula $2^{27}\times 4 \times 10^6 / 1.9$ \cite{metrics}. In this case 4 is the number of bytes which are loaded per particle position\footnote{We only iterate over a single axis} and the factor $10^6$ is used to convert milliseconds to seconds. 
+$560$ GB/s comes close to the effective hardware limit of $732$ GB/s and $kernel2$ was already performing near optimally, thus the improvements made in kernel3 have a negligible impact. 
 
 \subsection{GPU Accelerated Partitioning}
 
@@ -2437,44 +2435,13 @@ All measurements were performed on Piz Daint where the performance of the system
 	\label{fig:analy2}
 \end{figure}
 
-In figure \ref{fig:analy2} the final measurements are plotted. The total runtime of the ORB is around 43 seconds when performed only on the CPU, for the GPU accelerated version it comes down to 18 seconds. However a large part of the execution time can be attributed to the Partitioning, where its overhead remains equal for both versions. Even the CPU Partitioning can be improved a lot and the GPU version might increase the performance even further. 
-If the time lost during the partitioning is subtracted, the GPU version is about $5.6$ times faster, which is slightly worse than the expected speedup of $6.2$. The difference can be explained by additional overheads, especially as the GPU kernel has to touch the elements more than once due to the way it was implemented. 
+In figure \ref{fig:analy2} the final measurements are plotted. A uniform random distribution was used instead of a the target data, because at time of estimating the runtime there was no dataset available with the proper distribution. The results should however be comparable as the only thing, which can vary is the number of iterations taken to find a cut for each cell.
 
-When looking at the absolute number there is a stark difference: $56.47s$ were predicted for the CPU version where $31.83$ was the actual timing. Similarly the GPU was expected to execute ORB\footnote{Excluding the time required for the partition} in $8.99s$, however it only took $5.6s$. The theoretical model considers an upper bound for the total number of iterations which the bisection method takes to converge. In reality this number is closer to 20 than to $p$ which is 32 in the measured data. When considering this, the measurements are also in an absolute term relatively close to the theoretical model. $56.47s \times \frac{20}{32} = 37s$ against the actual $31.83s$ and $8.99s \times \frac{20}{32} =5.99s$ compared to $5.6s$.
+The total runtime of the CPU only version of ORB is around 43, the GPU accelerated variant takes 18 seconds. However a large part of the execution time can be attributed to the Partitioning, where its overhead remains equal for both versions. 
+If the time lost during the partitioning is subtracted, the GPU version is about $5.6$ times faster, which is slightly worse than the expected speedup of $6.2$. The difference can be explained by the GPU reduction kernel which is slightly worse than than the memory bandwidth would allow. 
 
+When looking at the absolute number there is a stark difference: $56.47s$ were predicted for the CPU version where $31.83$ was the actual timing. Similarly the GPU was expected to execute ORB\footnote{Excluding the time required for the partition} in $8.99s$, however it only took $5.6s$. The theoretical model considers an upper bound for the total number of iterations which the bisection method takes to converge. In reality this number is closer to 20 than to $p$ which is 32 in the input data. When considering this, the measurements are also in an absolute term relatively close to the theoretical model. $56.47s \times \frac{20}{32} = 37s$ against the actual $31.83s$ and $8.99s \times \frac{20}{32} =5.99s$ compared to $5.6s$.
 
-\begin{figure}[H]
-	\begin{center}
-		\begin{tikzpicture}
-			
-			\begin{axis}
-				[
-				enlargelimits=0.4,
-				ybar stacked,
-				bar width=40pt,
-				nodes near coords,
-				legend style={at={(0.5,-0.20)},
-					anchor=north,legend columns=-1},
-				ylabel={seconds},
-				symbolic x coords={cpu, gpu},
-				xtick=data,
-				x tick label style={rotate=45,anchor=east}]
-				ymin=0,
-				ymax=50
-				]
-				\addplot+[ybar] plot coordinates {(cpu, 31.83) (gpu, 5.60)};
-				\addplot+[ybar] plot coordinates {(cpu, 12.83) (gpu, 12.87)};
-				
-				\legend{\strut Count and Copy, \strut Partition}
-			\end{axis}
-			
-			
-		\end{tikzpicture}
-	\end{center}
-	
-	\caption{Execution times of different strategies}
-	\label{fig:analy2}
-\end{figure}
 
 \subsection{Scaling}
 
@@ -2483,22 +2450,22 @@ To make sure the GPU version scales well the runtime were evaluated for differen
 
 \begin{filecontents*}{results0.csv}
 	p, d, t, t2
-	1048576, 10, 0.04
-	4194304, 10, 0.14
-	16777216, 10, 0.61
-	67108864, 10, 2.57
-	268435456, 10, 11.15
-	1073741824, 10, 47.58, 
+	1048576, 10, 0.027
+	4194304, 10, 0.085
+	16777216, 10, 0.37
+	67108864, 10, 1.65
+	268435456, 10, 7.2
+	1073741824, 10, 31.5, 
 \end{filecontents*}
 
 \begin{filecontents*}{results1.csv}
 	p, d, t, t2
-	1048576 , 10, 0.04
-	4194304, 10, 0.10
-	16777216 , 10, 0.33
-	67108864 , 10, 1.24
-	268435456 , 10, 4.98
-	1073741824, 10, 20.31
+	1048576 , 10, 0.022
+	4194304, 10, 0.036
+	16777216 , 10, 0.091
+	67108864 , 10, 0.328
+	268435456 , 10, 1.321
+	1073741824, 10, 5.704
 \end{filecontents*}
 
 \begin{figure}[H]
