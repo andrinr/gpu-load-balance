@@ -87,15 +87,56 @@
 
 \author{Andrin Rehmann}
 
+
 % Start
 \begin{document}
 
-\maketitle
+
+\begin{titlepage}
+	\begin{center}
+		\vspace*{1cm}
+		
+		\Huge
+		\textbf{Orthogonal Recursive Bisection on the GPU for Accelerated Load Balancing in Large N-Body Simulations}
+		
+		\vspace{0.5cm}
+		\LARGE
+		Bachelor Thesis
+		
+		\vspace{1.5cm}
+		
+		\textbf{Andrin Rehmann}\\
+		18-916-882
+		
+		\vfill
+		
+		Department for Informatics\\
+		University of Zürich
+		
+		\vspace{0.8cm}
+		
+		%\includegraphics[width=0.4\textwidth]{university}
+		
+		\Large
+
+		Prof. Dr. Michael Böhlen\\
+		Supervisor: Douglas Potter \\
+		14.08.2022
+		
+	\end{center}
+\end{titlepage}
 
 \newpage
 
-\tableofcontents
+\section*{Abstract}
 
+Large simulations with billions of particles are used to understand the universe. Commonly, the fast multipole method is employed to improve the runtime, where a space partitioning binary tree data structure is required. The structure is generated using the Orthogonal Recursive Bisection method and at the same time used as a load balancing strategy to leverage the hardware of super computers optimally.
+
+In this paper, a GPU accelerated version of ORB is proposed and implemented in the CUDA programming language. The implementation manages to maintain a consistent runtime during the entire execution of the ORB method, regardless of the increasing complexity as fragmentation grows with the tree depth and the number of leaf cells. Performance measurements showed a speedup by a factor of 5.4 over a fully parallelized and optimized CPU version. 
+
+\newpage
+\tableofcontents
+ 	
 \newpage
 \section{Introduction}
 
@@ -104,7 +145,7 @@ The N-Body technique has been used for decades to simulate the Universe to compa
 
 A common solution is to partition the space, in which the particles are contained, into a set of subspaces using the Orthogonal Recursive Bisection (ORB) algorithm. These subspaces, or cells, are then stored in a space partitioning tree data structure (SPTDS). The data structure is then leveraged in combination with the Fast Multipole Method (FMM) to speed up the particle simulation to $O(N)$. In order to balance the load of work and memory across nodes and processors in a computing system, a load balancing is necessary. The same tree, which is used for FMM can be leveraged to generate groupings of the particles which are then distributed among processing units. Building the SPTDS with ORB uses a significant percentage of the overall simulation time, \cite{Stadel2001} where as of now this was done on the CPU, not leveraging GPU acceleration.
  
-In this thesis I established an upper limit for the speedup of a GPU ORB implementation over its fully parallelized CPU only counterpart. In order to do so, I proposed a runtime estimate for both versions. As hardware specific details and some knowledge about compilers and Assembly instructions are crucial for a reliable estimate, I explored the theoretical foundations of memory bandwidth and processing power. 
+In this paper I established an upper limit for the speedup of a GPU ORB implementation over its fully parallelized CPU only counterpart. In order to do so, I proposed a runtime estimate for both versions. As hardware specific details and some knowledge about compilers and Assembly instructions are crucial for a reliable estimate, I explored the theoretical foundations of memory bandwidth and processing power. 
 
 Based on encouraging figures from the runtime estimates I proceeded with the actual implementation. Using the machine dependent layer (MDL) from PKDGRAV \cite{Stadel2001}, which is used to distribute workload among cores and processors, I implemented a fully parallelized CPU version of ORB. In preparation of advancing parts of the code to a GPU accelerated implementation, I have summarized the most important and relevant concepts of CUDA, a popular graphics programming language developed by NVIDIA. Compared to traditional C++ code, many hardware related limitations have to be considered and a fundamentally different paradigms is required.
 
@@ -216,7 +257,7 @@ It lies in the nature of the universe, that large clusters of particles are foun
 
 
 \subsection{Memory and Workload Balancing}\label{balancing}
-The aim of this thesis is to improve the runtime of ORB. In terms load balancing, there is a distinction between workload and memory balancing. 
+The aim of this paper is to improve the runtime of ORB. In terms load balancing, there is a distinction between workload and memory balancing. 
 
 To reduce the force integration error across all particles, some particles require more timesteps than others. This is caused by the vastly variant forces which are exerted on the particles. Whilst some follow a straight path with an almost constant velocity requiring little computational effort for great precision, others are influenced by strong gravitational poles resulting in highly curved movement paths and correlating with higher numbers of timesteps required.
 
@@ -694,7 +735,7 @@ Note how all particles from $cell_4$ are contained in the range of 0-1. The part
 \newpage
 \section{Theoretical Analysis}
 
-The main goal of this thesis, is to improve the runtime of the ORB algorithm by leveraging the graphics processing unit over the central processing unit. Before implementing, it makes sense to explore if and to which degree the performance benefits could in theory manifest themselves. For this purpose a simplified model is proposed, this model is then used to compare the runtime of the CPU version against two different GPU variants. As GPU programming is very low level, the knowledge gained while developing the model also builds a solid theoretical foundation.
+The main goal of this paper, is to improve the runtime of the ORB algorithm by leveraging the graphics processing unit over the central processing unit. Before implementing, it makes sense to explore if and to which degree the performance benefits could in theory manifest themselves. For this purpose a simplified model is proposed, this model is then used to compare the runtime of the CPU version against two different GPU variants. As GPU programming is very low level, the knowledge gained while developing the model also builds a solid theoretical foundation.
 
 \subsection{General Memory Model}\label{sec:gmm}
 
@@ -868,7 +909,7 @@ Both the CPU and the GPU have their own memory which are connected by a data lin
 
 \subsection{Supercomputers}
 
-For Piz Daint, Summit and Eiger all relevant hardware metrics were collected and compiled to table \ref{fig:datapoints}. Piz Daint and Eiger were chosen, because the systems can be used to test the code. Furthermore Summit is included as it is, at the time of writing this thesis, one of the most capable supercomputers in the world.
+For Piz Daint, Summit and Eiger all relevant hardware metrics were collected and compiled to table \ref{fig:datapoints}. Piz Daint and Eiger were chosen, because the systems can be used to test the code. Furthermore Summit is included as it is, at the time of writing this paper, one of the most capable supercomputers in the world.
 
 \small
 \begin{table}[H]
@@ -2428,12 +2469,12 @@ All measurements were performed on Piz Daint where the performance of the system
 	\label{fig:analy2}
 \end{figure}
 
-In figure \ref{fig:analy2} the final measurements are plotted for $N = 2^{30}$ and $d=4096$ on a single Piz Daint node. The reason why the measurements were not performed on multiple nodes, is that the thesis does not propose any changes to the internode communication strategies, therefore these results are not of importance. A uniform random distribution was used instead of the target data, because at time of estimating the runtime there was no dataset available with the proper distribution. The results should however be comparable as solely the exact number of iterations taken to find a cut for each cell varies on different datasets.
+In figure \ref{fig:analy2} the final measurements are plotted for $N = 2^{30}$ and $d=4096$ on a single Piz Daint node. The reason why the measurements were not performed on multiple nodes, is that the paper does not propose any changes to the internode communication strategies, therefore these results are not of importance. A uniform random distribution was used instead of the target data, because at time of estimating the runtime there was no dataset available with the proper distribution. The results should however be comparable as solely the exact number of iterations taken to find a cut for each cell varies on different datasets.
 
 A large portion of the total ORB runtime is attributed to the partition part. If the time lost during the partitioning is subtracted, the GPU version is about $5.6$ times faster than the CPU implementation, which is slightly worse than the expected speedup of $6.2$. The difference can be explained by the GPU reduction kernel which is slightly worse than the memory bandwidth would allow as described in section \ref{imprctlwrp}. The theoretical model on the other assumes an implementation which performs just as well as the memory bandwidth would allow. 
 
 When comparing the absolute runtimes there is a stark difference visible: $67.77s$ were predicted for the CPU version where $38.46s$ was the actual timing. Similarly the GPU was expected to execute ORB\footnote{Excluding the time required for the partition} in $10.79s$, however it only took $6.84s$. The theoretical model considers an upper bound for the total number of iterations which the bisection method takes to converge. In reality this number is closer to 20 than to $p$ which is 32 in the input data. When considering this, the measurements are also in an absolute term relatively close to the theoretical model. $67.47s \times \frac{20}{32} = 42.16s$ against the actual $38.46s$ and $10.79s \times \frac{20}{32} = 6.74s$ compared to the measured $6.84s$.
-Concluding the measured runtime are surprisingly similar to the expected ones, however they do not reach the theoretical maximum. The reduction kernel would need to be further improved to fully leverage the GPU bandwidth, however as of writing this thesis no better implementation variant is known. 
+Concluding the measured runtime are surprisingly similar to the expected ones, however they do not reach the theoretical maximum. The reduction kernel would need to be further improved to fully leverage the GPU bandwidth, however as of writing this paper no better implementation variant is known. 
 
 
 \subsection{Scaling}
