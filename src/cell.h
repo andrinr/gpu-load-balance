@@ -117,9 +117,6 @@ struct Cell {
                 maxD = d;
             }
         }
-
-        // keep track of history
-        //prevCutAxis = cutAxis;
         cutAxis = int(maxD);
     }
 
